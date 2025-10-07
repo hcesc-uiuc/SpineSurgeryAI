@@ -163,7 +163,7 @@ RETURNS text LANGUAGE sql IMMUTABLE AS $$
          END;
 $$;
 
-CREATE OR REPLACE VIEW v_last7 AS
+CREATE OR REP  LACE VIEW v_last7 AS
 SELECT generate_series(current_date - INTERVAL '6 day', current_date, '1 day')::date AS day;
 
 CREATE OR REPLACE VIEW v_accel_last7 AS

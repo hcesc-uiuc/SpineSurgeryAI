@@ -41,6 +41,7 @@ class DB:
     def temporary_database_connection(self) -> None:
         database_connection = self.connection_pool_manager.getconn()
         try:
+            database_connection.autocommit = True # autocommit can be put manually for other stuff
             yield database_connection
         except Exception as database_exception:
             print(f"[DB ERROR] Exception during DB operation: {database_exception}")
@@ -236,7 +237,7 @@ class DB:
         insert_heart_rate_sql = (
             "INSERT INTO heart_rate (participant_id, ts, object_url) VALUES %s"
         )
-        with self._temporary_database_connection() as database_connection, database_connection.cursor() as database_cursor:
+        with self.temporary_database_connection() as database_connection, database_connection.cursor() as database_cursor:
             execute_values(
                 database_cursor,
                 insert_heart_rate_sql,
@@ -277,7 +278,7 @@ class DB:
             )
 
     # ---------------------------
-    # Refresh presence MVs & simple reads
+    # Refresh cache for compliance periods
     # ---------------------------
     def refresh_summary_cache(self, use_concurrent_refresh: bool = True) -> None: # Use after flask push insert data then refresh
         #Refresh all daily presence materialized views. If concurrent refresh fails (e.g., first population), falls back automatically.
@@ -305,6 +306,8 @@ class DB:
         except Exception:
             execute_refresh_with_mode("")
 
+    
+    # rewrite this 
     def get_dashboard(
         self,
         external_participant_identifier_list: Optional[Sequence[str]] = None,
@@ -338,26 +341,25 @@ class DB:
             )
             return [dict(row) for row in database_cursor.fetchall()]
 
-    def get_last7_strips(self, external_participant_identifier: str) -> Optional[Dict[str, Any]]:
-        """Return the strip arrays for a single participant from v_last7_strips."""
-        select_last7_strips_sql = (
+    # returns whether or not their is data from the last 7 days (1 is yes data, 0 is no their is no data) -> reads from summary cache
+    def get_last_7_days(self, external_participant_identifier: str) -> Optional[Dict[str, Any]]: 
+        select_last_7_days_sql = (
             "SELECT ls.* FROM v_last7_strips ls "
             "JOIN participants p ON p.id = ls.participant_id "
             "WHERE p.external_id = %s"
         )
         with self.temporary_database_connection() as database_connection, database_connection.cursor(cursor_factory=DictCursor) as database_cursor:
-            database_cursor.execute(select_last7_strips_sql, (external_participant_identifier,))
+            database_cursor.execute(select_last_7_days_sql, (external_participant_identifier,))
             row = database_cursor.fetchone()
             return dict(row) if row else None
 
-    def get_compliance_for(self, external_participant_identifier: str) -> Dict[str, Any]:
-        """Return a compact compliance dict for accel/gyro/hr/survey for one participant."""
+    def get_compliance_for(self, external_participant_identifier: str) -> Dict[str, Any]: # let postgres handle compliance, Return a compact compliance dict for accel/gyro/hr/survey for one participant
         select_compliance_sql = """
             SELECT p.external_id,
                    ac.days_3  AS accel_days_3, ac.days_7  AS accel_days_7, ac.meets_1_of_3 AS accel_1of3, ac.meets_4_of_7 AS accel_4of7,
                    gc.days_3  AS gyro_days_3,  gc.days_7  AS gyro_days_7,  gc.meets_1_of_3 AS gyro_1of3,  gc.meets_4_of_7 AS gyro_4of_7,
                    hc.days_3  AS hr_days_3,    hc.days_7  AS hr_days_7,    hc.meets_1_of_3 AS hr_1of3,    hc.meets_4_of_7 AS hr_4of_7,
-                   sc.days_3  AS survey_days_3,sc.days_7  AS survey_days_7,sc.meets_1_of_3 AS survey_1of_3,sc.meets_4_of_7 AS survey_4_of_7
+                   sc.days_3  AS survey_days_3,s  c.days_7  AS survey_days_7,sc.meets_1_of_3 AS survey_1of_3,sc.meets_4_of_7 AS survey_4_of_7
             FROM participants p
             LEFT JOIN v_accel_compliance ac  ON ac.participant_id = p.id
             LEFT JOIN v_gyro_compliance  gc  ON gc.participant_id = p.id
@@ -423,8 +425,7 @@ class DB:
     # ---------------------------
     # Deletion helpers (for tests)
     # ---------------------------
-    def delete_participant(self, external_participant_identifier: str) -> int:
-        """Delete a participant by external_id. Returns number of rows deleted (0/1)."""
+    def delete_participant(self, external_participant_identifier: str) -> int: #Delete a participant by external_id. Returns number of rows deleted (0/1)
         delete_participant_sql = (
             "DELETE FROM participants WHERE external_id = %s RETURNING id"
         )
@@ -434,8 +435,7 @@ class DB:
             )
             return database_cursor.rowcount or 0
 
-    def truncate_data(self) -> None:
-        """Dangerous: wipe all timeseries & surveys (keeps participants)."""
+    def truncate_data(self) -> None: #Dangerous: wipe all timeseries & surveys (keeps participants)
         truncate_all_timeseries_sql = (
             "TRUNCATE accelerometer, gyroscope, heart_rate, daily_survey RESTART IDENTITY CASCADE;"
         )
@@ -448,14 +448,16 @@ db = DB()
 # Create or ensure a participant exists
 participant_id = db.create_participant_if_missing("P0001")
 
-# Insert some dummy accelerometer data
-db.insert_accel("P0001", [
-    {"ts": "2025-10-06T12:00:00Z", "ax": 0.1, "ay": 0.0, "az": -0.2},
-    {"ts": "2025-10-06T12:00:01Z", "ax": 0.2, "ay": 0.1, "az": -0.1},
-])
+# # Insert some dummy hr data
+# db.insert_hr("P0001", [
+#     {"ts": "2025-10-04T12:00:00Z", "url": "url"},
+#     {"ts": "2025-10-04T12:00:01Z",  "url": "url"},
+# ])
 
 # Refresh presence materialized views
 db.refresh_summary_cache()
 
+print(db.get_compliance_for("P0001"))
+
 # Get dashboard rows
-print(db.get_dashboard())
+# print(db.get_dashboard())
