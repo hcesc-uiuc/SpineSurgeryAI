@@ -9,29 +9,35 @@
 # if __name__ == "__main__":
 #     app.run(debug=True)
 
-from flask import Flask
+from flask import Flask, render_template
 from config import Config
-from models.data_record import db
 from routes.upload import upload_bp
+from database.database import DB
+from flask import current_app
+
 
 def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
 
     # Initialize database
-    db.init_app(app)
-
+    app.config["DB"] = DB()
     # Register blueprints
     app.register_blueprint(upload_bp, url_prefix="/api")
 
     @app.route("/")
-    def index():
-        return "Welcome — try POSTing to /api/upload"
+    def home():
+        return render_template("home.html")
+    
+    @app.route("/compliance")
+    def compliance():
+        data = current_app.config["DB"].get_compliance_for("P0001") 
+        table = current_app.config["DB"].get_table("heart_rate")
+        return render_template("compliance.html", data=data, table=table)
 
     return app
 
 if __name__ == "__main__":
     app = create_app()
-    with app.app_context():
-        db.create_all()  # Creates tables if not exist
+    
     app.run(debug=True)

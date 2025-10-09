@@ -359,7 +359,7 @@ class DB:
                    ac.days_3  AS accel_days_3, ac.days_7  AS accel_days_7, ac.meets_1_of_3 AS accel_1of3, ac.meets_4_of_7 AS accel_4of7,
                    gc.days_3  AS gyro_days_3,  gc.days_7  AS gyro_days_7,  gc.meets_1_of_3 AS gyro_1of3,  gc.meets_4_of_7 AS gyro_4of_7,
                    hc.days_3  AS hr_days_3,    hc.days_7  AS hr_days_7,    hc.meets_1_of_3 AS hr_1of3,    hc.meets_4_of_7 AS hr_4of_7,
-                   sc.days_3  AS survey_days_3,s  c.days_7  AS survey_days_7,sc.meets_1_of_3 AS survey_1of_3,sc.meets_4_of_7 AS survey_4_of_7
+                   sc.days_3  AS survey_days_3, sc.days_7  AS survey_days_7,sc.meets_1_of_3 AS survey_1of_3,sc.meets_4_of_7 AS survey_4_of_7
             FROM participants p
             LEFT JOIN v_accel_compliance ac  ON ac.participant_id = p.id
             LEFT JOIN v_gyro_compliance  gc  ON gc.participant_id = p.id
@@ -371,6 +371,17 @@ class DB:
             database_cursor.execute(select_compliance_sql, (external_participant_identifier,))
             row = database_cursor.fetchone()
             return dict(row) if row else {}
+
+    def get_table(self, table_name: str) -> list[dict]: # gets all rows from a table
+        # Prevent SQL injection by validating table name
+        allowed_tables = {"accelerometer", "gyroscope", "heart_rate", "daily_survey", "participants"}
+        if table_name not in allowed_tables:
+            raise ValueError(f"Table '{table_name}' not allowed.")
+
+        query = f"SELECT * FROM {table_name};"
+        with self.temporary_database_connection() as conn, conn.cursor(cursor_factory=DictCursor) as cur:
+            cur.execute(query)
+            return [dict(row) for row in cur.fetchall()]
 
     # ---------------------------
     # Simple presence queries (raw)
@@ -443,21 +454,21 @@ class DB:
             database_cursor.execute(truncate_all_timeseries_sql)
             database_connection.commit()
 
-db = DB()
+# db = DB()
 
-# Create or ensure a participant exists
-participant_id = db.create_participant_if_missing("P0001")
+# # Create or ensure a participant exists
+# participant_id = db.create_participant_if_missing("P0001")
 
-# # Insert some dummy hr data
-# db.insert_hr("P0001", [
-#     {"ts": "2025-10-04T12:00:00Z", "url": "url"},
-#     {"ts": "2025-10-04T12:00:01Z",  "url": "url"},
-# ])
+# # # Insert some dummy hr data
+# # db.insert_hr("P0001", [
+# #     {"ts": "2025-10-04T12:00:00Z", "url": "url"},
+# #     {"ts": "2025-10-04T12:00:01Z",  "url": "url"},
+# # ])
 
-# Refresh presence materialized views
-db.refresh_summary_cache()
+# # Refresh presence materialized views
+# db.refresh_summary_cache()
 
-print(db.get_compliance_for("P0001"))
+# print()
 
-# Get dashboard rows
-# print(db.get_dashboard())
+# # Get dashboard rows
+# # print(db.get_dashboard())
