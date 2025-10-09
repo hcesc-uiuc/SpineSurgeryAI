@@ -14,7 +14,7 @@ def upload():
         filename = data["filename"]
         content = data["content"]
 
-
+        
         db = current_app.config["DB"]
 
         # Upload to S3
