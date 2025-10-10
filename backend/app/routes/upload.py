@@ -30,4 +30,4 @@ def upload():
     else:
         return jsonify({"error": "Please send JSON data"}), 400
     
-#curl -X POST -H "Content-Type: application/json" -d '{"filename":"Jason","content":20}' http://127.0.0.1:5000/api/upload, do this in gitbash
+#curl -X POST -H "Content-Type: application/json" -d '{"filename":"Jason","content":20}' http://127.0.0.1:5000/api/upload    , do this in gitbash
