@@ -18,15 +18,15 @@ SpineSurgeryProject/
 ├── requirements.txt      # Python dependencies
 ├── .gitignore            # Files to exclude from Git
 │
-├── /routes               # API endpoints (blueprints)
-│   └── upload.py
+├── routes/               # API endpoints (Flask blueprints)
+│   └── upload.py         # Upload routes (JSON + file-to-S3)
 │
-├── /services             # Business logic layer
+├── services/             # Business logic layer
 │   ├── s3_service.py     # AWS S3 upload logic
 │   └── db_service.py     # Database insert logic
 │
-├── /models               # Database schema (ORM models for Flask)
-│   └── data_record.py
+├── models/               # Database schema (ORM models for Flask)
+│   └── data_record.py    # SQLAlchemy model for file metadata
 │
 ├── db_runner.py          # One‑file Postgres manager (CLI for schema, refresh, dashboard)
 └── database.py           # Connection‑pooled DB abstraction class (programmatic inserts/queries)
