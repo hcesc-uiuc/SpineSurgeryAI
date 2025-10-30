@@ -1,37 +1,123 @@
-#!/usr/bin/env python3
 """
-db_runner.py — One-file Postgres manager for your spine study.
+db_runner.py — One-file Postgres manager (URL-based timeseries) for SpineSurgeryAI.
 
-What it does:
-  • init          -> creates tables, indexes, materialized views, and views
-  • refresh       -> refreshes daily presence MVs (run after new data ingests)
-  • seed          -> inserts a couple of demo participants
-  • insert-demo   -> inserts a few demo rows for testing
-  • dashboard     -> prints v_compliance_dashboard
-  • exec-file     -> runs an arbitrary .sql file (idempotent scripts recommended)
+Commands:
+  setup-db      -> create role & database (needs ADMIN_URL superuser, or run as postgres)
+  init          -> create schema, indexes, materialized views, and views
+  refresh       -> refresh all materialized views (tries CONCURRENTLY, falls back)
+  seed          -> insert demo participants (P0001, P0002)
+  insert-demo   -> insert demo URL rows across last 7 days + refresh MVs
+  dashboard     -> print v_compliance_dashboard table
+  exec-file     -> run an arbitrary .sql file
 
 Connection:
-  - Reads DATABASE_URL from environment or .env
-    Example: postgresql://spine_app:spinepass@localhost:5432/spine_study
+  - App connection uses DATABASE_URL  (e.g., postgresql+psycopg2://user:pass@localhost:5432/spine_db)
+  - Admin tasks use ADMIN_URL         (e.g., postgresql+psycopg2://postgres@localhost:5432/postgres)
+
+Notes:
+  - Timeseries tables store (participant_id, ts, object_url) for accel/gyro/hr.
+  - MVs compute daily presence by counting rows per day; compliance views summarize 1/3 and 4/7 rules.
 """
 
+from __future__ import annotations
 import os
 import sys
 import argparse
-import psycopg2
-from psycopg2.extras import execute_batch, DictCursor
+from typing import Any, Dict, List, Optional, Sequence, Tuple
+from contextlib import contextmanager
+from datetime import datetime, timedelta, timezone
+
 from dotenv import load_dotenv
+import psycopg2
+from psycopg2 import sql
+from psycopg2.extras import DictCursor, execute_values
 from tabulate import tabulate
 
-# ---------- SQL DEFINITIONS ----------
+# =========================
+# SQL: SCHEMA (URL model)
+# =========================
 
-SQL_02_SCHEMA = r"""
+SQL_01_BASE = r"""
 CREATE TABLE IF NOT EXISTS participants (
   id           SERIAL PRIMARY KEY,
   external_id  TEXT UNIQUE NOT NULL,
   created_at   TIMESTAMPTZ DEFAULT now()
 );
 
+-- URL-based timeseries: store pointer to object (e.g., S3) per timestamp
+CREATE TABLE IF NOT EXISTS accelerometer (
+  id             BIGSERIAL PRIMARY KEY,
+  participant_id INT NOT NULL REFERENCES participants(id) ON DELETE CASCADE,
+  ts             TIMESTAMPTZ NOT NULL,
+  object_url     TEXT NOT NULL,
+  created_at     TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS gyroscope (
+  id             BIGSERIAL PRIMARY KEY,
+  participant_id INT NOT NULL REFERENCES participants(id) ON DELETE CASCADE,
+  ts             TIMESTAMPTZ NOT NULL,
+  object_url     TEXT NOT NULL,
+  created_at     TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS heart_rate (
+  id             BIGSERIAL PRIMARY KEY,
+  participant_id INT NOT NULL REFERENCES participants(id) ON DELETE CASCADE,
+  ts             TIMESTAMPTZ NOT NULL,
+  object_url     TEXT NOT NULL,
+  created_at     TIMESTAMPTZ DEFAULT now()
+);
+"""
+
+SQL_02_INDEXES = r"""
+-- Time-window helpers
+CREATE INDEX IF NOT EXISTS ix_accel_participant_ts ON accelerometer (participant_id, ts);
+CREATE INDEX IF NOT EXISTS ix_gyro_participant_ts  ON gyroscope     (participant_id, ts);
+CREATE INDEX IF NOT EXISTS ix_hr_participant_ts    ON heart_rate    (participant_id, ts);
+"""
+
+# Daily presence materialized views (ANY data that day = present)
+SQL_03_PRESENCE_MVS = r"""
+CREATE MATERIALIZED VIEW IF NOT EXISTS mv_accel_daily_presence AS
+SELECT participant_id, (ts AT TIME ZONE 'UTC')::date AS day, COUNT(*) AS points
+FROM accelerometer
+GROUP BY participant_id, day
+WITH NO DATA;
+
+CREATE MATERIALIZED VIEW IF NOT EXISTS mv_gyro_daily_presence AS
+SELECT participant_id, (ts AT TIME ZONE 'UTC')::date AS day, COUNT(*) AS points
+FROM gyroscope
+GROUP BY participant_id, day
+WITH NO DATA;
+
+CREATE MATERIALIZED VIEW IF NOT EXISTS mv_hr_daily_presence AS
+SELECT participant_id, (ts AT TIME ZONE 'UTC')::date AS day, COUNT(*) AS points
+FROM heart_rate
+GROUP BY participant_id, day
+WITH NO DATA;
+
+CREATE MATERIALIZED VIEW IF NOT EXISTS mv_survey_daily_presence AS
+SELECT participant_id, survey_date AS day, COUNT(*) AS forms
+FROM daily_survey
+GROUP BY participant_id, day
+WITH NO DATA;
+"""
+
+# Unique indexes on MVs to allow CONCURRENTLY refresh
+SQL_03A_PRESENCE_MV_UNIQUES = r"""
+CREATE UNIQUE INDEX IF NOT EXISTS ux_mv_accel_presence
+  ON mv_accel_daily_presence (participant_id, day);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_mv_gyro_presence
+  ON mv_gyro_daily_presence (participant_id, day);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_mv_hr_presence
+  ON mv_hr_daily_presence (participant_id, day);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_mv_survey_presence
+  ON mv_survey_daily_presence (participant_id, day);
+"""
+
+# Optional daily_survey (for compliance parity)
+SQL_03B_SURVEY_TABLE = r"""
 CREATE TABLE IF NOT EXISTS daily_survey (
   id             BIGSERIAL PRIMARY KEY,
   participant_id INT NOT NULL REFERENCES participants(id) ON DELETE CASCADE,
@@ -41,71 +127,11 @@ CREATE TABLE IF NOT EXISTS daily_survey (
   CONSTRAINT uq_survey_participant_date UNIQUE (participant_id, survey_date)
 );
 
-CREATE TABLE IF NOT EXISTS accelerometer (
-  id             BIGSERIAL PRIMARY KEY,
-  participant_id INT NOT NULL REFERENCES participants(id) ON DELETE CASCADE,
-  ts             TIMESTAMPTZ NOT NULL,
-  ax             REAL, ay REAL, az REAL,
-  created_at     TIMESTAMPTZ DEFAULT now()
-);
-
-CREATE TABLE IF NOT EXISTS gyroscope (
-  id             BIGSERIAL PRIMARY KEY,
-  participant_id INT NOT NULL REFERENCES participants(id) ON DELETE CASCADE,
-  ts             TIMESTAMPTZ NOT NULL,
-  gx             REAL, gy REAL, gz REAL,
-  created_at     TIMESTAMPTZ DEFAULT now()
-);
-
-CREATE TABLE IF NOT EXISTS heart_rate (
-  id             BIGSERIAL PRIMARY KEY,
-  participant_id INT NOT NULL REFERENCES participants(id) ON DELETE CASCADE,
-  ts             TIMESTAMPTZ NOT NULL,
-  bpm            REAL,
-  created_at     TIMESTAMPTZ DEFAULT now()
-);
+CREATE INDEX IF NOT EXISTS ix_survey_participant_date
+ON daily_survey (participant_id, survey_date);
 """
 
-SQL_03_INDEXES = r"""
-CREATE INDEX IF NOT EXISTS ix_accel_participant_ts ON accelerometer (participant_id, ts);
-CREATE INDEX IF NOT EXISTS ix_gyro_participant_ts  ON gyroscope     (participant_id, ts);
-CREATE INDEX IF NOT EXISTS ix_hr_participant_ts    ON heart_rate    (participant_id, ts);
-CREATE INDEX IF NOT EXISTS ix_survey_participant_date ON daily_survey (participant_id, survey_date);
-"""
-
-# Daily presence materialized views (ANY data = present)
-SQL_04_PRESENCE_MVS = r"""
-CREATE MATERIALIZED VIEW IF NOT EXISTS mv_accel_daily_presence AS
-SELECT participant_id, (ts AT TIME ZONE 'UTC')::date AS day, COUNT(*) AS points
-FROM accelerometer
-GROUP BY participant_id, day
-WITH NO DATA;
-CREATE INDEX IF NOT EXISTS ix_mv_accel_presence ON mv_accel_daily_presence (participant_id, day);
-
-CREATE MATERIALIZED VIEW IF NOT EXISTS mv_gyro_daily_presence AS
-SELECT participant_id, (ts AT TIME ZONE 'UTC')::date AS day, COUNT(*) AS points
-FROM gyroscope
-GROUP BY participant_id, day
-WITH NO DATA;
-CREATE INDEX IF NOT EXISTS ix_mv_gyro_presence ON mv_gyro_daily_presence (participant_id, day);
-
-CREATE MATERIALIZED VIEW IF NOT EXISTS mv_hr_daily_presence AS
-SELECT participant_id, (ts AT TIME ZONE 'UTC')::date AS day, COUNT(*) AS points
-FROM heart_rate
-GROUP BY participant_id, day
-WITH NO DATA;
-CREATE INDEX IF NOT EXISTS ix_mv_hr_presence ON mv_hr_daily_presence (participant_id, day);
-
-CREATE MATERIALIZED VIEW IF NOT EXISTS mv_survey_daily_presence AS
-SELECT participant_id, survey_date AS day, COUNT(*) AS forms
-FROM daily_survey
-GROUP BY participant_id, day
-WITH NO DATA;
-CREATE INDEX IF NOT EXISTS ix_mv_survey_presence ON mv_survey_daily_presence (participant_id, day);
-"""
-
-# FIXED: dynamic SQL via plpgsql so we can pass a table name
-SQL_05_COMPLIANCE_VIEWS = r"""
+SQL_04_COMPLIANCE_VIEWS = r"""
 CREATE OR REPLACE FUNCTION fn_compliance_from_presence(presence_table regclass)
 RETURNS TABLE (
   participant_id INT,
@@ -152,8 +178,7 @@ CREATE OR REPLACE VIEW v_survey_compliance AS
 SELECT * FROM fn_compliance_from_presence('mv_survey_daily_presence');
 """
 
-
-SQL_06_OVERVIEW = r"""
+SQL_05_OVERVIEW = r"""
 CREATE OR REPLACE FUNCTION fn_color(flag boolean, close int, target int)
 RETURNS text LANGUAGE sql IMMUTABLE AS $$
   SELECT CASE
@@ -163,7 +188,7 @@ RETURNS text LANGUAGE sql IMMUTABLE AS $$
          END;
 $$;
 
-CREATE OR REP  LACE VIEW v_last7 AS
+CREATE OR REPLACE VIEW v_last7 AS
 SELECT generate_series(current_date - INTERVAL '6 day', current_date, '1 day')::date AS day;
 
 CREATE OR REPLACE VIEW v_accel_last7 AS
@@ -237,8 +262,8 @@ SELECT
 
   sc.days_3  AS survey_days_3,
   sc.days_7  AS survey_days_7,
-  sc.meets_1_of_3 AS survey_1of3,
-  sc.meets_4_of_7 AS survey_4of_7,
+  sc.meets_1_of_3 AS survey_1of_3,
+  sc.meets_4_of_7 AS survey_4_of_7,
   fn_color(sc.meets_4_of_7, sc.days_7, 4) AS survey_color,
 
   strips.accel_strip,
@@ -255,11 +280,18 @@ LEFT JOIN v_last7_strips strips  ON strips.participant_id = p.id
 ORDER BY p.id;
 """
 
-SQL_REFRESH_ALL = r"""
+SQL_REFRESH_ALL_CONCURRENT = r"""
 REFRESH MATERIALIZED VIEW CONCURRENTLY mv_accel_daily_presence;
 REFRESH MATERIALIZED VIEW CONCURRENTLY mv_gyro_daily_presence;
 REFRESH MATERIALIZED VIEW CONCURRENTLY mv_hr_daily_presence;
 REFRESH MATERIALIZED VIEW CONCURRENTLY mv_survey_daily_presence;
+"""
+
+SQL_REFRESH_ALL = r"""
+REFRESH MATERIALIZED VIEW mv_accel_daily_presence;
+REFRESH MATERIALIZED VIEW mv_gyro_daily_presence;
+REFRESH MATERIALIZED VIEW mv_hr_daily_presence;
+REFRESH MATERIALIZED VIEW mv_survey_daily_presence;
 """
 
 SQL_SEED_PARTICIPANTS = r"""
@@ -268,166 +300,210 @@ INSERT INTO participants (external_id) VALUES
 ON CONFLICT (external_id) DO NOTHING;
 """
 
-# ---------- HELPER CODE ----------
+# =========================
+# Helpers: connections
+# =========================
 
-def get_conn():
+def get_env(name: str) -> Optional[str]:
+    v = os.getenv(name)
+    return v if v and v.strip() else None
+
+def strip_driver_prefix(url: str) -> str:
+    # Allow SQLAlchemy-style URLs but psycopg2 needs 'postgresql://'
+    return url.replace("postgresql+psycopg2://", "postgresql://")
+
+@contextmanager
+def connect_url(url_env: str, fallback: Optional[str] = None):
     load_dotenv()
-    dsn = os.getenv("DATABASE_URL")
-    if not dsn:
-        print("ERROR: Set DATABASE_URL env var (e.g., postgresql://user:pass@localhost:5432/spine_study)")
+    url = get_env(url_env) or fallback
+    if not url:
+        print(f"ERROR: set {url_env} or provide fallback.")
         sys.exit(1)
+    dsn = strip_driver_prefix(url)
+    conn = psycopg2.connect(dsn)
     try:
-        conn = psycopg2.connect(dsn)
         conn.autocommit = True
-        return conn
-    except Exception as e:
-        print("Connection error:", e)
-        sys.exit(1)
+        yield conn
+    finally:
+        conn.close()
 
-def exec_sql(conn, sql: str, label: str):
+# =========================
+# Admin: setup-db
+# =========================
+
+def setup_db(db_name: str, db_user: str, db_pass: str):
+    """Create role and database (idempotent). Requires ADMIN_URL (superuser)."""
+    with connect_url("ADMIN_URL") as conn:
+        with conn.cursor() as cur:
+            # create role
+            cur.execute("""
+                DO $$
+                BEGIN
+                  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = %s) THEN
+                    EXECUTE format('CREATE ROLE %I WITH LOGIN PASSWORD %L', %s, %s);
+                  END IF;
+                END$$;
+            """, (db_user, db_user, db_pass))
+            # create db owned by role
+            cur.execute("""
+                DO $$
+                BEGIN
+                  IF NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = %s) THEN
+                    EXECUTE format('CREATE DATABASE %I OWNER %I', %s, %s);
+                  END IF;
+                END$$;
+            """, (db_name, db_name, db_user))
+
+        print(f"✅ setup-db complete: db={db_name}, user={db_user}")
+
+# =========================
+# App-level operations
+# =========================
+
+def exec_sql(conn, sql_text: str, label: str):
     print(f"-> Executing: {label}")
     with conn.cursor() as cur:
-        cur.execute(sql)
+        cur.execute(sql_text)
 
-def exec_file(conn, path: str):
+def exec_file_path(conn, path: str):
     with open(path, "r", encoding="utf-8") as f:
-        sql = f.read()
-    exec_sql(conn, sql, f"file {path}")
+        txt = f.read()
+    exec_sql(conn, txt, f"file {path}")
 
-def init_all(conn):
-    exec_sql(conn, SQL_02_SCHEMA, "02_schema")
-    exec_sql(conn, SQL_03_INDEXES, "03_indexes")
-    exec_sql(conn, SQL_04_PRESENCE_MVS, "04_presence_materialized_views")
-    exec_sql(conn, SQL_05_COMPLIANCE_VIEWS, "05_compliance_views")
-    exec_sql(conn, SQL_06_OVERVIEW, "06_overview_views")
-    print("✅ init complete.")
+def init_all():
+    with connect_url("DATABASE_URL") as conn:
+        exec_sql(conn, SQL_01_BASE, "01_base_schema")
+        exec_sql(conn, SQL_02_INDEXES, "02_indexes")
+        exec_sql(conn, SQL_03B_SURVEY_TABLE, "03b_daily_survey")
+        exec_sql(conn, SQL_03_PRESENCE_MVS, "03_presence_mvs")
+        exec_sql(conn, SQL_03A_PRESENCE_MV_UNIQUES, "03a_presence_mv_unique_indexes")
+        exec_sql(conn, SQL_04_COMPLIANCE_VIEWS, "04_compliance_views")
+        exec_sql(conn, SQL_05_OVERVIEW, "05_overview_views")
+        print("✅ init complete.")
 
-def refresh_all(conn):
-    # Use non-concurrent if first-time populate or when concurrent fails
-    try:
-        exec_sql(conn, SQL_REFRESH_ALL, "refresh MVs (concurrently)")
-    except Exception:
-        print("Concurrent refresh failed. Falling back to non-concurrent...")
-        with conn.cursor() as cur:
-            for mv in ("mv_accel_daily_presence","mv_gyro_daily_presence","mv_hr_daily_presence","mv_survey_daily_presence"):
-                print(f"-> REFRESH MATERIALIZED VIEW {mv}")
-                cur.execute(f"REFRESH MATERIALIZED VIEW {mv};")
-    print("✅ refresh complete.")
+def refresh_all():
+    with connect_url("DATABASE_URL") as conn:
+        try:
+            exec_sql(conn, SQL_REFRESH_ALL_CONCURRENT, "refresh MV (concurrent)")
+        except Exception as e:
+            print(f"Concurrent refresh failed: {e}\nFalling back to non-concurrent...")
+            exec_sql(conn, SQL_REFRESH_ALL, "refresh MV (non-concurrent)")
+        print("✅ refresh complete.")
 
-def seed(conn):
-    exec_sql(conn, SQL_SEED_PARTICIPANTS, "seed participants")
-    print("✅ seed complete.")
+def seed_participants():
+    with connect_url("DATABASE_URL") as conn:
+        exec_sql(conn, SQL_SEED_PARTICIPANTS, "seed participants")
+        print("✅ seed complete.")
 
-def insert_demo(conn):
-    """Insert a few demo rows across the last 7 days for P0001, P0002."""
-    from datetime import datetime, timedelta, timezone
-    import random
+def normalize_ts(ts: Any) -> str:
+    if isinstance(ts, str):
+        return ts
+    if isinstance(ts, (int, float)):
+        return datetime.fromtimestamp(ts, tz=timezone.utc).isoformat()
+    if isinstance(ts, datetime):
+        if ts.tzinfo is None:
+            ts = ts.replace(tzinfo=timezone.utc)
+        return ts.isoformat()
+    raise TypeError("Unsupported timestamp type for demo insert")
 
-    with conn.cursor(cursor_factory=DictCursor) as cur:
-        cur.execute("SELECT id, external_id FROM participants ORDER BY id;")
-        parts = cur.fetchall()
-        if not parts:
-            print("No participants — seeding first.")
-            seed(conn)
-            cur.execute("SELECT id, external_id FROM participants ORDER BY id;")
+def insert_demo_rows():
+    """Insert fake URL rows for last 7 days for P0001/P0002; then refresh."""
+    with connect_url("DATABASE_URL") as conn:
+        with conn.cursor(cursor_factory=DictCursor) as cur:
+            # Ensure participants
+            cur.execute("INSERT INTO participants (external_id) VALUES ('P0001'),('P0002') ON CONFLICT DO NOTHING;")
+            cur.execute("SELECT id, external_id FROM participants WHERE external_id IN ('P0001','P0002') ORDER BY id;")
             parts = cur.fetchall()
 
-        now = datetime.now(timezone.utc)
-        accel_points, gyro_points, hr_points = [], [], []
+            now = datetime.now(timezone.utc)
+            accel_rows: List[Tuple[int, str, str]] = []
+            gyro_rows:  List[Tuple[int, str, str]] = []
+            hr_rows:    List[Tuple[int, str, str]] = []
 
-        for p in parts:
-            pid = p["id"]
-            for d in range(7):
-                day = now - timedelta(days=(6 - d))
-                if random.random() < 0.6:
-                    for _ in range(random.randint(2, 6)):
-                        ts = day.replace(hour=random.randint(8, 21),
-                                         minute=random.randint(0,59),
-                                         second=random.randint(0,59))
-                        accel_points.append((pid, ts.isoformat(), random.uniform(-1,1), random.uniform(-1,1), random.uniform(-1,1)))
-                        gyro_points.append((pid, ts.isoformat(), random.uniform(-180,180), random.uniform(-180,180), random.uniform(-180,180)))
-                        hr_points.append((pid, ts.isoformat(), random.uniform(55, 110)))
+            for p in parts:
+                pid = p["id"]
+                for d in range(7):
+                    day = (now - timedelta(days=(6 - d))).replace(hour=12, minute=0, second=0, microsecond=0)
+                    # 60% chance present that day
+                    import random
+                    if random.random() < 0.6:
+                        t = normalize_ts(day)
+                        accel_rows.append((pid, t, f"https://example.com/accel/{pid}/{int(day.timestamp())}.json"))
+                        gyro_rows.append((pid, t, f"https://example.com/gyro/{pid}/{int(day.timestamp())}.json"))
+                        hr_rows.append((pid, t, f"https://example.com/hr/{pid}/{int(day.timestamp())}.json"))
 
-        cur.execute("SET timezone TO 'UTC';")
-        if accel_points:
-            execute_batch(cur,
-                "INSERT INTO accelerometer (participant_id, ts, ax, ay, az) VALUES (%s, %s, %s, %s, %s)",
-                accel_points, page_size=1000
-            )
-        if gyro_points:
-            execute_batch(cur,
-                "INSERT INTO gyroscope (participant_id, ts, gx, gy, gz) VALUES (%s, %s, %s, %s, %s)",
-                gyro_points, page_size=1000
-            )
-        if hr_points:
-            execute_batch(cur,
-                "INSERT INTO heart_rate (participant_id, ts, bpm) VALUES (%s, %s, %s)",
-                hr_points, page_size=1000
-            )
+            if accel_rows:
+                execute_values(cur,
+                    "INSERT INTO accelerometer (participant_id, ts, object_url) VALUES %s",
+                    accel_rows, page_size=1000)
+            if gyro_rows:
+                execute_values(cur,
+                    "INSERT INTO gyroscope (participant_id, ts, object_url) VALUES %s",
+                    gyro_rows, page_size=1000)
+            if hr_rows:
+                execute_values(cur,
+                    "INSERT INTO heart_rate (participant_id, ts, object_url) VALUES %s",
+                    hr_rows, page_size=1000)
 
-    print(f"✅ inserted demo rows: accel={len(accel_points)}, gyro={len(gyro_points)}, hr={len(hr_points)}")
-    refresh_all(conn)
-    
-def print_dashboard(conn):
-    with conn.cursor(cursor_factory=DictCursor) as cur:
-        cur.execute("SELECT * FROM v_compliance_dashboard ORDER BY participant_id;")
-        rows = cur.fetchall()
-        if not rows:
-            print("No rows in v_compliance_dashboard. Did you run 'init' and 'refresh' and add data?")
-            return
+            print(f"✅ inserted demo: accel={len(accel_rows)}, gyro={len(gyro_rows)}, hr={len(hr_rows)}")
 
-        # Convert DictRow -> dict for tabulate
-        records = [dict(r) for r in rows]
+    refresh_all()
 
-        # Optional: if you want a narrower view, uncomment and adjust:
-        # wanted = [
-        #   "participant_id","external_id",
-        #   "accel_days_3","accel_days_7","accel_1of3","accel_4of7","accel_color",
-        #   "gyro_days_7","gyro_4of7","gyro_color",
-        #   "hr_days_7","hr_4of7","hr_color",
-        #   "survey_days_7","survey_4of7","survey_color",
-        # ]
-        # records = [{k: rec.get(k) for k in wanted} for rec in records]
+def print_dashboard():
+    with connect_url("DATABASE_URL") as conn:
+        with conn.cursor(cursor_factory=DictCursor) as cur:
+            cur.execute("SELECT * FROM v_compliance_dashboard ORDER BY participant_id;")
+            rows = cur.fetchall()
+            if not rows:
+                print("No rows. Try: init -> (seed/insert-demo) -> refresh.")
+                return
+            print(tabulate([dict(r) for r in rows], headers="keys", tablefmt="github", disable_numparse=True))
 
-        # Print full table
-        from tabulate import tabulate
-        print(tabulate(records, headers="keys", tablefmt="github", disable_numparse=True))
+def exec_file(path: str):
+    with connect_url("DATABASE_URL") as conn:
+        exec_file_path(conn, path)
+        print(f"✅ executed file: {path}")
 
-
-# ---------- CLI ----------
+# =========================
+# CLI
+# =========================
 
 def main():
-    parser = argparse.ArgumentParser(description="Postgres manager for spine study DB")
+    parser = argparse.ArgumentParser(description="Postgres manager (URL-based timeseries)")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
-    sub.add_parser("init", help="create schema, indexes, MVs, views")
-    sub.add_parser("refresh", help="refresh presence MVs")
+    p_setup = sub.add_parser("setup-db", help="create role & database (needs ADMIN_URL)")
+    p_setup.add_argument("--db-name", required=True)
+    p_setup.add_argument("--db-user", required=True)
+    p_setup.add_argument("--db-pass", required=True)
+
+    sub.add_parser("init", help="create schema, MVs, views")
+    sub.add_parser("refresh", help="refresh materialized views")
     sub.add_parser("seed", help="insert demo participants")
-    sub.add_parser("insert-demo", help="insert demo timeseries data + refresh MVs")
+    sub.add_parser("insert-demo", help="insert demo URL rows + refresh")
     sub.add_parser("dashboard", help="print v_compliance_dashboard")
+
     p_exec = sub.add_parser("exec-file", help="execute a .sql file")
     p_exec.add_argument("path", help="path to .sql file")
 
     args = parser.parse_args()
-    conn = get_conn()
 
-    try:
-        if args.cmd == "init":
-            init_all(conn)
-        elif args.cmd == "refresh":
-            refresh_all(conn)
-        elif args.cmd == "seed":
-            seed(conn)
-        elif args.cmd == "insert-demo":
-            insert_demo(conn)
-        elif args.cmd == "dashboard":
-            print_dashboard(conn)
-        elif args.cmd == "exec-file":
-            exec_file(conn, args.path)
-        else:
-            parser.print_help()
-    finally:
-        conn.close()
+    if args.cmd == "setup-db":
+        setup_db(args.db_name, args.db_user, args.db_pass)
+    elif args.cmd == "init":
+        init_all()
+    elif args.cmd == "refresh":
+        refresh_all()
+    elif args.cmd == "seed":
+        seed_participants()
+    elif args.cmd == "insert-demo":
+        insert_demo_rows()
+    elif args.cmd == "dashboard":
+        print_dashboard()
+    elif args.cmd == "exec-file":
+        exec_file(args.path)
+    else:
+        parser.print_help()
 
 if __name__ == "__main__":
     main()
