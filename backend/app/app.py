@@ -1,4 +1,5 @@
 from flask import Flask, render_template
+from config import Config
 from routes.upload import upload_bp
 from database.database import DB
 from flask import current_app
@@ -6,6 +7,7 @@ from flask import current_app
 
 def create_app():
     app = Flask(__name__)
+    app.config.from_object(Config)
 
     # Initialize database (remove try catch later)
     try:
@@ -33,7 +35,11 @@ def create_app():
 
 if __name__ == "__main__":
     app = create_app()
-    app.run(host="0.0.0.0", port=5000, debug=False)  # MAKES THIS PUBLIC
+    
+from routes.dashboard_api import dashboard_api
+from routes.dashboard_page import dashboard_page
 
-    #app.run(debug=True)
-
+app.register_blueprint(dashboard_api)
+app.register_blueprint(dashboard_page)
+ 
+app.run(debug=True)

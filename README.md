@@ -11,7 +11,7 @@ It includes:
 ---
 
 ## Project Structure
-SpineSurgeryProject/
+"SpineSurgeryProject/
 │
 ├── app.py                # Flask entry point (app factory)
 ├── config.py             # Centralized configuration
@@ -29,7 +29,7 @@ SpineSurgeryProject/
 │   └── data_record.py    # SQLAlchemy model for file metadata
 │
 ├── db_runner.py          # One‑file Postgres manager (CLI for schema, refresh, dashboard)
-└── database.py           # Connection‑pooled DB abstraction class (programmatic inserts/queries)
+└── database.py           # Connection‑pooled DB abstraction class (programmatic inserts/queries)"
 
 
 ---

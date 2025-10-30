@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Study Dashboard</title>
+  <!-- Vega libraries -->
+  <script src="https://cdn.jsdelivr.net/npm/vega@5"></script>
+  <script src="https://cdn.jsdelivr.net/npm/vega-lite@5"></script>
+  <script src="https://cdn.jsdelivr.net/npm/vega-embed@6"></script>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 24px; }
+    h2 { margin-bottom: 16px; }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 24px;
+    }
+    .chart {
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 12px;
+      background: #fafafa;
+    }
+  </style>
+</head>
+<body>
+  <h2>Compliance Dashboard</h2>
+
+  <div class="grid">
+    <div id="accelChart" class="chart"></div>
+    <div id="gyroChart" class="chart"></div>
+    <div id="hrChart" class="chart"></div>
+    <div id="surveyChart" class="chart"></div>
+  </div>
+
+<script>
+async function renderCharts(externalId) {
+  const endpoints = [
+    {id: "accelChart", url: `/api/dashboard/presence/accel/${externalId}`, title: "Accelerometer"},
+    {id: "gyroChart",  url: `/api/dashboard/presence/gyro/${externalId}`,  title: "Gyroscope"},
+    {id: "hrChart",    url: `/api/dashboard/presence/hr/${externalId}`,    title: "Heart Rate"},
+    {id: "surveyChart",url: `/api/dashboard/presence/survey/${externalId}`,title: "Survey"}
+  ];
+
+  for (const {id, url, title} of endpoints) {
+    const data = await fetch(url).then(r => r.json());
+    const spec = {
+      $schema: "https://vega.github.io/schema/vega-lite/v5.json",
+      data: { values: data },
+      mark: { type: "bar", tooltip: true },
+      encoding: {
+        x: { field: "day", type: "ordinal", title: "Day" },
+        y: { field: "count", type: "quantitative", title: "Count" }
+      },
+      width: 350,
+      height: 200,
+      title: `${title} presence (last 7 days)`
+    };
+    vegaEmbed(`#${id}`, spec, { actions: false });
+  }
+}
+
+// Render for default participant
+renderCharts("P0001");
+</script>
+</body>
+</html>
