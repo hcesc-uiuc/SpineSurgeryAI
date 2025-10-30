@@ -3,7 +3,8 @@ db_runner.py — One-file Postgres manager (URL-based timeseries) for SpineSurge
 
 Commands:
   setup-db      -> create role & database (needs ADMIN_URL superuser, or run as postgres)
-  init          -> create schema, indexes, materialized views, and views
+  init          -> create schema, indexes, materialized views, and views (idempotent)
+  reset         -> DROP ALL objects (views/MVs/tables) then run init (DESTRUCTIVE)
   refresh       -> refresh all materialized views (tries CONCURRENTLY, falls back)
   seed          -> insert demo participants (P0001, P0002)
   insert-demo   -> insert demo URL rows across last 7 days + refresh MVs
@@ -11,8 +12,9 @@ Commands:
   exec-file     -> run an arbitrary .sql file
 
 Connection:
-  - App connection uses DATABASE_URL  (e.g., postgresql+psycopg2://user:pass@localhost:5432/spine_db)
-  - Admin tasks use ADMIN_URL         (e.g., postgresql+psycopg2://postgres@localhost:5432/postgres)
+  - App/admin operations use env vars:
+      DATABASE_URL  (e.g., postgresql://user:pass@host:5432/dbname)
+      ADMIN_URL     (e.g., postgresql://postgres@host:5432/postgres) for setup-db
 
 Notes:
   - Timeseries tables store (participant_id, ts, object_url) for accel/gyro/hr.
@@ -251,13 +253,13 @@ SELECT
   gc.days_3  AS gyro_days_3,
   gc.days_7  AS gyro_days_7,
   gc.meets_1_of_3 AS gyro_1of3,
-  gc.meets_4_of_7 AS gyro_4of7,
+  gc.meets_4_of_7 AS gyro_4of_7,
   fn_color(gc.meets_4_of_7, gc.days_7, 4) AS gyro_color,
 
   hc.days_3  AS hr_days_3,
   hc.days_7  AS hr_days_7,
   hc.meets_1_of_3 AS hr_1of3,
-  hc.meets_4_of_7 AS hr_4of_7,
+  hc.meets_4_of_7 AS hr_4_of_7,
   fn_color(hc.meets_4_of_7, hc.days_7, 4) AS hr_color,
 
   sc.days_3  AS survey_days_3,
@@ -300,6 +302,37 @@ INSERT INTO participants (external_id) VALUES
 ON CONFLICT (external_id) DO NOTHING;
 """
 
+# Destructive drop of all objects (for reset)
+SQL_DROP_ALL = r"""
+-- Drop views and materialized views first (dependency order)
+DROP VIEW IF EXISTS v_compliance_dashboard CASCADE;
+DROP VIEW IF EXISTS v_last7_strips CASCADE;
+DROP VIEW IF EXISTS v_hr_last7 CASCADE;
+DROP VIEW IF EXISTS v_gyro_last7 CASCADE;
+DROP VIEW IF EXISTS v_accel_last7 CASCADE;
+DROP VIEW IF EXISTS v_survey_last7 CASCADE;
+DROP VIEW IF EXISTS v_last7 CASCADE;
+DROP VIEW IF EXISTS v_hr_compliance CASCADE;
+DROP VIEW IF EXISTS v_gyro_compliance CASCADE;
+DROP VIEW IF EXISTS v_accel_compliance CASCADE;
+DROP VIEW IF EXISTS v_survey_compliance CASCADE;
+
+DROP FUNCTION IF EXISTS fn_compliance_from_presence(regclass) CASCADE;
+DROP FUNCTION IF EXISTS fn_color(boolean,int,int) CASCADE;
+
+DROP MATERIALIZED VIEW IF EXISTS mv_accel_daily_presence CASCADE;
+DROP MATERIALIZED VIEW IF EXISTS mv_gyro_daily_presence CASCADE;
+DROP MATERIALIZED VIEW IF EXISTS mv_hr_daily_presence CASCADE;
+DROP MATERIALIZED VIEW IF EXISTS mv_survey_daily_presence CASCADE;
+
+-- Drop tables (children first because of FK constraints)
+DROP TABLE IF EXISTS accelerometer CASCADE;
+DROP TABLE IF EXISTS gyroscope CASCADE;
+DROP TABLE IF EXISTS heart_rate CASCADE;
+DROP TABLE IF EXISTS daily_survey CASCADE;
+DROP TABLE IF EXISTS participants CASCADE;
+"""
+
 # =========================
 # Helpers: connections
 # =========================
@@ -326,6 +359,16 @@ def connect_url(url_env: str, fallback: Optional[str] = None):
         yield conn
     finally:
         conn.close()
+
+def exec_sql(conn, sql_text: str, label: str):
+    print(f"-> Executing: {label}")
+    with conn.cursor() as cur:
+        cur.execute(sql_text)
+
+def exec_file_path(conn, path: str):
+    with open(path, "r", encoding="utf-8") as f:
+        txt = f.read()
+    exec_sql(conn, txt, f"file {path}")
 
 # =========================
 # Admin: setup-db
@@ -360,16 +403,6 @@ def setup_db(db_name: str, db_user: str, db_pass: str):
 # App-level operations
 # =========================
 
-def exec_sql(conn, sql_text: str, label: str):
-    print(f"-> Executing: {label}")
-    with conn.cursor() as cur:
-        cur.execute(sql_text)
-
-def exec_file_path(conn, path: str):
-    with open(path, "r", encoding="utf-8") as f:
-        txt = f.read()
-    exec_sql(conn, txt, f"file {path}")
-
 def init_all():
     with connect_url("DATABASE_URL") as conn:
         exec_sql(conn, SQL_01_BASE, "01_base_schema")
@@ -380,6 +413,12 @@ def init_all():
         exec_sql(conn, SQL_04_COMPLIANCE_VIEWS, "04_compliance_views")
         exec_sql(conn, SQL_05_OVERVIEW, "05_overview_views")
         print("✅ init complete.")
+
+def reset_all():
+    """DESTRUCTIVE: drop everything, then run init."""
+    with connect_url("DATABASE_URL") as conn:
+        exec_sql(conn, SQL_DROP_ALL, "00_drop_all_objects")
+    init_all()
 
 def refresh_all():
     with connect_url("DATABASE_URL") as conn:
@@ -478,6 +517,7 @@ def main():
     p_setup.add_argument("--db-pass", required=True)
 
     sub.add_parser("init", help="create schema, MVs, views")
+    sub.add_parser("reset", help="DROP all objects and recreate schema (destructive)")
     sub.add_parser("refresh", help="refresh materialized views")
     sub.add_parser("seed", help="insert demo participants")
     sub.add_parser("insert-demo", help="insert demo URL rows + refresh")
@@ -492,6 +532,8 @@ def main():
         setup_db(args.db_name, args.db_user, args.db_pass)
     elif args.cmd == "init":
         init_all()
+    elif args.cmd == "reset":
+        reset_all()
     elif args.cmd == "refresh":
         refresh_all()
     elif args.cmd == "seed":

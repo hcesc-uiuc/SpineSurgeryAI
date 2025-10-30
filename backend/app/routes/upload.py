@@ -79,7 +79,7 @@ def uploadfile():
 
     return jsonify(message="Upload successful", key=key, presigned_url=url)
 
-#curl -X POST -H "Content-Type: application/json" -d '{"filename":"Jason","content":20}' http://127.0.0.1:5000/api/upload    , do this in gitbash
+#curl -X POST -H "Content-Type: application/json" -d '{"filename":"Jason","content":20}' http://18.116.67.186/api/upload    , do this in gitbash
 # "C:\Users\indep\Downloads\BIOE 476_Fall 2025_exam2review (1).pdf"
 
 #curl -X POST -F "file=@/c/Users/indep/Downloads/BIOE 476_Fall 2025_exam2review (1).pdf" http://127.0.0.1:5000/api/uploadfile
