@@ -3,7 +3,8 @@ from config import Config
 from routes.upload import upload_bp
 from database.database import DB
 from flask import current_app
-
+from routes.dashboard_api import dashboard_api
+from routes.dashboard_page import dashboard_page
 
 def create_app():
     app = Flask(__name__)
@@ -17,7 +18,10 @@ def create_app():
 
     # Register blueprints
     app.register_blueprint(upload_bp, url_prefix="/api")
-
+    
+    app.register_blueprint(dashboard_api)
+    app.register_blueprint(dashboard_page)
+    
     @app.route("/")
     def home():
         return render_template("home.html")
@@ -35,11 +39,8 @@ def create_app():
 
 if __name__ == "__main__":
     app = create_app()
+    app.run(host="0.0.0.0", port=5000, debug=False)
     
-from routes.dashboard_api import dashboard_api
-from routes.dashboard_page import dashboard_page
 
-app.register_blueprint(dashboard_api)
-app.register_blueprint(dashboard_page)
  
-app.run(debug=True)
+
