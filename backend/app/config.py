@@ -1,5 +1,7 @@
 import os
 
+# unused class keep for now remove later
+
 class Config:
     SQLALCHEMY_DATABASE_URI = os.getenv("DATABASE_URL", "sqlite:///data.db")
     SQLALCHEMY_TRACK_MODIFICATIONS = False

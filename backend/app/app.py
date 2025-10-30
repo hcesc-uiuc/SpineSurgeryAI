@@ -1,16 +1,4 @@
-# from flask import Flask
-
-# app = Flask(__name__)
-
-# @app.route("/")
-# def home():
-#     return "Hello Akarsh — Flask is running inside your venv!"
-
-# if __name__ == "__main__":
-#     app.run(debug=True)
-
 from flask import Flask, render_template
-from config import Config
 from routes.upload import upload_bp
 from database.database import DB
 from flask import current_app
@@ -18,7 +6,6 @@ from flask import current_app
 
 def create_app():
     app = Flask(__name__)
-    app.config.from_object(Config)
 
     # Initialize database (remove try catch later)
     try:
