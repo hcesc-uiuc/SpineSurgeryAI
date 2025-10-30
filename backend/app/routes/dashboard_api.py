@@ -1,3 +1,20 @@
+from flask import Blueprint, render_template
+from flask import Blueprint, request, jsonify
+# from services import s3_service, db_service
+from flask import current_app
+from datetime import datetime
+
+#S3 imports
+from flask import Blueprint, request, jsonify
+from dotenv import load_dotenv
+
+from werkzeug.utils import secure_filename
+from datetime import datetime
+import boto3, os
+
+dashboard_api = Blueprint("dashboard_api", __name__)
+
+
 @dashboard_api.route("/presence/accel/<external_id>")
 def presence_accel(external_id):
     db = current_app.config["DB"]
