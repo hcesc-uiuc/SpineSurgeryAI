@@ -18,13 +18,13 @@ def create_app():
 
     # Register blueprints
     app.register_blueprint(upload_bp, url_prefix="/api")
-    
+
     app.register_blueprint(dashboard_api)
     app.register_blueprint(dashboard_page)
     
     @app.route("/")
     def home():
-        return render_template("home.html")
+        return render_template(("dashboard.html"))
     
     @app.route("/compliance")
     def compliance():
