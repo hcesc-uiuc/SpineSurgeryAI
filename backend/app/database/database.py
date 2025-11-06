@@ -103,51 +103,40 @@ class DB:
             "Unsupported timestamp type; use str, datetime, or unix seconds"
         )
 
-    # fix with parser also look at HR 
     def insert_accel(
         self,
         external_participant_identifier: str,
-        accelerometer_data_rows_sequence: Sequence[Dict[str, Any] | Tuple[Any, Any, Any, Any]],
+        accelerometer_data_rows_sequence: Sequence[Dict[str, Any] | Tuple[Any, Any]],
     ) -> int:
-        #Insert accelerometer rows for a participant.
-        #Rows may be dicts {ts, ax, ay, az} or tuples (ts, ax, ay, az).
-        #Returns inserted row count.
-        
+        """Insert accelerometer objects (timestamp + URL). Returns inserted row count.
+
+        Accepts rows as:
+        - dict: {"ts": <str/datetime/unix>, "url": <str>}
+        - tuple: (<ts>, <url>)
+        """
         participant_id_integer = self.create_participant_if_missing(external_participant_identifier)
-        accelerometer_payload_rows_list: List[
-            Tuple[int, str, Optional[float], Optional[float], Optional[float]]
-        ] = []  # (participant_id, iso8601_ts, ax, ay, az)
-        for single_accelerometer_record in accelerometer_data_rows_sequence:
-            if isinstance(single_accelerometer_record, dict):
-                timestamp_iso8601_string = self.normalize_timestamp_to_iso8601(
-                    single_accelerometer_record["ts"]
-                )
-                accelerometer_payload_rows_list.append(
-                    (
-                        participant_id_integer,
-                        timestamp_iso8601_string,
-                        single_accelerometer_record.get("ax"),
-                        single_accelerometer_record.get("ay"),
-                        single_accelerometer_record.get("az"),
-                    )
-                )
+        accelerometer_payload_rows_list: List[Tuple[int, str, str]] = []  # (participant_id, iso8601_ts, url)
+
+        for single_accel_record in accelerometer_data_rows_sequence:
+            if isinstance(single_accel_record, dict):
+                timestamp_iso8601_string = self.normalize_timestamp_to_iso8601(single_accel_record["ts"])
+                object_url_string = single_accel_record.get("url")
             else:
-                timestamp_iso8601_string = self.normalize_timestamp_to_iso8601(
-                    single_accelerometer_record[0]
-                )
-                accelerometer_payload_rows_list.append(
-                    (
-                        participant_id_integer,
-                        timestamp_iso8601_string,
-                        single_accelerometer_record[1] if len(single_accelerometer_record) > 1 else None,
-                        single_accelerometer_record[2] if len(single_accelerometer_record) > 2 else None,
-                        single_accelerometer_record[3] if len(single_accelerometer_record) > 3 else None,
-                    )
-                )
+                timestamp_iso8601_string = self.normalize_timestamp_to_iso8601(single_accel_record[0])
+                object_url_string = single_accel_record[1] if len(single_accel_record) > 1 else None
+
+            if not object_url_string:
+                raise ValueError("accelerometer row missing required 'url' value")
+
+            accelerometer_payload_rows_list.append(
+                (participant_id_integer, timestamp_iso8601_string, object_url_string)
+            )
+
         if not accelerometer_payload_rows_list:
             return 0
+
         insert_accelerometer_sql = (
-            "INSERT INTO accelerometer (participant_id, ts, ax, ay, az) VALUES %s"
+            "INSERT INTO accelerometer (participant_id, ts, object_url) VALUES %s"
         )
         with self.temporary_database_connection() as database_connection, database_connection.cursor() as database_cursor:
             execute_values(
@@ -156,55 +145,56 @@ class DB:
                 accelerometer_payload_rows_list,
                 page_size=1000,
             )
-            return database_cursor.rowcount or len(accelerometer_payload_rows_list)
+        return database_cursor.rowcount or len(accelerometer_payload_rows_list)
 
-    # fix with parser also look at HR 
+
     def insert_gyro(
         self,
         external_participant_identifier: str,
-        gyroscope_data_rows_sequence: Sequence[Dict[str, Any] | Tuple[Any, Any, Any, Any]],
+        gyroscope_data_rows_sequence: Sequence[Dict[str, Any] | Tuple[Any, Any]],
     ) -> int:
+        """Insert gyroscope objects (timestamp + URL). Returns inserted row count.
+
+        Expects each row to be either:
+        - dict: {"ts": <str/datetime/unix>, "url": <str>}
+        - tuple: (<ts>, <url>)
+        """
         participant_id_integer = self.create_participant_if_missing(external_participant_identifier)
-        gyroscope_payload_rows_list: List[
-            Tuple[int, str, Optional[float], Optional[float], Optional[float]]
-        ] = []  # (participant_id, iso8601_ts, gx, gy, gz)
+        gyroscope_payload_rows_list: List[Tuple[int, str, str]] = []  # (participant_id, iso8601_ts, S3/HTTP url)
+
         for single_gyroscope_record in gyroscope_data_rows_sequence:
             if isinstance(single_gyroscope_record, dict):
                 timestamp_iso8601_string = self.normalize_timestamp_to_iso8601(
                     single_gyroscope_record["ts"]
                 )
-                gyroscope_payload_rows_list.append(
-                    (
-                        participant_id_integer,
-                        timestamp_iso8601_string,
-                        single_gyroscope_record.get("gx"),
-                        single_gyroscope_record.get("gy"),
-                        single_gyroscope_record.get("gz"),
-                    )
-                )
+                object_url_string = single_gyroscope_record.get("url")
             else:
                 timestamp_iso8601_string = self.normalize_timestamp_to_iso8601(
                     single_gyroscope_record[0]
                 )
-                gyroscope_payload_rows_list.append(
-                    (
-                        participant_id_integer,
-                        timestamp_iso8601_string,
-                        single_gyroscope_record[1] if len(single_gyroscope_record) > 1 else None,
-                        single_gyroscope_record[2] if len(single_gyroscope_record) > 2 else None,
-                        single_gyroscope_record[3] if len(single_gyroscope_record) > 3 else None,
-                    )
-                )
+                object_url_string = single_gyroscope_record[1] if len(single_gyroscope_record) > 1 else None
+
+            if not object_url_string:
+                raise ValueError("gyroscope row missing required 'url' value")
+
+            gyroscope_payload_rows_list.append(
+                (participant_id_integer, timestamp_iso8601_string, object_url_string)
+            )
+
         if not gyroscope_payload_rows_list:
             return 0
+
         insert_gyroscope_sql = (
-            "INSERT INTO gyroscope (participant_id, ts, gx, gy, gz) VALUES %s"
+            "INSERT INTO gyroscope (participant_id, ts, object_url) VALUES %s"
         )
         with self.temporary_database_connection() as database_connection, database_connection.cursor() as database_cursor:
             execute_values(
-                database_cursor, insert_gyroscope_sql, gyroscope_payload_rows_list, page_size=1000
+                database_cursor,
+                insert_gyroscope_sql,
+                gyroscope_payload_rows_list,
+                page_size=1000,
             )
-            return database_cursor.rowcount or len(gyroscope_payload_rows_list)
+        return database_cursor.rowcount or len(gyroscope_payload_rows_list)
 
     def insert_hr(
         self,
