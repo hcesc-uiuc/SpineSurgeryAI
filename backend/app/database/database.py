@@ -279,7 +279,7 @@ class DB:
             "REFRESH MATERIALIZED VIEW {mode} mv_hr_daily_presence;"
             "REFRESH MATERIALIZED VIEW {mode} mv_survey_daily_presence;"
         )
-
+ 
         def execute_refresh_with_mode(mode_clause_string: str) -> None:
             refresh_statement_sql = refresh_all_materialized_views_sql_template.format(
                 mode=mode_clause_string

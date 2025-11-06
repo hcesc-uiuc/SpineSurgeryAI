@@ -5,9 +5,13 @@ from database.database import DB
 from flask import current_app
 from routes.dashboard_api import dashboard_api
 from routes.dashboard_page import dashboard_page
+import logging
+import sys
 
 def create_app():
     app = Flask(__name__)
+    app.logger.addHandler(logging.StreamHandler(sys.stdout))
+    app.logger.setLevel(logging.DEBUG)
     app.config.from_object(Config)
 
     # Initialize database (remove try catch later)
