@@ -57,7 +57,7 @@ def upload():
 @upload_bp.route("/uploadfile", methods=["POST"])  
 def uploadfile():
     
-
+    print(request)
     file = request.files.get("file")
     if not file:
         return jsonify(error="No file uploaded"), 400
