@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 from werkzeug.utils import secure_filename
 from datetime import datetime
 import boto3, os
+from config import Config
 
 upload_bp = Blueprint("upload", __name__)
 
@@ -46,6 +47,8 @@ def upload():
         # s3_link = s3_service.upload_to_s3(content, filename)
         s3_link = str(filename) + str(content)
         db.insert_hr("P0001", [{"ts": str(datetime.now()), "url": s3_link}])
+        db.insert_accel("P0001", [{"ts": str(datetime.now()), "url": s3_link}])
+        db.insert_gyro("P0001", [{"ts": str(datetime.now()), "url": s3_link}])
         db.refresh_summary_cache(True)
 
         # Save metadata in DB
@@ -56,14 +59,17 @@ def upload():
 
 @upload_bp.route("/uploadfile", methods=["POST"])  
 def uploadfile():
-    
-    print("---- REQUEST START ----")
-    print("Method:", request.method)
-    print("URL:", request.url)
-    print("Headers:\n", request.headers)
-    # Be careful printing body — can be huge or binary
-    print("Body:\n", request.get_data(as_text=True))
-    print("---- REQUEST END ----")    
+    db = current_app.config["DB"]
+
+    if (Config.DEBUG_MODE):
+        # Be careful printing body — can be huge or binary
+
+        print("---- REQUEST START ----")
+        print("Method:", request.method)
+        print("URL:", request.url)
+        print("Headers:\n", request.headers)
+        print("Body:\n", request.get_data(as_text=True))
+        print("---- REQUEST END ----")    
     file = request.files.get("file")
     if not file:
         return jsonify(error="No file uploaded"), 400
@@ -85,9 +91,11 @@ def uploadfile():
         ExpiresIn=3600
     )
 
+    db.insert_accel("P0001", [{"ts": str(datetime.now()), "url": url}])
+
     return jsonify(message="Upload successful", key=key, presigned_url=url)
 
 #curl -X POST -H "Content-Type: application/json" -d '{"filename":"Jason","content":20}' http://18.116.67.186/api/upload    , do this in gitbash
 # "C:\Users\indep\Downloads\BIOE 476_Fall 2025_exam2review (1).pdf"
 
-#curl -X POST -F "file=@/c/Users/indep/Downloads/BIOE 476_Fall 2025_exam2review (1).pdf" http://127.0.0.1:5000/api/uploadfile
+#curl -X POST -F "file=@/C:\Users\indep\Downloads\accelerometer_2025-10-22_06-20-03.csv" http://127.0.0.1:5000/api/uploadfile

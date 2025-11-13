@@ -34,7 +34,8 @@ def create_app():
     def compliance():
         try:
             data = current_app.config["DB"].get_compliance_for("P0001") 
-            table = current_app.config["DB"].get_table("heart_rate")
+            table = current_app.config["DB"].get_table("accelerometer")
+            
             return render_template("compliance.html", data=data, table=table)
         except: 
             app.logger.error("\033[91m" + "Cannot connect to database" + "\033[0m")
