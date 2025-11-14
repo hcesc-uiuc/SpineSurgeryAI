@@ -8,12 +8,29 @@ from typing import Any, Dict, List, Optional
 import csv
 import io
 import json
+from config import Config
+import boto3
+from dotenv import load_dotenv
 
 
 from database.database import DB
 from psycopg2.extras import DictCursor
 from dataclasses import dataclass
 import requests
+
+load_dotenv()
+
+AWS_ACCESS_KEY_ID = os.getenv("AWS_KEY")
+AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_KEY")
+AWS_REGION = os.getenv("AWS_REGION")
+S3_BUCKET = os.getenv("AWS_BUCKET")
+
+s3 = boto3.client(
+    "s3",
+    region_name=AWS_REGION,
+    aws_access_key_id=AWS_ACCESS_KEY_ID,
+    aws_secret_access_key=AWS_SECRET_ACCESS_KEY
+)
 
 
 
@@ -111,6 +128,10 @@ def download_object_content(url_or_key: str) -> bytes:
         resp = requests.get(url_or_key, timeout=60)
         resp.raise_for_status()
         return resp.content
+
+    # Case 2: S3 key (new preferred mode)
+    resp = s3.get_object(Bucket=S3_BUCKET, Key=url_or_key)
+    return resp["Body"].read()
     raise ValueError(
         f"Unsupported object_url format (expected http/https): {url_or_key!r}"
     )
@@ -260,11 +281,18 @@ def run_once(db: DB):
     print(f"[checker] Found {len(uploads)} recent upload(s).", flush=True)
 
     for upload in uploads:
-        print(
-            f"[checker] Processing {upload.kind} data for participant={upload.external_id!r} "
-            f"ts={upload.ts} url={upload.object_url}",
-            flush=True,
-        )
+        if (Config.DEBUG_MODE):
+            print(
+                f"[checker] Processing {upload.kind} data for participant={upload.external_id!r} "
+                f"ts={upload.ts} url={upload.object_url}",
+                flush=True,
+            )
+        else:
+            print(
+                f"[checker] Processing {upload.kind} data for participant={upload.external_id!r} "
+                f"ts={upload.ts}",
+                flush=True,
+            )
         try:
             content = download_object_content(upload.object_url)
             analysis = analyze_uploaded_data(upload.kind, content)
@@ -287,7 +315,7 @@ Main loop runs every 15 minutes
 """
 def main_loop():
     db = DB() 
-
+    
     print(
         f"[checker] Starting loop: interval={CHECKING_INTERVAL_SECONDS}s, "
         f"window={CHECKING_INTERVAL_SECONDS}min, "
@@ -302,6 +330,12 @@ def main_loop():
             except Exception as e:
                 # Don't crash on a single failure
                 print(f"[checker] ERROR in run_once: {e!r}", flush=True)
+            try:
+                db.refresh_summary_cache()
+            except Exception as e:
+                # Don't crash on a single failure
+                print(f"[checker] ERROR in refreshing summary cache!: {e!r}", flush=True)
+            
             time.sleep(CHECKING_INTERVAL_SECONDS)
     except KeyboardInterrupt:
         print("[checker] Shutting down (KeyboardInterrupt).", flush=True)
@@ -310,6 +344,14 @@ def main_loop():
             db.close_all_pool_connections()
         except Exception:
             pass
+
+def debug():
+    db = DB() 
+    run_once(db)
+    # content = download_object_content("uploads/20251114T000314_accelerometer_2025-10-22_06-20-03.csv")
+    # analysis = analyze_uploaded_data("e", content)
+
+    # print(f"[checker]: Results: " + str(analysis))
 
 
 if __name__ == "__main__":

@@ -85,15 +85,9 @@ def uploadfile():
         ServerSideEncryption="AES256"
     )
 
-    url = s3.generate_presigned_url(
-        "get_object",
-        Params={"Bucket": S3_BUCKET, "Key": key},
-        ExpiresIn=3600
-    )
+    db.insert_accel("P0001", [{"ts": str(datetime.now()), "url": key}])
 
-    db.insert_accel("P0001", [{"ts": str(datetime.now()), "url": url}])
-
-    return jsonify(message="Upload successful", key=key, presigned_url=url)
+    return jsonify(message="Upload successful", key=key)
 
 #curl -X POST -H "Content-Type: application/json" -d '{"filename":"Jason","content":20}' http://18.116.67.186/api/upload    , do this in gitbash
 # "C:\Users\indep\Downloads\BIOE 476_Fall 2025_exam2review (1).pdf"
