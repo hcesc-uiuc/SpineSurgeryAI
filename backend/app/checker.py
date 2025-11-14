@@ -132,9 +132,6 @@ def download_object_content(url_or_key: str) -> bytes:
     # Case 2: S3 key (new preferred mode)
     resp = s3.get_object(Bucket=S3_BUCKET, Key=url_or_key)
     return resp["Body"].read()
-    raise ValueError(
-        f"Unsupported object_url format (expected http/https): {url_or_key!r}"
-    )
 
 """
     Analyzer for CSV files (accereromter currently)
@@ -181,6 +178,7 @@ def analyze_uploaded_data(kind: str, content_bytes: bytes) -> Dict[str, Any]:
                     timestamps_ms.append(ts)
                 except ValueError:
                     # skip bad rows
+                    print(f"[checker] skipping bad rows")
                     continue
             print(f"[checker] CSV parse done, timestamps={len(timestamps_ms)}", flush=True)
 
