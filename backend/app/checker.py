@@ -176,7 +176,7 @@ def analyze_uploaded_data(kind: str, content_bytes: bytes) -> Dict[str, Any]:
                     continue
                 try:
                     ts = int(Decimal(ts_str))
-                    print(ts)
+                    print(ts_str)
                 except ValueError:
                     continue
                 timestamps_ms.append(ts)
