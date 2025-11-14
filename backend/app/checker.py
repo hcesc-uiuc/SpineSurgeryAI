@@ -234,11 +234,10 @@ def analyze_uploaded_data(kind: str, content_bytes: bytes) -> Dict[str, Any]:
         for i in range(1, actual_samples)
     ]
     print(f"[checker] dt list built, len={len(dts_seconds)}", flush=True)
-    nonzero_dts = [dt for dt in dts_seconds if dt > 0]
 
 
     # median dt = typical sampling interval
-    median_dt = statistics.median(nonzero_dts)
+    median_dt = statistics.median(dts_seconds)
     sampling_rate_hz = 1.0 / median_dt if median_dt > 0 else 0.0
     print(f"[checker] median_dt={median_dt}, sampling_rate_hz={sampling_rate_hz}", flush=True)
 
