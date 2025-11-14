@@ -172,14 +172,13 @@ def analyze_uploaded_data(kind: str, content_bytes: bytes) -> Dict[str, Any]:
             parse_format = "csv"
             for row in reader:
                 if row and row[0]:
-                    # Convert timestamp from scientific notation to full int
-                    row[0] = str(int(Decimal(row[0])))
                     print(row[0])
-                ts_str = row
+                ts_str = row.get("timestamp")
                 if ts_str is None or ts_str == "":
                     continue
                 try:
                     ts = int(Decimal(ts_str))
+                    print(ts_str)
                 except ValueError:
                     continue
                 timestamps_ms.append(ts)
