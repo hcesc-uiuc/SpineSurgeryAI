@@ -82,19 +82,19 @@ CREATE INDEX IF NOT EXISTS ix_hr_participant_ts    ON heart_rate    (participant
 # Daily presence materialized views (ANY data that day = present)
 SQL_03_PRESENCE_MVS = r"""
 CREATE MATERIALIZED VIEW IF NOT EXISTS mv_accel_daily_presence AS
-SELECT participant_id, (ts AT TIME ZONE 'UTC')::date AS day, COUNT(*) AS points
+SELECT participant_id, ts::date AS day, COUNT(*) AS points
 FROM accelerometer
 GROUP BY participant_id, day
 WITH NO DATA;
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS mv_gyro_daily_presence AS
-SELECT participant_id, (ts AT TIME ZONE 'UTC')::date AS day, COUNT(*) AS points
+SELECT participant_id, ts::date AS day, COUNT(*) AS points
 FROM gyroscope
 GROUP BY participant_id, day
 WITH NO DATA;
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS mv_hr_daily_presence AS
-SELECT participant_id, (ts AT TIME ZONE 'UTC')::date AS day, COUNT(*) AS points
+SELECT participant_id, ts::date AS day, COUNT(*) AS points
 FROM heart_rate
 GROUP BY participant_id, day
 WITH NO DATA;

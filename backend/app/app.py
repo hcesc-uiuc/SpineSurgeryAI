@@ -8,6 +8,8 @@ from routes.dashboard_page import dashboard_page
 import logging
 import sys
 
+
+
 def create_app():
     app = Flask(__name__)
     app.logger.addHandler(logging.StreamHandler(sys.stdout))
@@ -17,6 +19,8 @@ def create_app():
     # Initialize database (remove try catch later)
     try:
         app.config["DB"] = DB()
+        current_app.config["DB"].refresh_summary_cache()
+
     except:
         app.logger.error("\033[91m" + "Cannot connect to database" + "\033[0m")
 
