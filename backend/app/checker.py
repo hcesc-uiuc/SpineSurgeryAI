@@ -171,7 +171,10 @@ def analyze_uploaded_data(kind: str, content_bytes: bytes) -> Dict[str, Any]:
         if reader.fieldnames and "timestamp" in reader.fieldnames:
             parse_format = "csv"
             for row in reader:
-                ts_str = row.get("timestamp")
+                if row and row[0]:
+                    # Convert timestamp from scientific notation to full int
+                    row[0] = str(int(Decimal(row[0])))
+                ts_str = row
                 if ts_str is None or ts_str == "":
                     continue
                 try:
