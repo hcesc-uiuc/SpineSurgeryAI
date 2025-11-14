@@ -175,14 +175,10 @@ def analyze_uploaded_data(kind: str, content_bytes: bytes) -> Dict[str, Any]:
                 if ts_str is None or ts_str == "":
                     continue
                 try:
-                    ts = int(ts_str)
+                    ts = int(Decimal(ts_str))
                 except ValueError:
-                    try:
-                        # handle scientific notation like 1.76109E+12
-                        ts = int(Decimal(ts_str))   # Perfect precision
-                    except ValueError:
-                        # truly bad row, skip
-                        continue
+                   
+                    continue
                 timestamps_ms.append(ts)
 
             print(f"[checker] CSV parse done, timestamps={len(timestamps_ms)}", flush=True)
