@@ -19,10 +19,10 @@ def create_app():
     # Initialize database (remove try catch later)
     try:
         app.config["DB"] = DB()
-        current_app.config["DB"].refresh_summary_cache()
+        app.config["DB"].refresh_summary_cache()
 
     except Exception as e:
-        app.logger.error("\033[91m" + "Cannot connect to database" + e + "\033[0m")
+        app.logger.error("\033[91m" + "Cannot connect to database" + str(e) + "\033[0m")
 
     # Register blueprints
     app.register_blueprint(upload_bp, url_prefix="/api")
