@@ -166,6 +166,8 @@ def analyze_uploaded_data(kind: str, content_bytes: bytes) -> Dict[str, Any]:
 
     # Try CSV first
     try:
+        print("[checker] analyze_uploaded_data: trying CSV parse", flush=True)
+
         f = io.StringIO(text)
         reader = csv.DictReader(f)
         if reader.fieldnames and "timestamp" in reader.fieldnames:
@@ -180,7 +182,11 @@ def analyze_uploaded_data(kind: str, content_bytes: bytes) -> Dict[str, Any]:
                 except ValueError:
                     # skip bad rows
                     continue
-    except Exception:
+            print(f"[checker] CSV parse done, timestamps={len(timestamps_ms)}", flush=True)
+
+    except Exception as e:
+        print(f"[checker] CSV parse error: {e!r}", flush=True)
+
         pass
 
     # if no timestamps try json
@@ -201,6 +207,7 @@ def analyze_uploaded_data(kind: str, content_bytes: bytes) -> Dict[str, Any]:
             pass
 
     actual_samples = len(timestamps_ms)
+    print(f"[checker] total timestamps collected: {actual_samples}", flush=True)
 
     # If we still have nothing usable:
     if actual_samples < 2:
@@ -218,14 +225,20 @@ def analyze_uploaded_data(kind: str, content_bytes: bytes) -> Dict[str, Any]:
 
     # Calculate sampling rate
     timestamps_ms.sort()
+    print("[checker] timestamps sorted", flush=True)
+
     dts_seconds = [
         (timestamps_ms[i] - timestamps_ms[i - 1]) / 1000.0
         for i in range(1, actual_samples)
     ]
+    print(f"[checker] dt list built, len={len(dts_seconds)}", flush=True)
+
 
     # median dt = typical sampling interval
     median_dt = statistics.median(dts_seconds)
     sampling_rate_hz = 1.0 / median_dt if median_dt > 0 else 0.0
+    print(f"[checker] median_dt={median_dt}, sampling_rate_hz={sampling_rate_hz}", flush=True)
+
 
     # expected samples for a 15-min window at that rate
     expected_samples = int(round(sampling_rate_hz * CHECKING_INTERVAL_SECONDS))
