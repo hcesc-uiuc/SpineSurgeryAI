@@ -175,11 +175,15 @@ def analyze_uploaded_data(kind: str, content_bytes: bytes) -> Dict[str, Any]:
                     continue
                 try:
                     ts = int(ts_str)
-                    timestamps_ms.append(ts)
                 except ValueError:
-                    # skip bad rows
-                    print(f"[checker] skipping bad rows")
-                    continue
+                    try:
+                        # handle scientific notation like 1.76109E+12
+                        ts = int(float(ts_str))
+                    except ValueError:
+                        # truly bad row, skip
+                        continue
+                timestamps_ms.append(ts)
+
             print(f"[checker] CSV parse done, timestamps={len(timestamps_ms)}", flush=True)
 
     except Exception as e:
