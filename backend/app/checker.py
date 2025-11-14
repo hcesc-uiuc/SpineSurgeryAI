@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from decimal import Decimal
 import os
 import statistics
 import time
@@ -178,7 +179,7 @@ def analyze_uploaded_data(kind: str, content_bytes: bytes) -> Dict[str, Any]:
                 except ValueError:
                     try:
                         # handle scientific notation like 1.76109E+12
-                        ts = int(float(ts_str))
+                        ts = int(Decimal(ts_str))   # Perfect precision
                     except ValueError:
                         # truly bad row, skip
                         continue
