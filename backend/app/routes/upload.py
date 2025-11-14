@@ -92,4 +92,5 @@ def uploadfile():
 #curl -X POST -H "Content-Type: application/json" -d '{"filename":"Jason","content":20}' http://18.116.67.186/api/upload    , do this in gitbash
 # "C:\Users\indep\Downloads\BIOE 476_Fall 2025_exam2review (1).pdf"
 
-#curl -X POST -F "file=@/C:\Users\indep\Downloads\accelerometer_2025-10-22_06-20-03.csv" http://127.0.0.1:5000/api/uploadfile
+#curl -X POST   -F "file=@/c/Users/indep/Downloads/20251114T204023_20251114T202132_20251113T223719_accelerometer_2025-10-22_06-20-03.csv"   http://18.116.67.186/api/uploadfile 
+
