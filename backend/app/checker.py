@@ -294,8 +294,14 @@ def run_once(db: DB):
                 flush=True,
             )
         try:
+            print("[checker] Downloading object...", flush=True)
             content = download_object_content(upload.object_url)
+            print(f"[checker] Downloaded {len(content)} bytes", flush=True)
+
+            print("[checker] Analyzing data...", flush=True)
             analysis = analyze_uploaded_data(upload.kind, content)
+
+            print(f"[checker] Results: {analysis}", flush=True)
 
             print(f"[checker]: Results: " + str(analysis))
 
