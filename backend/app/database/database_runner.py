@@ -190,6 +190,8 @@ RETURNS text LANGUAGE sql IMMUTABLE AS $$
          END;
 $$;
 
+SQL
+
 CREATE OR REPLACE VIEW v_last7 AS
 SELECT generate_series(current_date - INTERVAL '6 day', current_date, '1 day')::date AS day;
 
@@ -332,7 +334,23 @@ DROP TABLE IF EXISTS heart_rate CASCADE;
 DROP TABLE IF EXISTS daily_survey CASCADE;
 DROP TABLE IF EXISTS participants CASCADE;
 """
+SQL_06_INGESTION_HEALTH = r"""
+CREATE TABLE IF NOT EXISTS ingestion_health (
+    modality TEXT NOT NULL,
+    participant_id INT NOT NULL REFERENCES participants(id) ON DELETE CASCADE,
+    window_start TIMESTAMPTZ NOT NULL,
+    window_end   TIMESTAMPTZ NOT NULL,
+    expected_count INT NOT NULL,
+    actual_count   INT NOT NULL,
+    pct_expected   NUMERIC,
+    status         TEXT,
+    updated_at     TIMESTAMPTZ DEFAULT now(),
+    PRIMARY KEY (modality, participant_id, window_start)
+);
 
+CREATE UNIQUE INDEX IF NOT EXISTS ux_ingestion_health
+  ON ingestion_health (modality, participant_id, window_start);
+"""
 # =========================
 # Helpers: connections
 # =========================
@@ -412,6 +430,7 @@ def init_all():
         exec_sql(conn, SQL_03A_PRESENCE_MV_UNIQUES, "03a_presence_mv_unique_indexes")
         exec_sql(conn, SQL_04_COMPLIANCE_VIEWS, "04_compliance_views")
         exec_sql(conn, SQL_05_OVERVIEW, "05_overview_views")
+        exec_sql(conn, SQL_06_INGESTION_HEALTH, "06_ingestion_health")
         print("✅ init complete.")
 
 def reset_all():
