@@ -391,7 +391,6 @@ def debug():
     # print(f"[checker]: Results: " + str(analysis))
 
 if __name__ == "__main__":
-    from database import DB
     db = DB()
     run_once(db)   # run a single ingestion health check
 
