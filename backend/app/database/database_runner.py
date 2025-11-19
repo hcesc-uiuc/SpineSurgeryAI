@@ -190,8 +190,6 @@ RETURNS text LANGUAGE sql IMMUTABLE AS $$
          END;
 $$;
 
-SQL
-
 CREATE OR REPLACE VIEW v_last7 AS
 SELECT generate_series(current_date - INTERVAL '6 day', current_date, '1 day')::date AS day;
 
