@@ -19,6 +19,10 @@ from psycopg2.extras import DictCursor
 from dataclasses import dataclass
 import requests
 
+from datetime import datetime, timedelta
+
+
+
 load_dotenv()
 
 AWS_ACCESS_KEY_ID = os.getenv("AWS_KEY")
@@ -313,6 +317,21 @@ def run_once(db: DB):
             print("[checker] Analyzing data...", flush=True)
             analysis = analyze_uploaded_data(upload.kind, content)
 
+            end = datetime.utcnow()
+            start = end - timedelta(seconds=CHECKING_INTERVAL_SECONDS)
+
+            db.insert_ingestion_health(
+                modality=upload.kind,
+                external_participant_identifier=upload.external_id,
+                window_start=start,
+                window_end=end,
+                expected_count=analysis["expected_samples"],
+                actual_count=analysis["actual_samples"],
+                pct_expected=analysis["completeness"] * 100,
+                status="OK" if analysis["is_usable"] else "LOW",
+            )
+
+
             print(f"[checker] Results: {analysis}", flush=True)
 
             print(f"[checker]: Results: " + str(analysis))
@@ -371,6 +390,10 @@ def debug():
 
     # print(f"[checker]: Results: " + str(analysis))
 
-
 if __name__ == "__main__":
-    main_loop()
+    from database import DB
+    db = DB()
+    run_once(db)   # run a single ingestion health check
+
+# if __name__ == "__main__":
+#     main_loop()

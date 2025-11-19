@@ -266,7 +266,50 @@ class DB:
                     json.dumps(survey_payload_dictionary),
                 ),
             )
+# Writes metrics about data ingestion health, sent to Notebook
+def insert_ingestion_health(
+    self,
+    modality: str,
+    external_participant_identifier: str,
+    window_start: Any,
+    window_end: Any,
+    expected_count: int,
+    actual_count: int,
+    pct_expected: float,
+    status: str,
+) -> None:
+    """Insert or update ingestion health record for a participant/modality/window."""
 
+    participant_id_integer = self.create_participant_if_missing(external_participant_identifier)
+
+    upsert_sql = """
+        INSERT INTO ingestion_health (
+            modality, participant_id, window_start, window_end,
+            expected_count, actual_count, pct_expected, status
+        )
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+        ON CONFLICT (modality, participant_id, window_start)
+        DO UPDATE SET
+            actual_count = EXCLUDED.actual_count,
+            pct_expected = EXCLUDED.pct_expected,
+            status = EXCLUDED.status,
+            updated_at = now();
+    """
+
+    with self.temporary_database_connection() as conn, conn.cursor() as cur:
+        cur.execute(
+            upsert_sql,
+            (
+                modality,
+                participant_id_integer,
+                window_start,
+                window_end,
+                expected_count,
+                actual_count,
+                pct_expected,
+                status,
+            ),
+        )
     # ---------------------------
     # Refresh cache for compliance periods
     # ---------------------------
