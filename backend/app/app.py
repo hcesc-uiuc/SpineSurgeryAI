@@ -8,11 +8,15 @@ from routes.dashboard_page import dashboard_page
 
 def create_app():
     app = Flask(__name__)
+    app.logger.addHandler(logging.StreamHandler(sys.stdout))
+    app.logger.setLevel(logging.DEBUG)
     app.config.from_object(Config)
 
     # Initialize database (remove try catch later)
     try:
         app.config["DB"] = DB()
+        app.config["DB"].refresh_summary_cache()
+
     except:
         app.logger.error("\033[91m" + "Cannot connect to database" + "\033[0m")
 
@@ -30,7 +34,7 @@ def create_app():
     def compliance():
         try:
             # data = current_app.config["DB"].get_compliance_for("P0001") 
-            table = current_app.config["DB"].get_table("accel")
+            table = current_app.config["DB"].get_table("acceleromter")
             return render_template("compliance.html", data=table, table=table)
         except Exception as e: 
             app.logger.error("\033[91m" + "Cannot connect to database" + "\033[0m" + str(e))
