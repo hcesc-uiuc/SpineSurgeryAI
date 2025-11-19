@@ -33,7 +33,7 @@ def create_app():
             table = current_app.config["DB"].get_table("accel")
             return render_template("compliance.html", data=data, table=table)
         except Exception as e: 
-            app.logger.error("\033[91m" + "Cannot connect to database" + "\033[0m" + e)
+            app.logger.error("\033[91m" + "Cannot connect to database" + "\033[0m" + str(e))
 
     return app
 
