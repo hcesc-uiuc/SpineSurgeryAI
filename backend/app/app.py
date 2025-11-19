@@ -29,9 +29,9 @@ def create_app():
     @app.route("/compliance")
     def compliance():
         try:
-            data = current_app.config["DB"].get_compliance_for("P0001") 
+            # data = current_app.config["DB"].get_compliance_for("P0001") 
             table = current_app.config["DB"].get_table("accel")
-            return render_template("compliance.html", data=data, table=table)
+            return render_template("compliance.html", data=table, table=table)
         except Exception as e: 
             app.logger.error("\033[91m" + "Cannot connect to database" + "\033[0m" + str(e))
 
