@@ -89,6 +89,14 @@ struct ContentView: View {
                     BackgroundScheduler.shared.printScheduledBackgroundTasks()
                 }
             }.padding(.top, 30)
+            Button("Upload File"){
+                Task{
+                    let filename = "accelerometer_2025-11-05_13-34-16.csv"
+                    let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+                    let fileURL = dir.appendingPathComponent(filename)
+                    Uploader.shared.uploadFile(fileURL: fileURL)
+                }
+            }.padding(.top, 30)
             Button("Print log data"){
                 Task{
                     self.printCurrentLogFile()
@@ -145,8 +153,10 @@ struct ContentView: View {
                         onResearchFormCompletion: { completion in
                             switch completion {
                                 case .completed(let results):
-                                    print(results)
-                                    //save(results)
+                                    let resultsAsText = results.compactMap { result in
+                                        "\(result.identifier): \(getAnswerValue(answer: result.answer))"
+                                    }
+                                    print(resultsAsText)
                                     self.isPresented = false
                                 case .discarded:
                                     print("cancelled")
@@ -237,7 +247,76 @@ struct ContentView: View {
 //
 //================================================================================================================
     
+    func resultForStep<Result>(answerFormat: AnswerFormat) -> Result? {
+        switch answerFormat {
+        case let .text(answer):
+            return answer as? Result
+        case .numeric(let decimal):
+            return decimal as? Result
+        case .date(let date):
+            return date as? Result
+        case .height(let height):
+            return height as? Result
+        case .weight(let weight):
+            return weight as? Result
+        case .image(let image):
+            return image as? Result
+        case .multipleChoice(let multipleChoice):
+            return multipleChoice as? Result
+        case .scale(let double):
+            return double as? Result
+        default:
+            return nil
+        }
+    }
     
+    func getAnswerValue(answer: AnswerFormat) -> String{
+        //see how the handle AnswerFormat
+        //https://chatgpt.com/share/69165514-aa20-8008-b3ad-ed2372d08ef5
+        switch answer {
+            case .text(let value):
+                return value ?? "nil"
+            case .numeric(let value):
+                return String(value ?? -1)
+            case .multipleChoice(let values):
+                //separate this out as a function
+                if let vals = values {
+                    var choices: [String] = []
+                    for val in vals {
+                        switch val {
+                            case .int(let value):
+                                choices.append(String(value))
+                            case .string(let value):
+                                choices.append(value)
+                            case .date(let value):
+                                choices.append(dateToString(value))
+                            default:
+                                return "nil"
+                        }
+                    }
+                    return choices.joined(separator: ", ") // Access elements safely
+                } else {
+                    return "Multiple choice is nil."
+                }
+            case .scale(let value):
+                return String(value ?? -1)
+            case .date(let value):
+                return dateToString(value ?? Date())
+            default:
+                return "nil"
+            
+            
+//            case .image(let values):
+//                print("Image answers:", values ?? [])
+//            case .date(let value):
+//                return String(value ?? Date())
+//            case .weight(let value):
+//                print("Weight answer:", value ?? 0)
+//            case .height(let value):
+//                print("Height answer:", value ?? 0)
+                
+        }
+    }
     
     // Ask for motion authorization (needed for CMSensorRecorder)
     func requestMotionPermission() {
@@ -287,6 +366,18 @@ struct ContentView: View {
         if let logs = Logger.shared.readAll() {
             print(logs)
         }
+    }
+    
+    func dateToString(_ date: Date?, format: String = "yyyy-MM-dd HH:mm:ss") -> String {
+        guard let date = date else {
+            return "Invalid Date"
+        }
+        
+        let formatter = DateFormatter()
+        formatter.dateFormat = format
+        formatter.timeZone = .current       // user’s current timezone
+        formatter.locale = .current         // user’s locale (e.g., 12/24h preference)
+        return formatter.string(from: date)
     }
     
     
