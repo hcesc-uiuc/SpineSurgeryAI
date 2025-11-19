@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Compliance Dashboard</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 2rem; }
+        table { border-collapse: collapse; width: 60%; margin-top: 1rem; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: center; }
+        th { background-color: #f2f2f2; }
+    </style>
+</head>
+<body>
+    <a href="{{ url_for('dashboard_page.dashboard') }}" 
+     style="display:inline-block; padding:10px 20px; background:#007bff; color:white; 
+            text-decoration:none; border-radius:5px;">
+      Home
+  </a>
+    <h1>Participant Compliance Summary</h1>
+    <table>
+        <tr>
+            <th>Participant</th>
+            <th>HeartRate Days (7)</th>
+            <th>Survey Days (7)</th>
+        </tr>
+        <td>{{ data.external_id }}</td>
+        <td>{{ data.hr_days_7 }}</td>
+        <td>{{ data.survey_days_7 }}</td>
+    </table>
+    <p>
+        {{data}}
+    </p>
+    <h2>Heart Rate Table</h2>
+  <table border="1" cellpadding="5">
+    <tr>
+      <th>ID</th>
+      <th>Participant</th>
+      <th>Timestamp</th>
+      <th>Object URL</th>
+    </tr>
+    {% for row in table %}
+    <tr>
+      <td>{{ row.id }}</td>
+      <td>{{ row.participant_id }}</td>
+      <td>{{ row.ts }}</td>
+      <td>{{ row.object_url }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+</body>
+</html>
