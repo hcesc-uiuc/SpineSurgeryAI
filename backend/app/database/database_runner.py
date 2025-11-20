@@ -124,6 +124,7 @@ CREATE TABLE IF NOT EXISTS daily_survey (
   id             BIGSERIAL PRIMARY KEY,
   participant_id INT NOT NULL REFERENCES participants(id) ON DELETE CASCADE,
   survey_date    DATE NOT NULL,
+  object_url     TEXT NOT NULL,
   payload        JSONB NOT NULL,
   created_at     TIMESTAMPTZ DEFAULT now(),
   CONSTRAINT uq_survey_participant_date UNIQUE (participant_id, survey_date)
@@ -132,6 +133,7 @@ CREATE TABLE IF NOT EXISTS daily_survey (
 CREATE INDEX IF NOT EXISTS ix_survey_participant_date
 ON daily_survey (participant_id, survey_date);
 """
+
 
 SQL_04_COMPLIANCE_VIEWS = r"""
 CREATE OR REPLACE FUNCTION fn_compliance_from_presence(presence_table regclass)
