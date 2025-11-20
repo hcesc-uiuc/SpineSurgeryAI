@@ -284,6 +284,16 @@ def analyze_uploaded_data(kind: str, content_bytes: bytes) -> Dict[str, Any]:
 Runs function once for main loop (helper function)
 """
 def run_once(db: DB):
+    global LAST_WINDOW_END
+
+    end = datetime.now()
+    if LAST_WINDOW_END is None:
+        start = end - timedelta(seconds=CHECKING_INTERVAL_SECONDS)
+    else:
+        start = LAST_WINDOW_END
+
+    LAST_WINDOW_END = end
+    
     print(
         f"[checker] Looking for accel/gyro/hr uploads in last {CHECKING_INTERVAL_SECONDS / 60} minutes...",
         flush=True,
@@ -317,11 +327,7 @@ def run_once(db: DB):
             print("[checker] Analyzing data...", flush=True)
             analysis = analyze_uploaded_data(upload.kind, content)
 
-            global LAST_WINDOW_END
-
-            end = datetime.now()
-            start = LAST_WINDOW_END or (end - timedelta(seconds=CHECKING_INTERVAL_SECONDS))
-            LAST_WINDOW_END = end   
+              
 
             db.insert_ingestion_health(
                 modality=upload.kind,
