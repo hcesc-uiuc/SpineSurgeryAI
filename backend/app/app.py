@@ -10,8 +10,8 @@ import sys
 
 def create_app():
     app = Flask(__name__)
-    app.logger.addHandler(logging.StreamHandler(sys.stdout))
-    app.logger.setLevel(logging.DEBUG)
+    # app.logger.addHandler(logging.StreamHandler(sys.stdout))
+    # app.logger.setLevel(logging.DEBUG)
     app.config.from_object(Config)
 
     # Initialize database (remove try catch later)
@@ -19,8 +19,8 @@ def create_app():
         app.config["DB"] = DB()
         app.config["DB"].refresh_summary_cache()
 
-    except:
-        app.logger.error("\033[91m" + "Cannot connect to database" + "\033[0m")
+    except Exception as e:
+        app.logger.error("\033[91m" + "Cannot connect to database" + "\033[0m" + str(e))
 
     # Register blueprints
     app.register_blueprint(upload_bp, url_prefix="/api")
@@ -30,22 +30,25 @@ def create_app():
     
     @app.route("/")
     def home():
-        return render_template(("home.html"))
+        return render_template(("dashboard.html"))
     
     @app.route("/compliance")
     def compliance():
         try:
-            # data = current_app.config["DB"].get_compliance_for("P0001") 
-            table = current_app.config["DB"].get_table("acceleromter")
-            return render_template("compliance.html", data=table, table=table)
+            data = current_app.config["DB"].get_compliance_for("P0001") 
+            table = current_app.config["DB"].get_table("accelerometer")
+            ingestion_rows = current_app.config["DB"].get_table("ingestion_health")
+            return render_template("compliance.html", data=data, table=table, ingestion_rows=ingestion_rows)
         except Exception as e: 
+            print("error")
             app.logger.error("\033[91m" + "Cannot connect to database" + "\033[0m" + str(e))
-
+        
     return app
 
 if __name__ == "__main__":
     app = create_app()
-    app.run(host="0.0.0.0", port=5000, debug=False)
+    app.run(debug=False)
+    # app.run(host="0.0.0.0", port=5000, debug=True)
     
 
  

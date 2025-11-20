@@ -58,8 +58,8 @@ TODO: INSERT DATA INTO JUPITER NOTEBOOK
 #Checking Interval (15 Minutes preset -> move to config.py in review)
 CHECKING_INTERVAL_SECONDS = 900
 
-#% of data there needs to be in order to satisfy data requirements
-DATA_COMPLETENESS_THRESHOLD = 90
+#% of data there needs to be in order to satisfy data requirements (fraction)
+DATA_COMPLETENESS_THRESHOLD = 0.9
 
 #Gap > 5x normal time interval counts as "missing"
 MAX_GAP_FACTOR           = 5.0      
@@ -180,7 +180,6 @@ def analyze_uploaded_data(kind: str, content_bytes: bytes) -> Dict[str, Any]:
                     continue
                 try:
                     ts = int(Decimal(ts_str))
-                    print(ts_str)
                 except ValueError:
                     continue
                 timestamps_ms.append(ts)
@@ -325,11 +324,10 @@ def run_once(db: DB):
                 external_participant_identifier=upload.external_id,
                 window_start=start,
                 window_end=end,
-                expected_count=analysis["expected_samples"],
-                actual_count=analysis["actual_samples"],
-                pct_expected=analysis["completeness"] * 100,
-                status="OK" if analysis["is_usable"] else "LOW",
+                analysis=analysis,  # <-- pass the dict
+                status="OK" if analysis["is_usable"] else "LOW",  # optional; method can also derive it
             )
+
 
 
             print(f"[checker] Results: {analysis}", flush=True)
@@ -390,9 +388,9 @@ def debug():
 
     # print(f"[checker]: Results: " + str(analysis))
 
-if __name__ == "__main__":
-    db = DB()
-    run_once(db)   # run a single ingestion health check
-
 # if __name__ == "__main__":
-#     main_loop()
+#     db = DB()
+#     run_once(db)   # run a single ingestion health check
+
+if __name__ == "__main__":
+    main_loop()

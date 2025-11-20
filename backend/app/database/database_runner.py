@@ -316,6 +316,7 @@ DROP VIEW IF EXISTS v_hr_compliance CASCADE;
 DROP VIEW IF EXISTS v_gyro_compliance CASCADE;
 DROP VIEW IF EXISTS v_accel_compliance CASCADE;
 DROP VIEW IF EXISTS v_survey_compliance CASCADE;
+DROP TABLE IF EXISTS ingestion_health CASCADE;
 
 DROP FUNCTION IF EXISTS fn_compliance_from_presence(regclass) CASCADE;
 DROP FUNCTION IF EXISTS fn_color(boolean,int,int) CASCADE;
@@ -334,21 +335,35 @@ DROP TABLE IF EXISTS participants CASCADE;
 """
 SQL_06_INGESTION_HEALTH = r"""
 CREATE TABLE IF NOT EXISTS ingestion_health (
-    modality TEXT NOT NULL,
-    participant_id INT NOT NULL REFERENCES participants(id) ON DELETE CASCADE,
-    window_start TIMESTAMPTZ NOT NULL,
-    window_end   TIMESTAMPTZ NOT NULL,
-    expected_count INT NOT NULL,
-    actual_count   INT NOT NULL,
-    pct_expected   NUMERIC,
-    status         TEXT,
-    updated_at     TIMESTAMPTZ DEFAULT now(),
+    modality        TEXT        NOT NULL,
+    participant_id  INT         NOT NULL REFERENCES participants(id) ON DELETE CASCADE,
+    window_start    TIMESTAMPTZ NOT NULL,
+    window_end      TIMESTAMPTZ NOT NULL,
+
+    -- Core counts / summary
+    expected_count  INT         NOT NULL,
+    actual_count    INT         NOT NULL,
+    pct_expected    NUMERIC,
+    status          TEXT,
+
+    -- Detailed analysis fields from analyze_uploaded_data(...)
+    format              TEXT,
+    row_count           INT,
+    sampling_rate_hz    NUMERIC,
+    completeness        NUMERIC,
+    total_gap_seconds   NUMERIC,
+    gap_fraction        NUMERIC,
+    is_usable           BOOLEAN,
+
+    updated_at      TIMESTAMPTZ DEFAULT now(),
+
     PRIMARY KEY (modality, participant_id, window_start)
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS ux_ingestion_health
   ON ingestion_health (modality, participant_id, window_start);
 """
+
 # =========================
 # Helpers: connections
 # =========================

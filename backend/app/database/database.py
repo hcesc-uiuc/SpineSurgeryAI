@@ -266,53 +266,99 @@ class DB:
                     json.dumps(survey_payload_dictionary),
                 ),
             )
-# Writes metrics about data ingestion health, sent to Notebook
-def insert_ingestion_health(
-    self,
-    modality: str,
-    external_participant_identifier: str,
-    window_start: Any,
-    window_end: Any,
-    expected_count: int,
-    actual_count: int,
-    pct_expected: float,
-    status: str,
-) -> None:
-    """Insert or update ingestion health record for a participant/modality/window."""
+    
+    # Writes metrics about data ingestion health, sent db
+    def insert_ingestion_health(
+        self,
+        modality: str,
+        external_participant_identifier: str,
+        window_start: Any,
+        window_end: Any,
+        analysis: Dict[str, Any],
+        status: Optional[str] = None,
+    ) -> None:
+        """
+        Insert or update ingestion health record for a participant/modality/window.
 
-    participant_id_integer = self.create_participant_if_missing(external_participant_identifier)
+        `analysis` is the dict returned by analyze_uploaded_data(...), e.g.:
 
-    upsert_sql = """
-        INSERT INTO ingestion_health (
-            modality, participant_id, window_start, window_end,
-            expected_count, actual_count, pct_expected, status
+        {
+            "format": "csv",
+            "row_count": 90000,
+            "sampling_rate_hz": 100.0,
+            "expected_samples": 90000,
+            "actual_samples": 87000,
+            "completeness": 0.966,
+            "total_gap_seconds": 2.5,
+            "gap_fraction": 0.0027,
+            "is_usable": True,
+        }
+        """
+
+        participant_id_integer = self.create_participant_if_missing(
+            external_participant_identifier
         )
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-        ON CONFLICT (modality, participant_id, window_start)
-        DO UPDATE SET
-            actual_count = EXCLUDED.actual_count,
-            pct_expected = EXCLUDED.pct_expected,
-            status = EXCLUDED.status,
-            updated_at = now();
-    """
 
-    with self.temporary_database_connection() as conn, conn.cursor() as cur:
-        cur.execute(
-            upsert_sql,
-            (
-                modality,
-                participant_id_integer,
-                window_start,
-                window_end,
-                expected_count,
-                actual_count,
-                pct_expected,
-                status,
-            ),
-        )
-    # ---------------------------
-    # Refresh cache for compliance periods
-    # ---------------------------
+        expected_samples = int(analysis.get("expected_samples", 0))
+        actual_samples = int(analysis.get("actual_samples", 0))
+        completeness = float(analysis.get("completeness", 0.0))
+
+        pct_expected = completeness * 100.0 if expected_samples > 0 else 0.0
+
+        # If caller didn't pass explicit status, derive from is_usable
+        if status is None:
+            is_usable_flag = bool(analysis.get("is_usable", False))
+            status = "OK" if is_usable_flag else "LOW"
+
+        upsert_sql = """
+            INSERT INTO ingestion_health (
+                modality, participant_id, window_start, window_end,
+                expected_count, actual_count, pct_expected, status,
+                format, row_count, sampling_rate_hz,
+                completeness, total_gap_seconds, gap_fraction, is_usable
+            )
+            VALUES (%s, %s, %s, %s,
+                    %s, %s, %s, %s,
+                    %s, %s, %s,
+                    %s, %s, %s, %s)
+            ON CONFLICT (modality, participant_id, window_start)
+            DO UPDATE SET
+                actual_count      = EXCLUDED.actual_count,
+                expected_count    = EXCLUDED.expected_count,
+                pct_expected      = EXCLUDED.pct_expected,
+                status            = EXCLUDED.status,
+                format            = EXCLUDED.format,
+                row_count         = EXCLUDED.row_count,
+                sampling_rate_hz  = EXCLUDED.sampling_rate_hz,
+                completeness      = EXCLUDED.completeness,
+                total_gap_seconds = EXCLUDED.total_gap_seconds,
+                gap_fraction      = EXCLUDED.gap_fraction,
+                is_usable         = EXCLUDED.is_usable,
+                updated_at        = now();
+        """
+
+        with self.temporary_database_connection() as conn, conn.cursor() as cur:
+            cur.execute(
+                upsert_sql,
+                (
+                    modality,
+                    participant_id_integer,
+                    window_start,
+                    window_end,
+                    expected_samples,
+                    actual_samples,
+                    pct_expected,
+                    status,
+                    analysis.get("format"),
+                    int(analysis.get("row_count", 0)),
+                    float(analysis.get("sampling_rate_hz", 0.0)),
+                    float(analysis.get("completeness", 0.0)),
+                    float(analysis.get("total_gap_seconds", 0.0)),
+                    float(analysis.get("gap_fraction", 1.0)),
+                    bool(analysis.get("is_usable", False)),
+                ),
+            )
+
     def refresh_summary_cache(self, use_concurrent_refresh: bool = True) -> None: # Use after flask push insert data then refresh
         #Refresh all daily presence materialized views. If concurrent refresh fails (e.g., first population), falls back automatically.
         
@@ -321,8 +367,9 @@ def insert_ingestion_health(
             "REFRESH MATERIALIZED VIEW {mode} mv_gyro_daily_presence;"
             "REFRESH MATERIALIZED VIEW {mode} mv_hr_daily_presence;"
             "REFRESH MATERIALIZED VIEW {mode} mv_survey_daily_presence;"
+            "REFRESH MATERIALIZED VIEW {mode} mv_accel_daily_presence;"
         )
- 
+
         def execute_refresh_with_mode(mode_clause_string: str) -> None:
             refresh_statement_sql = refresh_all_materialized_views_sql_template.format(
                 mode=mode_clause_string
@@ -389,10 +436,10 @@ def insert_ingestion_health(
     def get_compliance_for(self, external_participant_identifier: str) -> Dict[str, Any]: # let postgres handle compliance, Return a compact compliance dict for accel/gyro/hr/survey for one participant
         select_compliance_sql = """
             SELECT p.external_id,
-                   ac.days_3  AS accel_days_3, ac.days_7  AS accel_days_7, ac.meets_1_of_3 AS accel_1of3, ac.meets_4_of_7 AS accel_4of7,
-                   gc.days_3  AS gyro_days_3,  gc.days_7  AS gyro_days_7,  gc.meets_1_of_3 AS gyro_1of3,  gc.meets_4_of_7 AS gyro_4of_7,
-                   hc.days_3  AS hr_days_3,    hc.days_7  AS hr_days_7,    hc.meets_1_of_3 AS hr_1of3,    hc.meets_4_of_7 AS hr_4of_7,
-                   sc.days_3  AS survey_days_3, sc.days_7  AS survey_days_7,sc.meets_1_of_3 AS survey_1of_3,sc.meets_4_of_7 AS survey_4_of_7
+                ac.days_3  AS accel_days_3, ac.days_7  AS accel_days_7, ac.meets_1_of_3 AS accel_1of3, ac.meets_4_of_7 AS accel_4of7,
+                gc.days_3  AS gyro_days_3,  gc.days_7  AS gyro_days_7,  gc.meets_1_of_3 AS gyro_1of3,  gc.meets_4_of_7 AS gyro_4of_7,
+                hc.days_3  AS hr_days_3,    hc.days_7  AS hr_days_7,    hc.meets_1_of_3 AS hr_1of3,    hc.meets_4_of_7 AS hr_4of_7,
+                sc.days_3  AS survey_days_3, sc.days_7  AS survey_days_7,sc.meets_1_of_3 AS survey_1of_3,sc.meets_4_of_7 AS survey_4_of_7
             FROM participants p
             LEFT JOIN v_accel_compliance ac  ON ac.participant_id = p.id
             LEFT JOIN v_gyro_compliance  gc  ON gc.participant_id = p.id
@@ -407,7 +454,7 @@ def insert_ingestion_health(
 
     def get_table(self, table_name: str) -> list[dict]: # gets all rows from a table
         # Prevent SQL injection by validating table name
-        allowed_tables = {"accelerometer", "gyroscope", "heart_rate", "daily_survey", "participants"}
+        allowed_tables = {"accelerometer", "gyroscope", "heart_rate", "daily_survey", "participants", "ingestion_health"}
         if table_name not in allowed_tables:
             raise ValueError(f"Table '{table_name}' not allowed.")
 
@@ -441,8 +488,8 @@ def insert_ingestion_health(
             """
             SELECT d.day::text, COALESCE(pcnt, 0) AS count
             FROM generate_series(current_date - %s::int * INTERVAL '1 day' + INTERVAL '1 day',
-                                 current_date,
-                                 '1 day') AS d(day)
+                                current_date,
+                                '1 day') AS d(day)
             LEFT JOIN (
                 SELECT m.day, COUNT(*) AS pcnt
                 FROM {mv} m

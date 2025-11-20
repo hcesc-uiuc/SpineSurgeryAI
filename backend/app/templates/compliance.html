@@ -46,5 +46,46 @@
     </tr>
     {% endfor %}
   </table>
+  <h2>Ingestion Health (Last Windows)</h2>
+  <table>
+    <tr>
+        <th>Modality</th>
+        <th>Window Start</th>
+        <th>Window End</th>
+        <th>Expected Samples</th>
+        <th>Actual Samples</th>
+        <th>% Expected</th>
+        <th>Completeness</th>
+        <th>Gap Fraction</th>
+        <th>Usable?</th>
+        <th>Status</th>
+    </tr>
+    {% for row in ingestion_rows %}
+    <tr>
+      <td>{{ row.modality }}</td>
+      <td>{{ row.window_start }}</td>
+      <td>{{ row.window_end }}</td>
+      <td>{{ row.expected_count }}</td>
+      <td>{{ row.actual_count }}</td>
+      <td>{{ "%.1f" | format(row.pct_expected or 0) }}%</td>
+      <td>{{ "%.3f" | format(row.completeness or 0) }}</td>
+      <td>{{ "%.3f" | format(row.gap_fraction or 0) }}</td>
+      <td>
+          {% if row.is_usable %}
+            <span class="chip-ok">Yes</span>
+          {% else %}
+            <span class="chip-low">No</span>
+          {% endif %}
+      </td>
+      <td>
+          {% if row.status == "OK" %}
+            <span class="chip-ok">OK</span>
+          {% else %}
+            <span class="chip-low">{{ row.status }}</span>
+          {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
 </body>
 </html>
