@@ -21,7 +21,8 @@ import requests
 
 from datetime import datetime, timedelta
 
-
+# window clipping!
+LAST_WINDOW_END = None
 
 load_dotenv()
 
@@ -85,21 +86,21 @@ def fetch_recent_uploads(db: DB) -> List[UploadRecord]:
         SELECT 'accel' AS kind, p.external_id, a.ts, a.object_url
         FROM accelerometer a
         JOIN participants p ON p.id = a.participant_id
-        WHERE a.ts >= now() - %s * INTERVAL '1 minute'
+        WHERE a.ts >= now() - %s * INTERVAL '1 second'
 
         UNION ALL
 
         SELECT 'gyro' AS kind, p.external_id, g.ts, g.object_url
         FROM gyroscope g
         JOIN participants p ON p.id = g.participant_id
-        WHERE g.ts >= now() - %s * INTERVAL '1 minute'
+        WHERE g.ts >= now() - %s * INTERVAL '1 second'
 
         UNION ALL
 
         SELECT 'hr' AS kind, p.external_id, h.ts, h.object_url
         FROM heart_rate h
         JOIN participants p ON p.id = h.participant_id
-        WHERE h.ts >= now() - %s * INTERVAL '1 minute'
+        WHERE h.ts >= now() - %s * INTERVAL '1 second'
 
         ORDER BY ts;
     """
@@ -316,8 +317,11 @@ def run_once(db: DB):
             print("[checker] Analyzing data...", flush=True)
             analysis = analyze_uploaded_data(upload.kind, content)
 
-            end = datetime.utcnow()
-            start = end - timedelta(seconds=CHECKING_INTERVAL_SECONDS)
+            global LAST_WINDOW_END
+
+            end = datetime.now()
+            start = LAST_WINDOW_END or (end - timedelta(seconds=CHECKING_INTERVAL_SECONDS))
+            LAST_WINDOW_END = end   
 
             db.insert_ingestion_health(
                 modality=upload.kind,
