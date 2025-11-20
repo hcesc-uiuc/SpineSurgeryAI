@@ -236,37 +236,86 @@ class DB:
             )
         return database_cursor.rowcount or len(heart_rate_payload_rows_list)
 
-    # fix with parser also look at HR 
     def insert_survey(
-        self,
-        external_participant_identifier: str,
-        survey_date_value_any: Any,
-        survey_payload_dictionary: Dict[str, Any],
-    ) -> None:
-        """Upsert a daily survey JSON by (participant_id, survey_date)."""
+    self,
+    external_participant_identifier: str,
+    survey_data_rows_sequence: Sequence[Dict[str, Any] | Tuple[Any, ...]],
+    ) -> int:
+        """
+        Insert survey rows (date + URL + optional payload) for a participant.
+
+        Each row can be:
+        - dict: {"survey_date": <str/date>, "url": <str>, "payload": <dict or JSON-serializable, optional>}
+        - tuple: (<survey_date>, <url>, <payload_optional>)
+
+        Upserts on (participant_id, survey_date) like before.
+        """
         import datetime as _dt
-        participant_id_integer = self.create_participant_if_missing(external_participant_identifier)
-        if isinstance(survey_date_value_any, str):
-            survey_date_iso8601_string = survey_date_value_any
-        elif isinstance(survey_date_value_any, _dt.date):
-            survey_date_iso8601_string = survey_date_value_any.isoformat()
-        else:
-            raise TypeError("survey_date must be date or ISO string")
-        upsert_daily_survey_sql = (
-            "INSERT INTO daily_survey (participant_id, survey_date, payload) "
-            "VALUES (%s, %s, %s) "
-            "ON CONFLICT (participant_id, survey_date) DO UPDATE SET payload = EXCLUDED.payload"
+
+        participant_id_integer = self.create_participant_if_missing(
+            external_participant_identifier
         )
-        with self.temporary_database_connection() as database_connection, database_connection.cursor() as database_cursor:
-            database_cursor.execute(
-                upsert_daily_survey_sql,
+
+        survey_payload_rows_list: List[Tuple[int, str, str, str]] = []  # (participant_id, survey_date_iso, object_url, payload_json)
+
+        for single_survey_record in survey_data_rows_sequence:
+            # ----- dict style -----
+            if isinstance(single_survey_record, dict):
+                raw_date = single_survey_record["survey_date"]
+                object_url_string = single_survey_record.get("url")
+                payload_obj = single_survey_record.get("payload", {})
+            # ----- tuple style -----
+            else:
+                raw_date = single_survey_record[0]
+                object_url_string = single_survey_record[1] if len(single_survey_record) > 1 else None
+                payload_obj = single_survey_record[2] if len(single_survey_record) > 2 else {}
+
+            # normalize survey_date to YYYY-MM-DD
+            if isinstance(raw_date, str):
+                survey_date_iso8601_string = raw_date
+            elif isinstance(raw_date, _dt.date):
+                survey_date_iso8601_string = raw_date.isoformat()
+            else:
+                raise TypeError("survey_date must be date or ISO string")
+
+            if not object_url_string:
+                raise ValueError("survey row missing required 'url' (object_url) value")
+
+            survey_payload_rows_list.append(
                 (
                     participant_id_integer,
                     survey_date_iso8601_string,
-                    json.dumps(survey_payload_dictionary),
-                ),
+                    object_url_string,
+                    json.dumps(payload_obj),
+                )
             )
-    
+
+        if not survey_payload_rows_list:
+            return 0
+
+        upsert_daily_survey_sql = """
+            INSERT INTO daily_survey (
+                participant_id,
+                survey_date,
+                object_url,
+                payload
+            )
+            VALUES %s
+            ON CONFLICT (participant_id, survey_date)
+            DO UPDATE SET
+                object_url = EXCLUDED.object_url,
+                payload    = EXCLUDED.payload
+        """
+
+        with self.temporary_database_connection() as database_connection, database_connection.cursor() as database_cursor:
+            execute_values(
+                database_cursor,
+                upsert_daily_survey_sql,
+                survey_payload_rows_list,
+                page_size=1000,
+            )
+            return database_cursor.rowcount or len(survey_payload_rows_list)
+
     # Writes metrics about data ingestion health, sent db
     def insert_ingestion_health(
         self,
