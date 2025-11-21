@@ -11,6 +11,7 @@ from werkzeug.utils import secure_filename
 from datetime import datetime
 import boto3, os
 from config import Config
+import json
 
 upload_bp = Blueprint("upload", __name__)
 
@@ -32,30 +33,56 @@ s3 = boto3.client(
 
 upload_bp = Blueprint("upload", __name__)
 
-@upload_bp.route("/upload", methods=["POST"])
+@upload_bp.route("/uploadjson", methods=["POST"])
 def upload():
-    if request.is_json:
-        data = request.get_json()
-        filename = data["filename"]
-        content = data["content"]
+    db = current_app.config["DB"]
 
-        
-        db = current_app.config["DB"]
-
-        # Upload to S3  
-
-        # s3_link = s3_service.upload_to_s3(content, filename)
-        s3_link = str(filename) + str(content)
-        db.insert_hr("P0001", [{"ts": str(datetime.now()), "url": s3_link}])
-        db.insert_accel("P0001", [{"ts": str(datetime.now()), "url": s3_link}])
-        db.insert_gyro("P0001", [{"ts": str(datetime.now()), "url": s3_link}])
-        db.refresh_summary_cache(True)
-
-        # Save metadata in DB
-        
-        return jsonify({"message": "Upload successful", "s3_link": s3_link})
-    else:
+    if not request.is_json:
         return jsonify({"error": "Please send JSON data"}), 400
+
+    # The JSON body (can be any structure, no 'filename' required)
+    data = request.get_json()
+
+    # Try to get filename from JSON, then from query param, else default
+    filename = None
+    if isinstance(data, dict):
+        filename = data.get("filename")
+
+    if not filename:
+        filename = request.args.get("filename")
+
+    if not filename:
+        filename = f"survey_{datetime.utcnow():%Y%m%dT%H%M%S}.json"
+
+    if Config.DEBUG_MODE:
+        print("---- REQUEST START ----")
+        print("Method:", request.method)
+        print("URL:", request.url)
+        print("Headers:\n", request.headers)
+        print("Body:\n", request.get_data(as_text=True))
+        print("---- REQUEST END ----")
+
+    # Build S3 key
+    key = f"uploads/{datetime.utcnow():%Y%m%dT%H%M%S}_{secure_filename(filename)}"
+
+    # Store the entire JSON body as the file contents
+    body_bytes = json.dumps(data).encode("utf-8")
+
+    s3.put_object(
+        Bucket=S3_BUCKET,
+        Key=key,
+        Body=body_bytes,
+        ContentType="application/json",
+        StorageClass="GLACIER_IR",
+        ServerSideEncryption="AES256",
+    )
+
+    db.insert_accel("P0001", [{
+        "ts": 0,
+        "url": key,
+    }])
+
+    return jsonify({"message": "Upload successful", "key": key}), 201
 
 @upload_bp.route("/uploadfile", methods=["POST"])  
 def uploadfile():
@@ -85,7 +112,7 @@ def uploadfile():
         ServerSideEncryption="AES256"
     )
 
-    db.insert_accel("P0001", [{"ts": str(datetime.now()), "url": key}])
+    db.insert_accel("P0001", [{"url": key}])
 
     return jsonify(message="Upload successful", key=key)
 
