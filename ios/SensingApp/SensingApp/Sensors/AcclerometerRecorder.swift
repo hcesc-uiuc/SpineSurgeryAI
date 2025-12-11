@@ -43,6 +43,9 @@ class AcclerometerRecorder {
             // Use stored value
             past = savedDate
         }
+        if isWithinPastThreeDays(past) == false {
+            past = Calendar.current.date(byAdding: .day, value: -2, to: Date())! //record only last 2 days of data.
+        }
         
         let writer = PreallocatedCSVBuffer(filename: "accelerometer_\(currentTimestampString()).csv", capacity: 100000)
         if let dataList = recorder.accelerometerData(from: past, to: now) {
@@ -68,6 +71,17 @@ class AcclerometerRecorder {
         Logger.shared.append("End time: \(dateToString(now))")
         
         //\(ISO8601DateFormatter().string(from: now)),\(ISO8601DateFormatter().string(from: past))")
+    }
+    
+    func isWithinPastThreeDays(_ date: Date) -> Bool {
+        let calendar = Calendar.current
+        let now = Date()
+        
+        guard let threeDaysAgo = calendar.date(byAdding: .day, value: -3, to: now) else {
+            return false
+        }
+        
+        return (threeDaysAgo ... now).contains(date)
     }
     
     

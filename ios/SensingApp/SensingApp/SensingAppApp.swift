@@ -106,7 +106,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         }
         
         BackgroundScheduler.shared.printScheduledBackgroundTasks()
-        BackgroundScheduler.shared.scheduleAppRefresh()
+        BackgroundScheduler.shared.scheduleAppRefresh() //ToDo: Why scheduling only AppRefreshTask
     }
     
     

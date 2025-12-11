@@ -14,6 +14,17 @@ import ResearchKitSwiftUI
 struct ResearchKitSurveyDemo: View {
     @Binding var isPresented: Bool
     
+    //    VStack {
+    //        Button("Start Survey") {
+    //            isPresented = true
+    //        }
+    //        //https://swiftpackageindex.com/stanfordbdhg/researchkit/4.0.0-beta.2/documentation/researchkitswiftui
+    //        //https://github.com/ResearchKit/ResearchKit/issues/1573
+    //        .sheet(isPresented: $isPresented) {
+    //            ResearchKitSurveyDemo(isPresented: $isPresented)
+    //        }
+    //    }
+    
     var body: some View {
         ResearchForm(
             id: "SurveyTask",
