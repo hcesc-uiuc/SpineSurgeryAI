@@ -19,38 +19,6 @@ struct ContentView: View {
     @State var showDeniedAlert = false
     @Environment(\.scenePhase) var scenePhase
     let motionActivityManager = CMMotionActivityManager()
-    //let recorder = CMSensorRecorder()
-    
-    
-//    var survey: ResearchForm = ResearchForm(
-//        id: "SurveyTask",
-//        steps: {
-//            ResearchFormStep(
-//                title: "Demographics",
-//                subtitle: "Tell us about yourself",
-//                content: {
-//                    TextQuestion(
-//                        id: "textQuestion",
-//                        title: "What is your name?",
-//                        prompt: "Enter your name here",
-//                        lineLimit: .singleLine,
-//                        characterLimit: 0
-//                    )
-//                    .questionRequired(true)
-//                }
-//            )
-//        },
-//        onResearchFormCompletion: { completion in
-//            switch completion {
-//            case .completed(let results):
-//                print(results)
-//            case .discarded:
-//                print("cancelled")
-//            default:
-//                print("cancelled")
-//            }
-//        }
-//    )
 
     @State private var isPresented = false
     @Environment(\.dismiss) var dismiss
@@ -97,6 +65,12 @@ struct ContentView: View {
                     Uploader.shared.uploadFile(fileURL: fileURL)
                 }
             }.padding(.top, 30)
+            Button("Upload All Files"){
+                Task{
+                    let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+                    Uploader.shared.uploadFolder()
+                }
+            }.padding(.top, 30)
             Button("Print log data"){
                 Task{
                     self.printCurrentLogFile()
@@ -109,62 +83,7 @@ struct ContentView: View {
                 //https://swiftpackageindex.com/stanfordbdhg/researchkit/4.0.0-beta.2/documentation/researchkitswiftui
                 //https://github.com/ResearchKit/ResearchKit/issues/1573
                 .sheet(isPresented: $isPresented) {
-                    ResearchForm(
-                        id: "SurveyTask",
-                        steps: {
-                            ResearchFormStep(
-                                title: "Demographics",
-                                subtitle: "Tell us about yourself",
-                                content: {
-                                    TextQuestion(
-                                        id: "Q1",
-                                        title: "What is your name?",
-                                        prompt: "Enter your name here",
-                                        lineLimit: .singleLine,
-                                        characterLimit: 0
-                                    )
-                                    .questionRequired(true)
-                                }
-                            )
-                            ResearchFormStep(
-                                title: "Yes or no question",
-                                subtitle: "Tell us about yourself",
-                                content: {
-                                    MultipleChoiceQuestion(
-                                        id: "Q2",
-                                        title: "What is your name?",
-                                        choices: [
-                                            TextChoice(
-                                                id: "Q21",
-                                                choiceText: "Yes",
-                                                value: 1
-                                            ),
-                                            TextChoice(
-                                                id: "Q22",
-                                                choiceText: "No",
-                                                value: 0
-                                            )
-                                        ], choiceSelectionLimit: .single
-                                    )
-                                    .questionRequired(true)
-                                }
-                            )
-                        },
-                        onResearchFormCompletion: { completion in
-                            switch completion {
-                                case .completed(let results):
-                                    let resultsAsText = results.compactMap { result in
-                                        "\(result.identifier): \(getAnswerValue(answer: result.answer))"
-                                    }
-                                    print(resultsAsText)
-                                    self.isPresented = false
-                                case .discarded:
-                                    print("cancelled")
-                                default:
-                                    print("cancelled")
-                            }
-                        }
-                    )
+                    ResearchKitSurveyDemo(isPresented: $isPresented)
                 }
             }
             
@@ -216,6 +135,15 @@ struct ContentView: View {
 
     }
     
+    
+    
+    
+//================================================================================================================
+//
+//  Internal
+//
+//================================================================================================================
+    
     func checkMotionAndFitnessAuthorization() {
         let status = CMMotionActivityManager.authorizationStatus()
         
@@ -240,83 +168,6 @@ struct ContentView: View {
         }
     }
     
-    
-//================================================================================================================
-//
-//  Internal
-//
-//================================================================================================================
-    
-    func resultForStep<Result>(answerFormat: AnswerFormat) -> Result? {
-        switch answerFormat {
-        case let .text(answer):
-            return answer as? Result
-        case .numeric(let decimal):
-            return decimal as? Result
-        case .date(let date):
-            return date as? Result
-        case .height(let height):
-            return height as? Result
-        case .weight(let weight):
-            return weight as? Result
-        case .image(let image):
-            return image as? Result
-        case .multipleChoice(let multipleChoice):
-            return multipleChoice as? Result
-        case .scale(let double):
-            return double as? Result
-        default:
-            return nil
-        }
-    }
-    
-    func getAnswerValue(answer: AnswerFormat) -> String{
-        //see how the handle AnswerFormat
-        //https://chatgpt.com/share/69165514-aa20-8008-b3ad-ed2372d08ef5
-        switch answer {
-            case .text(let value):
-                return value ?? "nil"
-            case .numeric(let value):
-                return String(value ?? -1)
-            case .multipleChoice(let values):
-                //separate this out as a function
-                if let vals = values {
-                    var choices: [String] = []
-                    for val in vals {
-                        switch val {
-                            case .int(let value):
-                                choices.append(String(value))
-                            case .string(let value):
-                                choices.append(value)
-                            case .date(let value):
-                                choices.append(dateToString(value))
-                            default:
-                                return "nil"
-                        }
-                    }
-                    return choices.joined(separator: ", ") // Access elements safely
-                } else {
-                    return "Multiple choice is nil."
-                }
-            case .scale(let value):
-                return String(value ?? -1)
-            case .date(let value):
-                return dateToString(value ?? Date())
-            default:
-                return "nil"
-            
-            
-//            case .image(let values):
-//                print("Image answers:", values ?? [])
-//            case .date(let value):
-//                return String(value ?? Date())
-//            case .weight(let value):
-//                print("Weight answer:", value ?? 0)
-//            case .height(let value):
-//                print("Height answer:", value ?? 0)
-                
-        }
-    }
     
     // Ask for motion authorization (needed for CMSensorRecorder)
     func requestMotionPermission() {
@@ -379,11 +230,6 @@ struct ContentView: View {
         formatter.locale = .current         // user’s locale (e.g., 12/24h preference)
         return formatter.string(from: date)
     }
-    
-    
-
-    
-    
 }
 
 #Preview {

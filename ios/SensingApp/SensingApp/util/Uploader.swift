@@ -13,6 +13,26 @@ struct Uploader {
     static let shared = Uploader()
     static let UploadURL = "http://18.116.67.186/api/uploadfile"
     
+    func uploadFolder() {
+        let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+        
+        //let file_prefixes = ["accelerometer_"] //, "log_"] //add more extension in future
+        let file_prefixes = ["log_"] //add more extension in future
+        for file_prefix in file_prefixes {
+            let matchingFiles = filesWithPrefix(in: documentsURL, prefix: file_prefix)
+            let numberOfFiles = matchingFiles.count
+            for (index, file) in matchingFiles.enumerated() {
+                if let size = fileSize(from: file) {
+                    let fileSizeInKB = Int(Double(size) / 1024)
+                    print("\(index+1)/\(numberOfFiles) Uploading file: \(file.lastPathComponent); \(fileSizeInKB)KB")
+                    uploadFile(fileURL: file)
+                }
+                break
+            }
+        }
+        
+    }
+    
     
     func uploadFile(fileURL: URL) {
         let boundary = "Boundary-\(UUID().uuidString)"
@@ -37,23 +57,38 @@ struct Uploader {
         body.append("\r\n--\(boundary)--\r\n".data(using: .utf8)!)
 
         // ✅ Use uploadTask(from:) instead of setting httpBody
-        let task = URLSession.shared.uploadTask(with: request, from: body) { data, response, error in
-            if let error = error {
-                print("Upload error: \(error.localizedDescription)")
-                return
-            }
-
-            if let httpResponse = response as? HTTPURLResponse {
-                print("Status code: \(httpResponse.statusCode)")
-            }
-
-            if let data = data,
-               let responseString = String(data: data, encoding: .utf8) {
-                print("Response: \(responseString)")
+        
+        //        let task = URLSession.shared.uploadTask(with: request, from: body) { data, response, error in
+        //            if let error = error {
+        //                print("     Upload error: \(error.localizedDescription)")
+        //                return
+        //            }
+        //
+        //            if let httpResponse = response as? HTTPURLResponse {
+        //                print("     Status code: \(httpResponse.statusCode)")
+        //            }
+        //
+        //            if let data = data,
+        //               let responseString = String(data: data, encoding: .utf8) {
+        //                print("     Response: \(responseString)")
+        //            }
+        //        }
+        //
+        //        task.resume()
+        Task {
+            do {
+                let (data, response) = try await upload(data: body, request: request)
+                print("     Upload success!")
+                //print("\(data)")
+                //                if let data = data,
+                //                   let responseString = String(data: data, encoding: .utf8) {
+                //                    print("     Response: \(responseString)")
+                //                }
+            } catch {
+                print("Upload failed: \(error)")
             }
         }
-
-        task.resume()
+        
     }
     
     
@@ -74,6 +109,49 @@ struct Uploader {
             print("Upload success: \(response)")
         } catch {
             print("Upload error: \(error.localizedDescription)")
+        }
+    }
+    
+    
+    //==========================
+    //  Internal
+    //==========================
+     
+    func upload(data: Data, request: URLRequest) async throws -> (Data, URLResponse) {
+        // `upload(for:from:)` works with Data
+        let (responseData, response) = try await URLSession.shared.upload(
+            for: request,
+            from: data
+        )
+        return (responseData, response)
+    }
+    
+    func filesWithPrefix(in directory: URL, prefix: String) -> [URL] {
+        let fileManager = FileManager.default
+        
+        do {
+            let fileURLs = try fileManager.contentsOfDirectory(
+                at: directory,
+                includingPropertiesForKeys: nil,
+                options: [.skipsHiddenFiles]
+            )
+            
+            // Filter by prefix
+            return fileURLs.filter { $0.lastPathComponent.hasPrefix(prefix) }
+            
+        } catch {
+            print("Error reading directory: \(error)")
+            return []
+        }
+    }
+    
+    func fileSize(from url: URL) -> Int? {
+        do {
+            let values = try url.resourceValues(forKeys: [.fileSizeKey])
+            return values.fileSize   // bytes
+        } catch {
+            print("Error: \(error)")
+            return nil
         }
     }
     
