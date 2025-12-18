@@ -112,7 +112,7 @@ def uploadfile():
         ServerSideEncryption="AES256"
     )
 
-    db.insert_accel("P0001", [{"url": key}])
+    db.insert_accel("P0001", [{"ts": 0, "url": key}])
 
     return jsonify(message="Upload successful", key=key)
 

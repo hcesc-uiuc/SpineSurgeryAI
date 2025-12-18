@@ -111,19 +111,36 @@ class DB:
         """Insert accelerometer objects (timestamp + URL). Returns inserted row count.
 
         Accepts rows as:
-        - dict: {"ts": <str/datetime/unix>, "url": <str>}
-        - tuple: (<ts>, <url>)
+        - dict: {"url": <str>, "ts": <str/datetime/unix> (optional, defaults to placeholder)}
+        - tuple: (<url>,) or (<ts>, <url>)
+        
+        If ts is not provided, it defaults to Unix epoch (1970-01-01) as a placeholder.
+        The checker will later update ts to the actual recording time from the data file.
         """
+        # Placeholder timestamp - obviously wrong so it's clear the checker hasn't processed it yet
+        PLACEHOLDER_TS = "1970-01-01T00:00:00+00:00"
+        
         participant_id_integer = self.create_participant_if_missing(external_participant_identifier)
         accelerometer_payload_rows_list: List[Tuple[int, str, str]] = []  # (participant_id, iso8601_ts, url)
 
         for single_accel_record in accelerometer_data_rows_sequence:
             if isinstance(single_accel_record, dict):
-                timestamp_iso8601_string = self.normalize_timestamp_to_iso8601(single_accel_record["ts"])
                 object_url_string = single_accel_record.get("url")
+                # ts is optional - default to placeholder if not provided
+                if "ts" in single_accel_record:
+                    timestamp_iso8601_string = self.normalize_timestamp_to_iso8601(single_accel_record["ts"])
+                else:
+                    timestamp_iso8601_string = PLACEHOLDER_TS
             else:
-                timestamp_iso8601_string = self.normalize_timestamp_to_iso8601(single_accel_record[0])
-                object_url_string = single_accel_record[1] if len(single_accel_record) > 1 else None
+                # For tuples, check length to determine format
+                if len(single_accel_record) == 1:
+                    # Just URL provided
+                    object_url_string = single_accel_record[0]
+                    timestamp_iso8601_string = PLACEHOLDER_TS
+                else:
+                    # (ts, url) format
+                    timestamp_iso8601_string = self.normalize_timestamp_to_iso8601(single_accel_record[0])
+                    object_url_string = single_accel_record[1]
 
             if not object_url_string:
                 raise ValueError("accelerometer row missing required 'url' value")
@@ -155,24 +172,37 @@ class DB:
     ) -> int:
         """Insert gyroscope objects (timestamp + URL). Returns inserted row count.
 
-        Expects each row to be either:
-        - dict: {"ts": <str/datetime/unix>, "url": <str>}
-        - tuple: (<ts>, <url>)
+        Accepts rows as:
+        - dict: {"url": <str>, "ts": <str/datetime/unix> (optional, defaults to placeholder)}
+        - tuple: (<url>,) or (<ts>, <url>)
+        
+        If ts is not provided, it defaults to Unix epoch (1970-01-01) as a placeholder.
+        The checker will later update ts to the actual recording time from the data file.
         """
+        # Placeholder timestamp - obviously wrong so it's clear the checker hasn't processed it yet
+        PLACEHOLDER_TS = "1970-01-01T00:00:00+00:00"
+        
         participant_id_integer = self.create_participant_if_missing(external_participant_identifier)
         gyroscope_payload_rows_list: List[Tuple[int, str, str]] = []  # (participant_id, iso8601_ts, S3/HTTP url)
 
         for single_gyroscope_record in gyroscope_data_rows_sequence:
             if isinstance(single_gyroscope_record, dict):
-                timestamp_iso8601_string = self.normalize_timestamp_to_iso8601(
-                    single_gyroscope_record["ts"]
-                )
                 object_url_string = single_gyroscope_record.get("url")
+                # ts is optional - default to placeholder if not provided
+                if "ts" in single_gyroscope_record:
+                    timestamp_iso8601_string = self.normalize_timestamp_to_iso8601(single_gyroscope_record["ts"])
+                else:
+                    timestamp_iso8601_string = PLACEHOLDER_TS
             else:
-                timestamp_iso8601_string = self.normalize_timestamp_to_iso8601(
-                    single_gyroscope_record[0]
-                )
-                object_url_string = single_gyroscope_record[1] if len(single_gyroscope_record) > 1 else None
+                # For tuples, check length to determine format
+                if len(single_gyroscope_record) == 1:
+                    # Just URL provided
+                    object_url_string = single_gyroscope_record[0]
+                    timestamp_iso8601_string = PLACEHOLDER_TS
+                else:
+                    # (ts, url) format
+                    timestamp_iso8601_string = self.normalize_timestamp_to_iso8601(single_gyroscope_record[0])
+                    object_url_string = single_gyroscope_record[1]
 
             if not object_url_string:
                 raise ValueError("gyroscope row missing required 'url' value")
@@ -200,21 +230,41 @@ class DB:
         self,
         external_participant_identifier: str,
         heart_rate_data_rows_sequence: Sequence[Dict[str, Any] | Tuple[Any, Any]],
-    ) -> int: #returns how many rows inserted
+    ) -> int:
+        """Insert heart rate objects (timestamp + URL). Returns inserted row count.
+
+        Accepts rows as:
+        - dict: {"url": <str>, "ts": <str/datetime/unix> (optional, defaults to placeholder)}
+        - tuple: (<url>,) or (<ts>, <url>)
+        
+        If ts is not provided, it defaults to Unix epoch (1970-01-01) as a placeholder.
+        The checker will later update ts to the actual recording time from the data file.
+        """
+        # Placeholder timestamp - obviously wrong so it's clear the checker hasn't processed it yet
+        PLACEHOLDER_TS = "1970-01-01T00:00:00+00:00"
+        
         participant_id_integer = self.create_participant_if_missing(external_participant_identifier)
         heart_rate_payload_rows_list: List[Tuple[int, str, str]] = []  # (participant_id, iso8601_ts, S3 url)
+        
         for single_heart_rate_record in heart_rate_data_rows_sequence:
             if isinstance(single_heart_rate_record, dict):
-                timestamp_iso8601_string = self.normalize_timestamp_to_iso8601(
-                    single_heart_rate_record["ts"] # timestamp
-                )
                 object_url_string = single_heart_rate_record.get("url")
-
+                # ts is optional - default to placeholder if not provided
+                if "ts" in single_heart_rate_record:
+                    timestamp_iso8601_string = self.normalize_timestamp_to_iso8601(single_heart_rate_record["ts"])
+                else:
+                    timestamp_iso8601_string = PLACEHOLDER_TS
             else:
-                timestamp_iso8601_string = self.normalize_timestamp_to_iso8601(
-                    single_heart_rate_record[0]
-                )
-                object_url_string = single_heart_rate_record[1] if len(single_heart_rate_record) > 1 else None
+                # For tuples, check length to determine format
+                if len(single_heart_rate_record) == 1:
+                    # Just URL provided
+                    object_url_string = single_heart_rate_record[0]
+                    timestamp_iso8601_string = PLACEHOLDER_TS
+                else:
+                    # (ts, url) format
+                    timestamp_iso8601_string = self.normalize_timestamp_to_iso8601(single_heart_rate_record[0])
+                    object_url_string = single_heart_rate_record[1]
+                    
             if not object_url_string:
                 raise ValueError("heart_rate row missing required 'url' value")
 
@@ -407,6 +457,46 @@ class DB:
                     bool(analysis.get("is_usable", False)),
                 ),
             )
+
+    # ---------------------------
+    # Update helpers
+    # ---------------------------
+    def update_recording_timestamp(
+        self,
+        kind: str,
+        row_id: int,
+        recording_timestamp_iso: str,
+    ) -> bool:
+        """
+        Update the ts field for a timeseries row to reflect the actual recording time
+        (extracted from the uploaded data file).
+        
+        Args:
+            kind: "accel", "gyro", or "hr"
+            row_id: The database row id to update
+            recording_timestamp_iso: ISO 8601 timestamp string of when data was actually recorded
+            
+        Returns:
+            True if update succeeded, False otherwise
+        """
+        # Map kind to table name
+        table_map = {
+            "accel": "accelerometer",
+            "gyro": "gyroscope",
+            "hr": "heart_rate",
+        }
+        
+        table_name = table_map.get(kind)
+        if not table_name:
+            raise ValueError(f"Unknown kind: {kind}. Expected 'accel', 'gyro', or 'hr'")
+        
+        update_sql = sql.SQL(
+            "UPDATE {table} SET ts = %s WHERE id = %s"
+        ).format(table=sql.Identifier(table_name))
+        
+        with self.temporary_database_connection() as conn, conn.cursor() as cur:
+            cur.execute(update_sql, (recording_timestamp_iso, row_id))
+            return cur.rowcount > 0
 
     def refresh_summary_cache(self, use_concurrent_refresh: bool = True) -> None: # Use after flask push insert data then refresh
         #Refresh all daily presence materialized views. If concurrent refresh fails (e.g., first population), falls back automatically.

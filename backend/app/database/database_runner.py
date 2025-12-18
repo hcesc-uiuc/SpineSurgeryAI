@@ -43,7 +43,7 @@ SQL_01_BASE = r"""
 CREATE TABLE IF NOT EXISTS participants (
   id           SERIAL PRIMARY KEY,
   external_id  TEXT UNIQUE NOT NULL,
-  created_at   TIMESTAMPTZ DEFAULT now()
+  uploaded_at   TIMESTAMPTZ DEFAULT now()
 );
 
 -- URL-based timeseries: store pointer to object (e.g., S3) per timestamp
@@ -52,7 +52,7 @@ CREATE TABLE IF NOT EXISTS accelerometer (
   participant_id INT NOT NULL REFERENCES participants(id) ON DELETE CASCADE,
   ts             TIMESTAMPTZ NOT NULL,
   object_url     TEXT NOT NULL,
-  created_at     TIMESTAMPTZ DEFAULT now()
+  uploaded_at     TIMESTAMPTZ DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS gyroscope (
@@ -60,7 +60,7 @@ CREATE TABLE IF NOT EXISTS gyroscope (
   participant_id INT NOT NULL REFERENCES participants(id) ON DELETE CASCADE,
   ts             TIMESTAMPTZ NOT NULL,
   object_url     TEXT NOT NULL,
-  created_at     TIMESTAMPTZ DEFAULT now()
+  uploaded_at     TIMESTAMPTZ DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS heart_rate (
@@ -68,7 +68,7 @@ CREATE TABLE IF NOT EXISTS heart_rate (
   participant_id INT NOT NULL REFERENCES participants(id) ON DELETE CASCADE,
   ts             TIMESTAMPTZ NOT NULL,
   object_url     TEXT NOT NULL,
-  created_at     TIMESTAMPTZ DEFAULT now()
+  uploaded_at     TIMESTAMPTZ DEFAULT now()
 );
 """
 
@@ -126,7 +126,7 @@ CREATE TABLE IF NOT EXISTS daily_survey (
   survey_date    DATE NOT NULL,
   object_url     TEXT NOT NULL,
   payload        JSONB NOT NULL,
-  created_at     TIMESTAMPTZ DEFAULT now(),
+  uploaded_at     TIMESTAMPTZ DEFAULT now(),
   CONSTRAINT uq_survey_participant_date UNIQUE (participant_id, survey_date)
 );
 

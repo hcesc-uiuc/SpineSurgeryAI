@@ -1,10 +1,13 @@
 from flask import Flask, render_template
 from config import Config
 from routes.upload import upload_bp
+from flask import Blueprint, Response, jsonify
 from database.database import DB
 from flask import current_app
 from routes.dashboard_api import dashboard_api
 from routes.dashboard_page import dashboard_page
+from heatmap import generate_participant_heatmap
+
 import logging
 import sys
 
@@ -28,9 +31,18 @@ def create_app():
     app.register_blueprint(dashboard_api)
     app.register_blueprint(dashboard_page)
     
+    
     @app.route("/")
     def home():
         return render_template(("home.html"))
+    
+    @app.route("/heatmap/<participant_id>", methods=["GET"])
+    def get_heatmap(participant_id: str):
+        """Generate and return heatmap HTML on demand."""
+        html = generate_participant_heatmap(current_app.config["DB"], participant_id)
+        if html:
+            return Response(html, mimetype="text/html")
+        return jsonify({"error": "No data for participant"}), 404
     
     @app.route("/compliance")
     def compliance():
