@@ -88,21 +88,21 @@ def fetch_recent_uploads(db: DB) -> List[UploadRecord]:
         SELECT 'accel' AS kind, p.external_id, a.ts, a.object_url, a.id AS row_id
         FROM accelerometer a
         JOIN participants p ON p.id = a.participant_id
-        WHERE a.created_at >= now() - %s * INTERVAL '1 second'
+        WHERE a.uploaded_at >= now() - %s * INTERVAL '1 second'
 
         UNION ALL
 
         SELECT 'gyro' AS kind, p.external_id, g.ts, g.object_url, g.id AS row_id
         FROM gyroscope g
         JOIN participants p ON p.id = g.participant_id
-        WHERE g.created_at >= now() - %s * INTERVAL '1 second'
+        WHERE g.uploaded_at >= now() - %s * INTERVAL '1 second'
 
         UNION ALL
 
         SELECT 'hr' AS kind, p.external_id, h.ts, h.object_url, h.id AS row_id
         FROM heart_rate h
         JOIN participants p ON p.id = h.participant_id
-        WHERE h.created_at >= now() - %s * INTERVAL '1 second'
+        WHERE h.uploaded_at >= now() - %s * INTERVAL '1 second'
 
         ORDER BY ts;
     """
