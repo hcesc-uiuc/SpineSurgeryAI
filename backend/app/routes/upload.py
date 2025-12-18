@@ -117,3 +117,102 @@ def uploadfile():
     return jsonify(message="Upload successful", key=key)
 
 
+@upload_bp.route("/uploadfile/accel", methods=["POST"])  
+def uploadfileaccel():
+    db = current_app.config["DB"]
+
+    if (Config.DEBUG_MODE):
+        # Be careful printing body — can be huge or binary
+        print("---- REQUEST START ----")
+        print("Method:", request.method)
+        print("URL:", request.url)
+        print("Headers:\n", request.headers)
+        print("Body:\n", request.get_data(as_text=True))
+        print("---- REQUEST END ----")    
+
+    file = request.files.get("file")
+    if not file:
+        return jsonify(error="No file uploaded"), 400
+
+    key = f"uploads/{datetime.utcnow():%Y%m%dT%H%M%S}_{secure_filename(file.filename)}"
+
+    s3.put_object(
+        Bucket=S3_BUCKET,
+        Key=key,
+        Body=file.stream,
+        ContentType=file.mimetype or "application/octet-stream",
+        StorageClass="GLACIER_IR",
+        ServerSideEncryption="AES256"
+    )
+
+    db.insert_accel("P0001", [{"ts": 0, "url": key}])
+
+    return jsonify(message="Upload successful", key=key)
+
+
+@upload_bp.route("/uploadfile/gyro", methods=["POST"])  
+def uploadfilegyro():
+    db = current_app.config["DB"]
+
+    if (Config.DEBUG_MODE):
+        # Be careful printing body — can be huge or binary
+        print("---- REQUEST START ----")
+        print("Method:", request.method)
+        print("URL:", request.url)
+        print("Headers:\n", request.headers)
+        print("Body:\n", request.get_data(as_text=True))
+        print("---- REQUEST END ----")    
+
+    file = request.files.get("file")
+    if not file:
+        return jsonify(error="No file uploaded"), 400
+
+    key = f"uploads/{datetime.utcnow():%Y%m%dT%H%M%S}_{secure_filename(file.filename)}"
+
+    s3.put_object(
+        Bucket=S3_BUCKET,
+        Key=key,
+        Body=file.stream,
+        ContentType=file.mimetype or "application/octet-stream",
+        StorageClass="GLACIER_IR",
+        ServerSideEncryption="AES256"
+    )
+
+    db.insert_gyro("P0001", [{"ts": 0, "url": key}])
+
+    return jsonify(message="Upload successful", key=key)
+
+
+@upload_bp.route("/uploadfile/heartrate", methods=["POST"])  
+def uploadfileheartrate():
+    db = current_app.config["DB"]
+
+    if (Config.DEBUG_MODE):
+        # Be careful printing body — can be huge or binary
+        print("---- REQUEST START ----")
+        print("Method:", request.method)
+        print("URL:", request.url)
+        print("Headers:\n", request.headers)
+        print("Body:\n", request.get_data(as_text=True))
+        print("---- REQUEST END ----")    
+
+    file = request.files.get("file")
+    if not file:
+        return jsonify(error="No file uploaded"), 400
+
+    key = f"uploads/{datetime.utcnow():%Y%m%dT%H%M%S}_{secure_filename(file.filename)}"
+
+    s3.put_object(
+        Bucket=S3_BUCKET,
+        Key=key,
+        Body=file.stream,
+        ContentType=file.mimetype or "application/octet-stream",
+        StorageClass="GLACIER_IR",
+        ServerSideEncryption="AES256"
+    )
+
+    db.insert_hr("P0001", [{"ts": 0, "url": key}])
+
+    return jsonify(message="Upload successful", key=key)
+
+

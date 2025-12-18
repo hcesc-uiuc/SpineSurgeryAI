@@ -48,9 +48,12 @@ def create_app():
     def compliance():
         try:
             data = current_app.config["DB"].get_compliance_for("P0001") 
-            table = current_app.config["DB"].get_table("accelerometer")
+            accel = current_app.config["DB"].get_table("accelerometer")
+            gyro = current_app.config["DB"].get_table("gyroscope")
             ingestion_rows = current_app.config["DB"].get_table("ingestion_health")
-            return render_template("compliance.html", data=data, table=table, ingestion_rows=ingestion_rows)
+            hr = current_app.config["DB"].get_table("heart_rate")
+
+            return render_template("compliance.html", data=data, accel=accel, gyro=gyro, ingestion_rows=ingestion_rows, hr=hr)
         except Exception as e: 
             print("error")
             app.logger.error("\033[91m" + "Cannot connect to database" + "\033[0m" + str(e))
