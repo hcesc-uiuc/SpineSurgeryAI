@@ -25,7 +25,30 @@
 
 <iframe id="heatmapFrame" width="100%" height="600" frameborder="0" style="display:none;"></iframe>
 
-
+<!-- Survey Table -->
+<h3 class="mt-5">Survey Table</h3>
+<table class="table table-bordered">
+  <thead class="table-light">
+    <tr>
+      <th>ID</th>
+      <th>Participant</th>
+      <th>Timestamp</th>
+      <th>Uploaded At</th>
+      <th>Object URL</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in survey %}
+    <tr>
+      <td>{{ row.id }}</td>
+      <td>{{ row.participant_id }}</td>
+      <td>{{ row.ts }}</td>
+      <td>{{row.uploaded_at}}</td>
+      <td><a href="{{ row.object_url }}" target="_blank">{{ row.object_url }}</a></td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
 
 <!-- Accel Table -->
 <h3 class="mt-5">Accel Table</h3>
