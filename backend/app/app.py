@@ -6,7 +6,7 @@ from database.database import DB
 from flask import current_app
 from routes.dashboard_api import dashboard_api
 from routes.dashboard_page import dashboard_page
-from heatmap import generate_participant_heatmap
+from heatmap import generate_compliance_report, generate_participant_heatmap
 
 import logging
 import sys
@@ -43,7 +43,14 @@ def create_app():
         if html:
             return Response(html, mimetype="text/html")
         return jsonify({"error": "No data for participant"}), 404
-    
+    @app.route("/totalcompliance")
+    def get_compliance():
+        """Generate and return compliance HTML on demand. See photo"""
+        html = generate_compliance_report(current_app.config["DB"], lookback_days=30)
+        if html:
+            return Response(html, mimetype="text/html")
+        return jsonify({"error": "No data for participant"}), 404
+
     @app.route("/compliance")
     def compliance():
         try:
