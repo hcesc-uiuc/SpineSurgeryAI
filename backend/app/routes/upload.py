@@ -216,3 +216,102 @@ def uploadfileheartrate():
     return jsonify(message="Upload successful", key=key)
 
 
+@upload_bp.route("/uploadjson/survey", methods=["POST"])
+def upload_survey():
+    """
+    Upload a survey response in the format
+    {
+      "metadata": {
+        "user_id": "P0001",
+        "timestamp_utc": "2026-01-12T22:41:00Z"
+      },
+      "payload": {
+        "study_id": "spine_recovery_v1",
+        "survey": { ... },
+        "device_metadata": { ... }
+      }
+    }
+    
+    """
+    db = current_app.config["DB"]
+
+    if not request.is_json:
+        return jsonify(error="Please send JSON data"), 400
+
+    data = request.get_json()
+
+    if Config.DEBUG_MODE:
+        print("---- SURVEY REQUEST START ----")
+        print("Method:", request.method)
+        print("URL:", request.url)
+        print("Headers:\n", request.headers)
+        print("Body:\n", json.dumps(data, indent=2))
+        print("---- SURVEY REQUEST END ----")
+
+    if not isinstance(data, dict):
+        return jsonify(error="Invalid JSON structure"), 400
+
+    metadata = data.get("metadata")
+    payload = data.get("payload")
+
+    if not metadata:
+        return jsonify(error="Missing 'metadata' field"), 400
+    if not payload:
+        return jsonify(error="Missing 'payload' field"), 400
+
+    user_id = metadata.get("user_id")
+    if not user_id:
+        return jsonify(error="Missing 'user_id' in metadata"), 400
+
+    timestamp_str = metadata.get("timestamp_utc")
+    if not timestamp_str:
+        return jsonify(error="Missing 'timestamp_utc' in metadata"), 400
+
+    try:
+        if timestamp_str.endswith("Z"):
+            timestamp_str = timestamp_str[:-1] + "+00:00"
+        survey_datetime = datetime.fromisoformat(timestamp_str)
+        survey_date = survey_datetime.date().isoformat()  # "2026-01-12"
+    except ValueError as e:
+        return jsonify(error=f"Invalid timestamp format: {e}"), 400
+
+    # Build S3 key for payload only
+    safe_user_id = secure_filename(user_id)
+    key = f"surveys/{safe_user_id}/{survey_date}_{datetime.utcnow():%H%M%S}.json"
+
+    # Upload only the payload to S3
+    payload_bytes = json.dumps(payload).encode("utf-8")
+
+    s3.put_object(
+        Bucket=S3_BUCKET,
+        Key=key,
+        Body=payload_bytes,
+        ContentType="application/json",
+        StorageClass="GLACIER_IR",
+        ServerSideEncryption="AES256",
+    )
+
+    db.insert_survey(user_id, [{
+        "survey_date": survey_date,
+        "url": key,
+        "payload": payload,
+    }])
+
+    return jsonify(
+        message="Survey uploaded successfully",
+        key=key,
+        user_id=user_id,
+        survey_date=survey_date,
+    ), 201
+
+
+
+
+
+
+
+
+
+
+
+
