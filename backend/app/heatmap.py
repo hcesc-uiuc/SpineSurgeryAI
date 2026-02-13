@@ -188,7 +188,7 @@ def get_participant_compliance_stats(db: DB, external_id: str) -> Optional[dict]
         return {
             "external_id": external_id,
             "total_possible_slots": 7 * 96,
-            "total_uploads": 0,
+            "total_good_slots": 0,
             "percentage": 0.0,
             "by_modality": {}
         }
