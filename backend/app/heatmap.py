@@ -232,7 +232,7 @@ def get_participant_compliance_stats(db: DB, external_id: str) -> Optional[dict]
 def generate_compliance_report(
     db: DB,
     external_id: Optional[str] = None,
-    lookback_days: int = 30
+    lookback_days: int = 100
 ) -> str:
     """
     Generate an HTML compliance report showing adherence data.
