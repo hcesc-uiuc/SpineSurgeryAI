@@ -78,7 +78,7 @@ def generate_participant_heatmap(db: DB, external_id: str) -> Optional[str]:
         on=["external_id", "modality", "day", "slot_index"]
     )
     
-    grid["good"] = grid["good"].fillna(False)
+    grid["good"] = grid["good"].fillna(False) # will be deprecated soon
     grid["pct"] = grid["pct"].fillna(0.0)
     
     # Convert day to datetime for Altair
