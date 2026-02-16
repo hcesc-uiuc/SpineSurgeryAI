@@ -498,34 +498,27 @@ class DB:
             cur.execute(update_sql, (recording_timestamp_iso, row_id))
             return cur.rowcount > 0
 
-    def refresh_summary_cache(self, use_concurrent_refresh: bool = True) -> None: # Use after flask push insert data then refresh
-        #Refresh all daily presence materialized views. If concurrent refresh fails (e.g., first population), falls back automatically.
-        
-        refresh_all_materialized_views_sql_template = (
-            "REFRESH MATERIALIZED VIEW {mode} mv_accel_daily_presence;"
-            "REFRESH MATERIALIZED VIEW {mode} mv_gyro_daily_presence;"
-            "REFRESH MATERIALIZED VIEW {mode} mv_hr_daily_presence;"
-            "REFRESH MATERIALIZED VIEW {mode} mv_survey_daily_presence;"
-            "REFRESH MATERIALIZED VIEW {mode} mv_accel_daily_presence;"
-        )
+    def refresh_summary_cache(self, use_concurrent_refresh: bool = True) -> None:
+        views = [
+            "mv_accel_daily_presence",
+            "mv_gyro_daily_presence",
+            "mv_hr_daily_presence",
+            "mv_survey_daily_presence",
+        ]
 
-        def execute_refresh_with_mode(mode_clause_string: str) -> None:
-            refresh_statement_sql = refresh_all_materialized_views_sql_template.format(
-                mode=mode_clause_string
-            )
-            with self.temporary_database_connection() as database_connection, database_connection.cursor() as database_cursor:
-                database_cursor.execute(refresh_statement_sql)
-                database_connection.commit()
+        def do_refresh(mode: str):
+            for view in views:
+                stmt = f"REFRESH MATERIALIZED VIEW {mode}{view};"
+                with self.temporary_database_connection() as conn, conn.cursor() as cur:
+                    cur.execute(stmt)
 
-        try:
-            if use_concurrent_refresh:
-                execute_refresh_with_mode("CONCURRENTLY ")
-            else:
-                execute_refresh_with_mode("")
-        except Exception:
-            execute_refresh_with_mode("")
-
-    
+        if use_concurrent_refresh:
+            try:
+                do_refresh("CONCURRENTLY ")
+            except Exception:
+                do_refresh("")
+        else:
+            do_refresh("")
     # rewrite this 
     def get_dashboard(
         self,
