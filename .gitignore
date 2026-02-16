@@ -5,3 +5,5 @@ __pycache__/
 .venv/
 .env
 
+ios/.DS_Store
+.DS_Store
