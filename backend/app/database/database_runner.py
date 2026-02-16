@@ -70,6 +70,10 @@ CREATE TABLE IF NOT EXISTS heart_rate (
   object_url     TEXT NOT NULL,
   uploaded_at     TIMESTAMPTZ DEFAULT now()
 );
+
+ALTER TABLE accelerometer ADD COLUMN IF NOT EXISTS file_size_bytes NUMERIC;
+ALTER TABLE gyroscope ADD COLUMN IF NOT EXISTS file_size_bytes NUMERIC;
+ALTER TABLE heart_rate ADD COLUMN IF NOT EXISTS file_size_bytes NUMERIC;
 """
 
 SQL_02_INDEXES = r"""

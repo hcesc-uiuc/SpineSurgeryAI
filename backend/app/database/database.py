@@ -673,6 +673,20 @@ class DB:
             database_cursor.execute(truncate_all_timeseries_sql)
             database_connection.commit()
 
+    # adds file size of the upload
+    def update_file_size(self, kind: str, row_id: int, file_size_megabytes: int) -> bool:
+        table_map = {"accel": "accelerometer", "gyro": "gyroscope", "hr": "heart_rate"}
+        table_name = table_map.get(kind)
+        if not table_name:
+            raise ValueError(f"Unknown kind: {kind}")
+        
+        update_sql = sql.SQL("UPDATE {table} SET file_size_bytes = %s WHERE id = %s").format(
+            table=sql.Identifier(table_name)
+        )
+        with self.temporary_database_connection() as database_connection:
+            with database_connection.cursor() as database_cursor:
+                database_cursor.execute(update_sql, (file_size_megabytes, row_id))
+
 # db = DB()
 
 # # Create or ensure a participant exists

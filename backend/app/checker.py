@@ -388,6 +388,9 @@ def run_once(db: DB):
             content = download_object_content(upload.object_url)
             print(f"[checker] Downloaded {len(content)} bytes", flush=True)
 
+            # update file size and store as (MB)
+            db.update_file_size(upload.kind, upload.row_id, round(len(content) / 1_000_000, 2))
+
             # Extract the actual recording timestamp from the data
             print("[checker] Extracting recording timestamps...", flush=True)
             first_ts_ms, last_ts_ms = extract_recording_timestamps(content)

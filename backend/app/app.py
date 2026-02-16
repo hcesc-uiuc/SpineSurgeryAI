@@ -49,10 +49,10 @@ def create_app():
         pid = db.get_participant_id_if_exists(participant_id)
         if pid:
             tables = {
-                "Accelerometer": "SELECT id, participant_id, ts, uploaded_at, object_url FROM accelerometer WHERE participant_id = %s AND ts > '1970-01-02' ORDER BY ts DESC LIMIT 100",
-                "Gyroscope": "SELECT id, participant_id, ts, uploaded_at, object_url FROM gyroscope WHERE participant_id = %s AND ts > '1970-01-02' ORDER BY ts DESC LIMIT 100",
-                "Heart Rate": "SELECT id, participant_id, ts, uploaded_at, object_url FROM heart_rate WHERE participant_id = %s AND ts > '1970-01-02' ORDER BY ts DESC LIMIT 100",
-                "Survey": "SELECT id, participant_id, survey_date AS ts, uploaded_at, object_url FROM daily_survey WHERE participant_id = %s ORDER BY survey_date DESC LIMIT 100",
+                "Accelerometer": "SELECT id, participant_id, ts, object_url, file_size_bytes FROM accelerometer WHERE participant_id = %s AND ts > '1970-01-02' ORDER BY ts DESC LIMIT 100",
+                "Gyroscope": "SELECT id, participant_id, ts, object_url, file_size_bytes FROM gyroscope WHERE participant_id = %s AND ts > '1970-01-02' ORDER BY ts DESC LIMIT 100",
+                "Heart Rate": "SELECT id, participant_id, ts, object_url, file_size_bytes FROM heart_rate WHERE participant_id = %s AND ts > '1970-01-02' ORDER BY ts DESC LIMIT 100",
+                "Survey": "SELECT id, participant_id, survey_date AS ts, object_url FROM daily_survey WHERE participant_id = %s ORDER BY survey_date DESC LIMIT 100",
             }
 
             tables_html = '<div style="font-family:sans-serif;padding:20px;">'
