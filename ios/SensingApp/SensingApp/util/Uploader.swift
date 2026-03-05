@@ -35,8 +35,19 @@ struct Uploader {
     
     
     func uploadFile(fileURL: URL) {
+        
+        if FileManager.default.fileExists(atPath: fileURL.path) {
+            print("File \(fileURL.lastPathComponent) exists")
+        }else{
+            print("File \(fileURL.lastPathComponent) does not exist")
+        }
+        
+        
         let boundary = "Boundary-\(UUID().uuidString)"
-        guard let url = URL(string: Uploader.UploadURL) else { return }
+        guard let url = URL(string: Uploader.UploadURL) else {
+            print("\(Uploader.UploadURL) does not exist")
+            return
+        }
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"

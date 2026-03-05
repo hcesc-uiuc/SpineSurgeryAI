@@ -4,6 +4,7 @@
 
 import SwiftUI
 import CoreMotion
+import CoreLocation
 
 struct ContentView: View {
 
@@ -11,19 +12,58 @@ struct ContentView: View {
     @StateObject private var appState = AppState()
     @State private var isSurveyPresented = false
     @State private var showDeniedAlert = false
-
+    @State private var showSettingsAlert = false
+    @StateObject var HKManager = HealthKitManager()
+    
     @Environment(\.scenePhase) var scenePhase
     let motionActivityManager = CMMotionActivityManager()
-
     var body: some View {
+        TabView {
+            // Tab 1
+            MainView
+                .tabItem {
+                    Label("Home", systemImage: "house.fill")
+                }
+
+            // Tab 2
+            SensorView
+                .tabItem {
+                    Label("Sensors", systemImage: "waveform")
+                }
+
+            // Tab 3
+            DebugView
+                .tabItem {
+                    Label("Debug", systemImage: "ant.fill")
+                }
+        }
+    }
+    
+    private var SensorView: some View {
+        VStack {
+            Text("Sensor view")
+                .font(.title2)
+                .padding()
+            
+            accelerometerView
+            gyroscopeView
+        }
+    }
+
+
+    private var DebugView: some View {
+        Text("Debug Screen")
+    }
+
+    
+    private var MainView: some View {
 
         VStack {
-            Text("Motion Dashboard")
+            Text("Journey app")
                 .font(.title2)
                 .padding()
 
-            accelerometerView
-            gyroscopeView
+            
 
             Button("Fetch Recorded Data") {
                 Task { await fetchRecordedData() }
@@ -49,7 +89,9 @@ struct ContentView: View {
             }.padding(.top, 30)
             Button("Upload File"){
                 Task{
-                    let filename = "accelerometer_2025-11-05_13-34-16.csv"
+                    print("Upload function called")
+                    //let filename = "accelerometer_2025-11-05_13-34-16.csv"
+                    let filename = "log_2026-02-19.txt"
                     let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
                     let fileURL = dir.appendingPathComponent(filename)
                     Uploader.shared.uploadFile(fileURL: fileURL)
@@ -66,6 +108,22 @@ struct ContentView: View {
                     self.printCurrentLogFile()
                 }
             }.padding(.top, 30)
+            Button("Get HealthKit data"){
+                Task{
+                    self.getHealthKitData()
+                }
+            }.padding(.top, 30)
+            if CLLocationManager().authorizationStatus  != .authorizedAlways {
+                Button("Always allow location"){
+                    Task{
+                        showSettingsAlert = true
+                    }
+                }.padding(.top, 30)
+            }
+            if CLLocationManager().authorizationStatus  == .authorizedAlways {
+                Text("Always allow location granted")
+                .padding(.top, 30)
+            }
         }
         .padding()
         .alert("Motion Access Denied",
@@ -73,8 +131,26 @@ struct ContentView: View {
                actions: {},
                message: { Text("Enable Motion & Fitness in Settings.") }
         )
+        .alert("Location Access Required", isPresented: $showSettingsAlert) {
+
+            // YES — deep link directly to this app's page in Settings.
+            // The user can change location permission to Always Allow from there.
+            Button("Open Settings") {
+                guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+                UIApplication.shared.open(url)
+            }
+
+            // NO — dismiss the alert and stay in the app.
+            // showSettingsAlert resets to false automatically when any button is tapped.
+            Button("Not Now", role: .cancel) { }
+
+        } message: {
+            Text("Please open Settings and set location access to Always Allow so we can track your location in the background.")
+        }
         .onLoad {
+            //called when loaded
             checkMotionAndFitnessAuthorization()
+            checkLocationAuthorization()
         }.onChange(of: scenePhase) { oldPhase, newPhase in
             if newPhase == .background {
                 print("App moved to background")
@@ -94,37 +170,106 @@ struct ContentView: View {
             }
         }
     }
+    
+    private func getHealthKitData() {
+        print("Requesting: HKManager.refreshWithNewRange")
+        HKManager.refreshWithNewRange(days: 7)
+        print("Requesting: HKManager.trialData. Len:\(HKManager.trialData.count)")
+        for (index, point) in HKManager.trialData.enumerated(){
+            let hkDataPointString = formatRawString(
+                point,
+                unixStartStr: String(Int(point.startDate.timeIntervalSince1970)),
+                unixEndStr: String(Int(point.endDate.timeIntervalSince1970))
+            )
+            print("\(index) - \(hkDataPointString)")
+        }
+    }
+    
+    func formatRawString(_ p: HealthKitManager.RawDataPoint, unixStartStr: String, unixEndStr: String) -> String {
+        let dateStr = p.startDate.formatted(.dateTime.month().day().hour().minute().second())
+        let metaStr = p.metadata.map { "\($0.key):\($0.value)" }.joined(separator: "|")
+        
+        return "[\(dateStr)] TYPE:\(p.type) | VAL:\(p.value)\(p.unit) | UNIX_START:\(unixStartStr) | UNIX_END:\(unixEndStr) | DUR:\(Float(unixEndStr)!-Float(unixStartStr)!)ms | SRC:\(p.sourceName) | BID:\(p.bundleID) | DEV:\(p.deviceName ?? "NA") | MOD:\(p.deviceModel ?? "NA") | SW:\(p.softwareVer ?? "NA") | ID:\(p.id.uuidString) | META:{\(metaStr)}"
+    }
 
     private var accelerometerView: some View {
-        VStack {
-            Text("Accelerometer")
+        SensorCard(
+            title: "Accelerometer",
+            systemImage: "arrow.up.and.down.and.arrow.left.and.right"
+        ) {
             if let d = motionManager.accelerometerData {
-                Text("x: \(d.acceleration.x)")
-                Text("y: \(d.acceleration.y)")
-                Text("z: \(d.acceleration.z)")
+                valueRow("X", d.acceleration.x)
+                valueRow("Y", d.acceleration.y)
+                valueRow("Z", d.acceleration.z)
             } else {
-                Text("No motion").foregroundColor(.red)
+                statusText("No motion detected", color: .illiniOrange)
             }
         }
-        .padding(.top)
     }
 
+    
     private var gyroscopeView: some View {
-        VStack {
-            Text("Gyroscope")
+        SensorCard(
+            title: "Gyroscope",
+            systemImage: "gyroscope"
+        ) {
             if let g = motionManager.gyroscopeData {
-                Text("x: \(g.rotationRate.x)")
-                Text("y: \(g.rotationRate.y)")
-                Text("z: \(g.rotationRate.z)")
+                valueRow("X", g.rotationRate.x)
+                valueRow("Y", g.rotationRate.y)
+                valueRow("Z", g.rotationRate.z)
             } else {
-                Text("No gyro").foregroundColor(.red)
+                statusText("No gyro detected", color: .illiniOrange)
             }
         }
-        .padding(.top)
     }
+    
+    private func valueRow(_ label: String, _ value: Double) -> some View {
+        HStack {
+            Text(label)
+                .fontWeight(.semibold)
+                .foregroundColor(.illiniBlue)
+            Spacer()
+            Text(String(format: "%.3f", value))
+                .monospacedDigit()
+                .foregroundColor(.secondary)
+        }
+    }
+    
+    private func statusText(_ text: String, color: Color) -> some View {
+        Text(text)
+            .font(.subheadline)
+            .foregroundColor(color)
+    }
+    
 
     private func fetchRecordedData() async {
         AcclerometerRecorder.shared.fetchRecordedData1Min()
+    }
+    
+    
+    private func checkLocationAuthorization(){
+        let status = CLLocationManager().authorizationStatus
+        
+        if status == .denied ||
+            status == .restricted {
+            //SettingsLinkButton()
+            showSettingsAlert = true
+        }
+        
+        if status == .authorizedWhenInUse {
+            //SettingsLinkButton()
+            showSettingsAlert = true
+        }
+
+        // Show the request button only when not yet determined
+        if status == .notDetermined {
+            //            Button("Enable Location Tracking") {
+            //                locationManager.requestPermission()
+            //            }
+            //            .buttonStyle(.borderedProminent)
+            AdaptiveLocationManager.shared.requestPermission()
+        }
+        
     }
 
     ///

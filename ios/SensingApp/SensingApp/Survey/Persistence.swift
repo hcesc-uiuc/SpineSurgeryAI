@@ -2,12 +2,17 @@
 //  Persistence.swift
 //  SensingApp
 //
-//  Created by Mohammod Mashfiqui Rabbi Shuvo on 10/16/25.
+//  Created by Samir Kurudi on 10/16/25.
 //
 
 import CoreData
 
+// Mash wrote this code
 struct PersistenceController {
+    
+    //ToDo: Samir
+    //We need a string what persistence controller is used for.
+    
     static let shared = PersistenceController()
 
     @MainActor

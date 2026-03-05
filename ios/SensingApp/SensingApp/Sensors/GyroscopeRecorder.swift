@@ -8,8 +8,15 @@
 import CoreMotion
 import BackgroundTasks
 
-class AcclerometerRecorder {
-    static let shared = AcclerometerRecorder()
+
+///
+///
+/// There is no sensor recorder like the CMSensorRecorder
+///
+///
+
+class GyroscopeRecorder {
+    static let shared = GyroscopeRecorder()
     private let recorder = CMSensorRecorder()
     
     private init() {}
@@ -91,23 +98,17 @@ class AcclerometerRecorder {
     ///
     func fetchRecordedData1Min() {
         let now = Date()
-        let past = now.addingTimeInterval(-180) // last 3 minutes
+        let past = now.addingTimeInterval(-60) // last hour
         var count = 0
-        
-        let writer = PreallocatedCSVBuffer(filename: "accelerometer_1min_\(currentTimestampString()).csv", capacity: 500)
         if let dataList = recorder.accelerometerData(from: past, to: now) {
             for case let data as CMRecordedAccelerometerData in dataList {
                 let accel = data.acceleration
-                let unixTime = Int64(data.startDate.timeIntervalSince1970 * 1000)
                 print("\(count), x:\(accel.x) y:\(accel.y) z:\(accel.z) at \(data.startDate)")
-                writer.addRowStr(rowOfData: "\(unixTime),\(accel.x),\(accel.y),\(accel.z)")
                 count+=1;
             }
         } else {
             print("No recorded accelerometer data available.")
         }
-        writer.flush()
-        writer.closeFile()
         //fetchRecordedData()
         print("Writing accelerometer data for 1 minute...")
     }
