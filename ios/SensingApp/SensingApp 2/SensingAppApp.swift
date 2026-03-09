@@ -9,32 +9,31 @@ import SwiftUI
 import CoreData
 import BackgroundTasks
 
-
 @main
 struct SensingAppApp: App {
-
-    @StateObject private var appState = AppState()
-
-    init() {
-        NotificationManager.shared.requestPermission()
+    @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+    
+    init(){
+        print("SensingApp init called")
+        
+        Logger.shared.append("")
+        Logger.shared.append("=======================================================")
+        Logger.shared.append("SensingApp init called")
+        
+        //        BackgroundScheduler.shared.registerBackgroundTasks()
+        //        BackgroundScheduler.shared.scheduleBGProcessingTask()
+        //
+        //        BackgroundScheduler.shared.registerBackgroundAppRefreshTask()
+        //        BackgroundScheduler.shared.scheduleAppRefresh()
+        
     }
-
+    
     var body: some Scene {
         WindowGroup {
             ContentView()
-                .environmentObject(appState)
-                .onAppear {
-                    NotificationManager.shared
-                        .scheduleDailyReminder(
-                            hour: 20,
-                            minute: 0,
-                            appState: appState
-                        )
-                }
         }
     }
 }
-
 
 
 class AppDelegate: NSObject, UIApplicationDelegate {
