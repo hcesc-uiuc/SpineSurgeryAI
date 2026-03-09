@@ -6,47 +6,69 @@ struct ContentView: View {
     
     var body: some View {
         NavigationView {
-            VStack(spacing: 0) {
-                // The Dropdown Header
-                HStack {
-                    Text("Range: Last \(manager.selectedDaysBack) Days")
-                        .font(.caption).bold()
-                    Spacer()
-                    Menu {
-                        ForEach(dayOptions, id: \.self) { day in
-                            Button("\(day) Days") {
-                                manager.refreshWithNewRange(days: day)
-                            }
-                        }
-                    } label: {
-                        Label("Change Range", systemImage: "calendar.badge.clock")
-                            .font(.caption)
-                    }
-                }
-                .padding()
-                .background(Color(.systemGray6))
+            VStack(spacing: 30) {
+                // Header
+                Image(systemName: "terminal.fill")
+                    .font(.system(size: 80))
+                    .foregroundColor(.blue)
+                    .padding(.top)
 
-                List(manager.trialData) { point in
-                    Text(
-                        formatRawString(
-                            point,
-                            unixStartStr: String(Int(point.startDate.timeIntervalSince1970)),
-                            unixEndStr: String(Int(point.endDate.timeIntervalSince1970))
-                        )
-                    )
-                    .font(.system(size: 10, design: .monospaced))
-                    .padding(.vertical, 2)
+                VStack(spacing: 8) {
+                    Text("Data Extractor Active")
+                        .font(.headline)
+                    Text("Check the Xcode console for raw logs.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
                 }
+
+                Divider().padding(.horizontal)
+
+                // Filter Picker
+                VStack(alignment: .leading) {
+                    Text("LIVE CONSOLE FILTER").font(.caption2).bold().foregroundColor(.secondary)
+                    Picker("Filter", selection: $manager.activeFilter) {
+                        ForEach(HealthManager.DataFilter.allCases, id: \.self) { filter in
+                            Text(filter.rawValue).tag(filter)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                }
+                .padding(.horizontal)
+
+                // Action Button
+                Menu {
+                    ForEach(dayOptions, id: \.self) { day in
+                        Button("\(day) Days") {
+                            manager.refreshWithNewRange(days: day)
+                        }
+                    }
+                } label: {
+                    HStack {
+                        Image(systemName: "arrow.clockwise.circle.fill")
+                        Text("Refresh Last \(manager.selectedDaysBack) Days")
+                    }
+                    .font(.headline)
+                    .foregroundColor(.white)
+                    .padding()
+                    .frame(maxWidth: .infinity)
+                    .background(manager.isProcessing ? Color.gray : Color.blue)
+                    .cornerRadius(12)
+                }
+                .disabled(manager.isProcessing)
+                .padding(.horizontal)
+
+                if manager.isProcessing {
+                    ProgressView("Streaming to Xcode...")
+                }
+
+                Spacer()
+                
+                Text("Ready for extraction")
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundColor(.gray)
             }
-            .navigationTitle("Data Log (Last \(manager.selectedDaysBack) Days)")
+            .navigationTitle("HealthManager Control")
             .navigationBarTitleDisplayMode(.inline)
         }
-    }
-    
-    func formatRawString(_ p: HealthManager.RawDataPoint, unixStartStr: String, unixEndStr: String) -> String {
-        let dateStr = p.startDate.formatted(.dateTime.month().day().hour().minute().second())
-        let metaStr = p.metadata.map { "\($0.key):\($0.value)" }.joined(separator: "|")
-        
-        return "[\(dateStr)] TYPE:\(p.type) | VAL:\(p.value)\(p.unit) | UNIX_START:\(unixStartStr) | UNIX_END:\(unixEndStr) | DUR:\(unixEndStr - unixStartStr)ms | SRC:\(p.sourceName) | BID:\(p.bundleID) | DEV:\(p.deviceName ?? "NA") | MOD:\(p.deviceModel ?? "NA") | SW:\(p.softwareVer ?? "NA") | ID:\(p.id.uuidString) | META:{\(metaStr)}"
     }
 }
