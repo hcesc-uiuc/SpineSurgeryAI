@@ -7,13 +7,27 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		FABC186C2EC29BB60071EC17 /* ResearchKitSwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = FABC18592EC29B9A0071EC17 /* ResearchKitSwiftUI.framework */; };
-		FABC186D2EC29BB60071EC17 /* ResearchKitSwiftUI.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = FABC18592EC29B9A0071EC17 /* ResearchKitSwiftUI.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
-		FABC186F2EC29BB90071EC17 /* ResearchKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = FABC18652EC29BA20071EC17 /* ResearchKit.framework */; };
-		FABC18702EC29BB90071EC17 /* ResearchKit.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = FABC18652EC29BA20071EC17 /* ResearchKit.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		AEA8E19D2F5FC2BB007B39EB /* ResearchKitSwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AEA8E02C2F5FC1AA007B39EB /* ResearchKitSwiftUI.framework */; };
+		AEA8E19E2F5FC2BB007B39EB /* ResearchKitSwiftUI.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = AEA8E02C2F5FC1AA007B39EB /* ResearchKitSwiftUI.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		AEA8E19F2F5FC2BF007B39EB /* ResearchKitUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AEA8E1972F5FC2AE007B39EB /* ResearchKitUI.framework */; };
+		AEA8E1A02F5FC2BF007B39EB /* ResearchKitUI.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = AEA8E1972F5FC2AE007B39EB /* ResearchKitUI.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+		AEA8E02B2F5FC1AA007B39EB /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = AEA8E0242F5FC1AA007B39EB /* ResearchKitSwiftUI.xcodeproj */;
+			proxyType = 2;
+			remoteGlobalIDString = 0BF86B1D2B4F360000E3790E;
+			remoteInfo = ResearchKitSwiftUI;
+		};
+		AEA8E1962F5FC2AE007B39EB /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = AEA8E1892F5FC2AE007B39EB /* ResearchKit.xcodeproj */;
+			proxyType = 2;
+			remoteGlobalIDString = CA1C7A5A288B0C68004DAB3A;
+			remoteInfo = ResearchKitUI;
+		};
 		AEABF39B2EA06D040055052F /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = AEABF3802EA06D020055052F /* Project object */;
@@ -28,23 +42,21 @@
 			remoteGlobalIDString = AEABF3872EA06D020055052F;
 			remoteInfo = SensingApp;
 		};
-		FABC18582EC29B9A0071EC17 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = FABC18512EC29B9A0071EC17 /* ResearchKitSwiftUI.xcodeproj */;
-			proxyType = 2;
-			remoteGlobalIDString = 0BF86B1D2B4F360000E3790E;
-			remoteInfo = ResearchKitSwiftUI;
-		};
-		FABC18642EC29BA20071EC17 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = FABC185C2EC29BA20071EC17 /* ResearchKit.xcodeproj */;
-			proxyType = 2;
-			remoteGlobalIDString = B183A5951A8535D100C76870;
-			remoteInfo = ResearchKit;
-		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
+		AEA8E19C2F5FC2B7007B39EB /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+				AEA8E1A02F5FC2BF007B39EB /* ResearchKitUI.framework in Embed Frameworks */,
+				AEA8E19E2F5FC2BB007B39EB /* ResearchKitSwiftUI.framework in Embed Frameworks */,
+			);
+			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		FABC183D2EC299760071EC17 /* Embed Frameworks */ = {
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
@@ -55,21 +67,337 @@
 			name = "Embed Frameworks";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		FABC186E2EC29BB60071EC17 /* Embed Frameworks */ = {
-			isa = PBXCopyFilesBuildPhase;
-			buildActionMask = 2147483647;
-			dstPath = "";
-			dstSubfolderSpec = 10;
-			files = (
-				FABC18702EC29BB90071EC17 /* ResearchKit.framework in Embed Frameworks */,
-				FABC186D2EC29BB60071EC17 /* ResearchKitSwiftUI.framework in Embed Frameworks */,
-			);
-			name = "Embed Frameworks";
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		AEA8E0242F5FC1AA007B39EB /* ResearchKitSwiftUI.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = ResearchKitSwiftUI.xcodeproj; path = ResearchKitSwiftUI/ResearchKitSwiftUI.xcodeproj; sourceTree = "<group>"; };
+		AEA8E0342F5FC240007B39EB /* CLLocationManager+ResearchKit.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "CLLocationManager+ResearchKit.h"; sourceTree = "<group>"; };
+		AEA8E0352F5FC240007B39EB /* CLLocationManager+ResearchKit.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = "CLLocationManager+ResearchKit.m"; sourceTree = "<group>"; };
+		AEA8E0362F5FC240007B39EB /* CMMotionActivity+ORKJSONDictionary.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "CMMotionActivity+ORKJSONDictionary.h"; sourceTree = "<group>"; };
+		AEA8E0372F5FC240007B39EB /* CMMotionActivity+ORKJSONDictionary.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = "CMMotionActivity+ORKJSONDictionary.m"; sourceTree = "<group>"; };
+		AEA8E0382F5FC240007B39EB /* HKSample+ORKJSONDictionary.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "HKSample+ORKJSONDictionary.h"; sourceTree = "<group>"; };
+		AEA8E0392F5FC240007B39EB /* HKSample+ORKJSONDictionary.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = "HKSample+ORKJSONDictionary.m"; sourceTree = "<group>"; };
+		AEA8E03A2F5FC240007B39EB /* ORKActiveStep.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKActiveStep.h; sourceTree = "<group>"; };
+		AEA8E03B2F5FC240007B39EB /* ORKActiveStep.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ORKActiveStep.m; sourceTree = "<group>"; };
+		AEA8E03C2F5FC240007B39EB /* ORKActiveStep_Internal.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKActiveStep_Internal.h; sourceTree = "<group>"; };
+		AEA8E03D2F5FC240007B39EB /* ORKAnswerFormat.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKAnswerFormat.h; sourceTree = "<group>"; };
+		AEA8E03E2F5FC240007B39EB /* ORKAnswerFormat.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ORKAnswerFormat.m; sourceTree = "<group>"; };
+		AEA8E03F2F5FC240007B39EB /* ORKAnswerFormat_Internal.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKAnswerFormat_Internal.h; sourceTree = "<group>"; };
+		AEA8E0402F5FC240007B39EB /* ORKAnswerFormat_Private.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKAnswerFormat_Private.h; sourceTree = "<group>"; };
+		AEA8E0412F5FC240007B39EB /* ORKAnswerFormat+FormStepViewControllerAdditions.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "ORKAnswerFormat+FormStepViewControllerAdditions.h"; sourceTree = "<group>"; };
+		AEA8E0422F5FC240007B39EB /* ORKAnswerFormat+FormStepViewControllerAdditions.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = "ORKAnswerFormat+FormStepViewControllerAdditions.m"; sourceTree = "<group>"; };
+		AEA8E0432F5FC240007B39EB /* ORKBodyItem.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKBodyItem.h; sourceTree = "<group>"; };
+		AEA8E0442F5FC240007B39EB /* ORKBodyItem.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ORKBodyItem.m; sourceTree = "<group>"; };
+		AEA8E0452F5FC240007B39EB /* ORKBodyItem_Internal.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKBodyItem_Internal.h; sourceTree = "<group>"; };
+		AEA8E0462F5FC240007B39EB /* ORKBundleAsset.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKBundleAsset.h; sourceTree = "<group>"; };
+		AEA8E0472F5FC240007B39EB /* ORKBundleAsset.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ORKBundleAsset.m; sourceTree = "<group>"; };
+		AEA8E0482F5FC240007B39EB /* ORKChoiceAnswerFormatHelper.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKChoiceAnswerFormatHelper.h; sourceTree = "<group>"; };
+		AEA8E0492F5FC240007B39EB /* ORKChoiceAnswerFormatHelper.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ORKChoiceAnswerFormatHelper.m; sourceTree = "<group>"; };
+		AEA8E04A2F5FC240007B39EB /* ORKChoiceViewCell+ORKTextChoice.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "ORKChoiceViewCell+ORKTextChoice.h"; sourceTree = "<group>"; };
+		AEA8E04B2F5FC240007B39EB /* ORKCollectionResult.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKCollectionResult.h; sourceTree = "<group>"; };
+		AEA8E04C2F5FC240007B39EB /* ORKCollectionResult.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ORKCollectionResult.m; sourceTree = "<group>"; };
+		AEA8E04D2F5FC240007B39EB /* ORKCollectionResult_Private.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKCollectionResult_Private.h; sourceTree = "<group>"; };
+		AEA8E04E2F5FC240007B39EB /* ORKCollector.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKCollector.h; sourceTree = "<group>"; };
+		AEA8E04F2F5FC240007B39EB /* ORKCollector.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ORKCollector.m; sourceTree = "<group>"; };
+		AEA8E0502F5FC240007B39EB /* ORKCollector_Internal.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKCollector_Internal.h; sourceTree = "<group>"; };
+		AEA8E0512F5FC240007B39EB /* ORKCompletionStep.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKCompletionStep.h; sourceTree = "<group>"; };
+		AEA8E0522F5FC240007B39EB /* ORKCompletionStep.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ORKCompletionStep.m; sourceTree = "<group>"; };
+		AEA8E0532F5FC240007B39EB /* ORKConditionStepConfiguration.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKConditionStepConfiguration.h; sourceTree = "<group>"; };
+		AEA8E0542F5FC240007B39EB /* ORKConditionStepConfiguration.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ORKConditionStepConfiguration.m; sourceTree = "<group>"; };
+		AEA8E0552F5FC240007B39EB /* ORKCustomStep.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKCustomStep.h; sourceTree = "<group>"; };
+		AEA8E0562F5FC240007B39EB /* ORKCustomStep.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ORKCustomStep.m; sourceTree = "<group>"; };
+		AEA8E0572F5FC240007B39EB /* ORKDataCollectionManager.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKDataCollectionManager.h; sourceTree = "<group>"; };
+		AEA8E0582F5FC240007B39EB /* ORKDataCollectionManager.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ORKDataCollectionManager.m; sourceTree = "<group>"; };
+		AEA8E0592F5FC240007B39EB /* ORKDataCollectionManager_Internal.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKDataCollectionManager_Internal.h; sourceTree = "<group>"; };
+		AEA8E05A2F5FC240007B39EB /* ORKDataLogger.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKDataLogger.h; sourceTree = "<group>"; };
+		AEA8E05B2F5FC240007B39EB /* ORKDataLogger.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ORKDataLogger.m; sourceTree = "<group>"; };
+		AEA8E05C2F5FC240007B39EB /* ORKDefines.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKDefines.h; sourceTree = "<group>"; };
+		AEA8E05D2F5FC240007B39EB /* ORKDevice.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKDevice.h; sourceTree = "<group>"; };
+		AEA8E05E2F5FC240007B39EB /* ORKDevice.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ORKDevice.m; sourceTree = "<group>"; };
+		AEA8E05F2F5FC240007B39EB /* ORKDevice_Private.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKDevice_Private.h; sourceTree = "<group>"; };
+		AEA8E0602F5FC240007B39EB /* ORKEarlyTerminationConfiguration.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKEarlyTerminationConfiguration.h; sourceTree = "<group>"; };
+		AEA8E0612F5FC240007B39EB /* ORKEarlyTerminationConfiguration.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ORKEarlyTerminationConfiguration.m; sourceTree = "<group>"; };
+		AEA8E0622F5FC240007B39EB /* ORKErrors.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKErrors.h; sourceTree = "<group>"; };
+		AEA8E0632F5FC240007B39EB /* ORKErrors.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ORKErrors.m; sourceTree = "<group>"; };
+		AEA8E0642F5FC240007B39EB /* ORKFamilyHistoryResult.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKFamilyHistoryResult.h; sourceTree = "<group>"; };
+		AEA8E0652F5FC240007B39EB /* ORKFamilyHistoryResult.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ORKFamilyHistoryResult.m; sourceTree = "<group>"; };
+		AEA8E0662F5FC240007B39EB /* ORKFamilyHistoryStep.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKFamilyHistoryStep.h; sourceTree = "<group>"; };
+		AEA8E0672F5FC240007B39EB /* ORKFamilyHistoryStep.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ORKFamilyHistoryStep.m; sourceTree = "<group>"; };
+		AEA8E0682F5FC240007B39EB /* ORKFileResult.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKFileResult.h; sourceTree = "<group>"; };
+		AEA8E0692F5FC240007B39EB /* ORKFileResult.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ORKFileResult.m; sourceTree = "<group>"; };
+		AEA8E06A2F5FC240007B39EB /* ORKFormItem_Internal.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKFormItem_Internal.h; sourceTree = "<group>"; };
+		AEA8E06B2F5FC240007B39EB /* ORKFormItemVisibilityRule.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKFormItemVisibilityRule.h; sourceTree = "<group>"; };
+		AEA8E06C2F5FC240007B39EB /* ORKFormItemVisibilityRule.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ORKFormItemVisibilityRule.m; sourceTree = "<group>"; };
+		AEA8E06D2F5FC240007B39EB /* ORKFormStep.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKFormStep.h; sourceTree = "<group>"; };
+		AEA8E06E2F5FC240007B39EB /* ORKFormStep.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ORKFormStep.m; sourceTree = "<group>"; };
+		AEA8E06F2F5FC240007B39EB /* ORKFormStep_Internal.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKFormStep_Internal.h; sourceTree = "<group>"; };
+		AEA8E0702F5FC240007B39EB /* ORKFrontFacingCameraStep.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKFrontFacingCameraStep.h; sourceTree = "<group>"; };
+		AEA8E0712F5FC240007B39EB /* ORKFrontFacingCameraStep.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ORKFrontFacingCameraStep.m; sourceTree = "<group>"; };
+		AEA8E0722F5FC240007B39EB /* ORKFrontFacingCameraStepResult.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKFrontFacingCameraStepResult.h; sourceTree = "<group>"; };
+		AEA8E0732F5FC240007B39EB /* ORKFrontFacingCameraStepResult.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ORKFrontFacingCameraStepResult.m; sourceTree = "<group>"; };
+		AEA8E0742F5FC240007B39EB /* ORKHealthAnswerFormat.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKHealthAnswerFormat.h; sourceTree = "<group>"; };
+		AEA8E0752F5FC240007B39EB /* ORKHealthAnswerFormat.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ORKHealthAnswerFormat.m; sourceTree = "<group>"; };
+		AEA8E0762F5FC240007B39EB /* ORKHealthCondition.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKHealthCondition.h; sourceTree = "<group>"; };
+		AEA8E0772F5FC240007B39EB /* ORKHealthCondition.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ORKHealthCondition.m; sourceTree = "<group>"; };
+		AEA8E0782F5FC240007B39EB /* ORKHealthKitPermissionType.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKHealthKitPermissionType.h; sourceTree = "<group>"; };
+		AEA8E0792F5FC240007B39EB /* ORKHealthKitPermissionType.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ORKHealthKitPermissionType.m; sourceTree = "<group>"; };
+		AEA8E07A2F5FC240007B39EB /* ORKHealthSampleQueryOperation.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKHealthSampleQueryOperation.h; sourceTree = "<group>"; };
+		AEA8E07B2F5FC240007B39EB /* ORKHealthSampleQueryOperation.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ORKHealthSampleQueryOperation.m; sourceTree = "<group>"; };
+		AEA8E07C2F5FC240007B39EB /* ORKHelpers.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ORKHelpers.m; sourceTree = "<group>"; };
+		AEA8E07D2F5FC240007B39EB /* ORKHelpers_Internal.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKHelpers_Internal.h; sourceTree = "<group>"; };
+		AEA8E07E2F5FC240007B39EB /* ORKHelpers_Private.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKHelpers_Private.h; sourceTree = "<group>"; };
+		AEA8E07F2F5FC240007B39EB /* ORKHTMLPDFPageRenderer.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKHTMLPDFPageRenderer.h; sourceTree = "<group>"; };
+		AEA8E0802F5FC240007B39EB /* ORKHTMLPDFPageRenderer.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ORKHTMLPDFPageRenderer.m; sourceTree = "<group>"; };
+		AEA8E0812F5FC240007B39EB /* ORKHTMLPDFWriter.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKHTMLPDFWriter.h; sourceTree = "<group>"; };
+		AEA8E0822F5FC240007B39EB /* ORKHTMLPDFWriter.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ORKHTMLPDFWriter.m; sourceTree = "<group>"; };
+		AEA8E0832F5FC240007B39EB /* ORKImageCaptureStep.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKImageCaptureStep.h; sourceTree = "<group>"; };
+		AEA8E0842F5FC240007B39EB /* ORKImageCaptureStep.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ORKImageCaptureStep.m; sourceTree = "<group>"; };
+		AEA8E0852F5FC240007B39EB /* ORKInstructionStep.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKInstructionStep.h; sourceTree = "<group>"; };
+		AEA8E0862F5FC240007B39EB /* ORKInstructionStep.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ORKInstructionStep.m; sourceTree = "<group>"; };
+		AEA8E0872F5FC240007B39EB /* ORKKeychainWrapper.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKKeychainWrapper.h; sourceTree = "<group>"; };
+		AEA8E0882F5FC240007B39EB /* ORKKeychainWrapper.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ORKKeychainWrapper.m; sourceTree = "<group>"; };
+		AEA8E0892F5FC240007B39EB /* ORKLearnMoreInstructionStep.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKLearnMoreInstructionStep.h; sourceTree = "<group>"; };
+		AEA8E08A2F5FC240007B39EB /* ORKLearnMoreInstructionStep.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ORKLearnMoreInstructionStep.m; sourceTree = "<group>"; };
+		AEA8E08B2F5FC240007B39EB /* ORKLearnMoreItem.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKLearnMoreItem.h; sourceTree = "<group>"; };
+		AEA8E08C2F5FC240007B39EB /* ORKLearnMoreItem.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ORKLearnMoreItem.m; sourceTree = "<group>"; };
+		AEA8E08D2F5FC240007B39EB /* ORKLocationPermissionType.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKLocationPermissionType.h; sourceTree = "<group>"; };
+		AEA8E08E2F5FC240007B39EB /* ORKLocationPermissionType.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ORKLocationPermissionType.m; sourceTree = "<group>"; };
+		AEA8E08F2F5FC240007B39EB /* ORKMotionActivityPermissionType.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKMotionActivityPermissionType.h; sourceTree = "<group>"; };
+		AEA8E0902F5FC240007B39EB /* ORKMotionActivityPermissionType.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ORKMotionActivityPermissionType.m; sourceTree = "<group>"; };
+		AEA8E0912F5FC240007B39EB /* ORKMotionActivityQueryOperation.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKMotionActivityQueryOperation.h; sourceTree = "<group>"; };
+		AEA8E0922F5FC240007B39EB /* ORKMotionActivityQueryOperation.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ORKMotionActivityQueryOperation.m; sourceTree = "<group>"; };
+		AEA8E0932F5FC240007B39EB /* ORKNavigableOrderedTask.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKNavigableOrderedTask.h; sourceTree = "<group>"; };
+		AEA8E0942F5FC240007B39EB /* ORKNavigableOrderedTask.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ORKNavigableOrderedTask.m; sourceTree = "<group>"; };
+		AEA8E0952F5FC240007B39EB /* ORKNavigablePageStep.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKNavigablePageStep.h; sourceTree = "<group>"; };
+		AEA8E0962F5FC240007B39EB /* ORKNavigablePageStep.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ORKNavigablePageStep.m; sourceTree = "<group>"; };
+		AEA8E0972F5FC240007B39EB /* ORKNotificationPermissionType.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKNotificationPermissionType.h; sourceTree = "<group>"; };
+		AEA8E0982F5FC240007B39EB /* ORKNotificationPermissionType.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ORKNotificationPermissionType.m; sourceTree = "<group>"; };
+		AEA8E0992F5FC240007B39EB /* ORKOperation.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKOperation.h; sourceTree = "<group>"; };
+		AEA8E09A2F5FC240007B39EB /* ORKOperation.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ORKOperation.m; sourceTree = "<group>"; };
+		AEA8E09B2F5FC240007B39EB /* ORKOrderedTask.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKOrderedTask.h; sourceTree = "<group>"; };
+		AEA8E09C2F5FC240007B39EB /* ORKOrderedTask.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ORKOrderedTask.m; sourceTree = "<group>"; };
+		AEA8E09D2F5FC240007B39EB /* ORKOrderedTask_Private.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKOrderedTask_Private.h; sourceTree = "<group>"; };
+		AEA8E09E2F5FC240007B39EB /* ORKPageStep.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKPageStep.h; sourceTree = "<group>"; };
+		AEA8E09F2F5FC240007B39EB /* ORKPageStep.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ORKPageStep.m; sourceTree = "<group>"; };
+		AEA8E0A02F5FC240007B39EB /* ORKPageStep_Private.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKPageStep_Private.h; sourceTree = "<group>"; };
+		AEA8E0A12F5FC240007B39EB /* ORKPasscodeResult.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKPasscodeResult.h; sourceTree = "<group>"; };
+		AEA8E0A22F5FC240007B39EB /* ORKPasscodeResult.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ORKPasscodeResult.m; sourceTree = "<group>"; };
+		AEA8E0A32F5FC240007B39EB /* ORKPasscodeStep.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKPasscodeStep.h; sourceTree = "<group>"; };
+		AEA8E0A42F5FC240007B39EB /* ORKPasscodeStep.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ORKPasscodeStep.m; sourceTree = "<group>"; };
+		AEA8E0A52F5FC240007B39EB /* ORKPDFViewerStep.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKPDFViewerStep.h; sourceTree = "<group>"; };
+		AEA8E0A62F5FC240007B39EB /* ORKPDFViewerStep.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ORKPDFViewerStep.m; sourceTree = "<group>"; };
+		AEA8E0A72F5FC240007B39EB /* ORKPermissionType.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKPermissionType.h; sourceTree = "<group>"; };
+		AEA8E0A82F5FC240007B39EB /* ORKPermissionType.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ORKPermissionType.m; sourceTree = "<group>"; };
+		AEA8E0A92F5FC240007B39EB /* ORKPredicateFormItemVisibilityRule.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKPredicateFormItemVisibilityRule.h; sourceTree = "<group>"; };
+		AEA8E0AA2F5FC240007B39EB /* ORKPredicateFormItemVisibilityRule.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ORKPredicateFormItemVisibilityRule.m; sourceTree = "<group>"; };
+		AEA8E0AB2F5FC240007B39EB /* ORKPredicateFormItemVisibilityRule_Private.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKPredicateFormItemVisibilityRule_Private.h; sourceTree = "<group>"; };
+		AEA8E0AC2F5FC240007B39EB /* ORKQuestionResult.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKQuestionResult.h; sourceTree = "<group>"; };
+		AEA8E0AD2F5FC240007B39EB /* ORKQuestionResult.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ORKQuestionResult.m; sourceTree = "<group>"; };
+		AEA8E0AE2F5FC240007B39EB /* ORKQuestionResult_Private.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKQuestionResult_Private.h; sourceTree = "<group>"; };
+		AEA8E0AF2F5FC240007B39EB /* ORKRecorder.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKRecorder.h; sourceTree = "<group>"; };
+		AEA8E0B02F5FC240007B39EB /* ORKRecorder.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ORKRecorder.m; sourceTree = "<group>"; };
+		AEA8E0B12F5FC240007B39EB /* ORKRecorder_Internal.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKRecorder_Internal.h; sourceTree = "<group>"; };
+		AEA8E0B22F5FC240007B39EB /* ORKRecorder_Private.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKRecorder_Private.h; sourceTree = "<group>"; };
+		AEA8E0B32F5FC240007B39EB /* ORKRelatedPerson.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKRelatedPerson.h; sourceTree = "<group>"; };
+		AEA8E0B42F5FC240007B39EB /* ORKRelatedPerson.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ORKRelatedPerson.m; sourceTree = "<group>"; };
+		AEA8E0B52F5FC240007B39EB /* ORKRelativeGroup.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKRelativeGroup.h; sourceTree = "<group>"; };
+		AEA8E0B62F5FC240007B39EB /* ORKRelativeGroup.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ORKRelativeGroup.m; sourceTree = "<group>"; };
+		AEA8E0B72F5FC240007B39EB /* ORKRequestPermissionsStep.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKRequestPermissionsStep.h; sourceTree = "<group>"; };
+		AEA8E0B82F5FC240007B39EB /* ORKRequestPermissionsStep.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ORKRequestPermissionsStep.m; sourceTree = "<group>"; };
+		AEA8E0B92F5FC240007B39EB /* ORKResult.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKResult.h; sourceTree = "<group>"; };
+		AEA8E0BA2F5FC240007B39EB /* ORKResult.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ORKResult.m; sourceTree = "<group>"; };
+		AEA8E0BB2F5FC240007B39EB /* ORKResult_Private.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKResult_Private.h; sourceTree = "<group>"; };
+		AEA8E0BC2F5FC240007B39EB /* ORKResultPredicate.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKResultPredicate.h; sourceTree = "<group>"; };
+		AEA8E0BD2F5FC240007B39EB /* ORKResultPredicate.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ORKResultPredicate.m; sourceTree = "<group>"; };
+		AEA8E0BE2F5FC240007B39EB /* ORKReviewStep.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKReviewStep.h; sourceTree = "<group>"; };
+		AEA8E0BF2F5FC240007B39EB /* ORKReviewStep.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ORKReviewStep.m; sourceTree = "<group>"; };
+		AEA8E0C02F5FC240007B39EB /* ORKReviewStep_Internal.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKReviewStep_Internal.h; sourceTree = "<group>"; };
+		AEA8E0C12F5FC240007B39EB /* ORKSecondaryTaskStep.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKSecondaryTaskStep.h; sourceTree = "<group>"; };
+		AEA8E0C22F5FC240007B39EB /* ORKSecondaryTaskStep.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ORKSecondaryTaskStep.m; sourceTree = "<group>"; };
+		AEA8E0C32F5FC240007B39EB /* ORKSensorPermissionType.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKSensorPermissionType.h; sourceTree = "<group>"; };
+		AEA8E0C42F5FC240007B39EB /* ORKSensorPermissionType.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ORKSensorPermissionType.m; sourceTree = "<group>"; };
+		AEA8E0C52F5FC240007B39EB /* ORKSignatureResult.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKSignatureResult.h; sourceTree = "<group>"; };
+		AEA8E0C62F5FC240007B39EB /* ORKSignatureResult.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ORKSignatureResult.m; sourceTree = "<group>"; };
+		AEA8E0C72F5FC240007B39EB /* ORKSignatureResult_Private.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKSignatureResult_Private.h; sourceTree = "<group>"; };
+		AEA8E0C82F5FC240007B39EB /* ORKSignatureStep.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKSignatureStep.h; sourceTree = "<group>"; };
+		AEA8E0C92F5FC240007B39EB /* ORKSignatureStep.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ORKSignatureStep.m; sourceTree = "<group>"; };
+		AEA8E0CA2F5FC240007B39EB /* ORKSkin.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKSkin.h; sourceTree = "<group>"; };
+		AEA8E0CB2F5FC240007B39EB /* ORKSkin.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ORKSkin.m; sourceTree = "<group>"; };
+		AEA8E0CC2F5FC240007B39EB /* ORKSkin_Private.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKSkin_Private.h; sourceTree = "<group>"; };
+		AEA8E0CD2F5FC240007B39EB /* ORKStep.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKStep.h; sourceTree = "<group>"; };
+		AEA8E0CE2F5FC240007B39EB /* ORKStep.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ORKStep.m; sourceTree = "<group>"; };
+		AEA8E0CF2F5FC240007B39EB /* ORKStep_Private.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKStep_Private.h; sourceTree = "<group>"; };
+		AEA8E0D02F5FC240007B39EB /* ORKStepNavigationRule.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKStepNavigationRule.h; sourceTree = "<group>"; };
+		AEA8E0D12F5FC240007B39EB /* ORKStepNavigationRule.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ORKStepNavigationRule.m; sourceTree = "<group>"; };
+		AEA8E0D22F5FC240007B39EB /* ORKStepNavigationRule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ORKStepNavigationRule.swift; sourceTree = "<group>"; };
+		AEA8E0D32F5FC240007B39EB /* ORKStepNavigationRule_Internal.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKStepNavigationRule_Internal.h; sourceTree = "<group>"; };
+		AEA8E0D42F5FC240007B39EB /* ORKStepNavigationRule_Private.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKStepNavigationRule_Private.h; sourceTree = "<group>"; };
+		AEA8E0D52F5FC240007B39EB /* ORKTableStep.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKTableStep.h; sourceTree = "<group>"; };
+		AEA8E0D62F5FC240007B39EB /* ORKTableStep.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ORKTableStep.m; sourceTree = "<group>"; };
+		AEA8E0D72F5FC240007B39EB /* ORKTask.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKTask.h; sourceTree = "<group>"; };
+		AEA8E0D82F5FC240007B39EB /* ORKTask_Util.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ORKTask_Util.m; sourceTree = "<group>"; };
+		AEA8E0D92F5FC240007B39EB /* ORKTypes.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKTypes.h; sourceTree = "<group>"; };
+		AEA8E0DA2F5FC240007B39EB /* ORKTypes.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ORKTypes.m; sourceTree = "<group>"; };
+		AEA8E0DB2F5FC240007B39EB /* ORKTypes_Private.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKTypes_Private.h; sourceTree = "<group>"; };
+		AEA8E0DC2F5FC240007B39EB /* ORKVideoCaptureStep.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKVideoCaptureStep.h; sourceTree = "<group>"; };
+		AEA8E0DD2F5FC240007B39EB /* ORKVideoCaptureStep.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ORKVideoCaptureStep.m; sourceTree = "<group>"; };
+		AEA8E0DE2F5FC240007B39EB /* ORKVideoInstructionStep.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKVideoInstructionStep.h; sourceTree = "<group>"; };
+		AEA8E0DF2F5FC240007B39EB /* ORKVideoInstructionStep.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ORKVideoInstructionStep.m; sourceTree = "<group>"; };
+		AEA8E0E02F5FC240007B39EB /* ORKVideoInstructionStepResult.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKVideoInstructionStepResult.h; sourceTree = "<group>"; };
+		AEA8E0E12F5FC240007B39EB /* ORKVideoInstructionStepResult.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ORKVideoInstructionStepResult.m; sourceTree = "<group>"; };
+		AEA8E0E22F5FC240007B39EB /* ORKWaitStep.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKWaitStep.h; sourceTree = "<group>"; };
+		AEA8E0E32F5FC240007B39EB /* ORKWaitStep.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ORKWaitStep.m; sourceTree = "<group>"; };
+		AEA8E0E42F5FC240007B39EB /* ORKWebViewStep.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKWebViewStep.h; sourceTree = "<group>"; };
+		AEA8E0E52F5FC240007B39EB /* ORKWebViewStep.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ORKWebViewStep.m; sourceTree = "<group>"; };
+		AEA8E0E62F5FC240007B39EB /* ORKWebViewStepResult.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKWebViewStepResult.h; sourceTree = "<group>"; };
+		AEA8E0E72F5FC240007B39EB /* ORKWebViewStepResult.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ORKWebViewStepResult.m; sourceTree = "<group>"; };
+		AEA8E0E82F5FC240007B39EB /* ORKWebViewStepResult_Private.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKWebViewStepResult_Private.h; sourceTree = "<group>"; };
+		AEA8E0E92F5FC240007B39EB /* UIImageView+ResearchKit.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "UIImageView+ResearchKit.h"; sourceTree = "<group>"; };
+		AEA8E0EA2F5FC240007B39EB /* UIImageView+ResearchKit.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = "UIImageView+ResearchKit.m"; sourceTree = "<group>"; };
+		AEA8E0EC2F5FC240007B39EB /* docs-Shared.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "docs-Shared.xcconfig"; sourceTree = "<group>"; };
+		AEA8E0EE2F5FC240007B39EB /* Project-Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "Project-Debug.xcconfig"; sourceTree = "<group>"; };
+		AEA8E0EF2F5FC240007B39EB /* Project-Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "Project-Release.xcconfig"; sourceTree = "<group>"; };
+		AEA8E0F02F5FC240007B39EB /* Project-Shared.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "Project-Shared.xcconfig"; sourceTree = "<group>"; };
+		AEA8E0F22F5FC240007B39EB /* ResearchKit-Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "ResearchKit-Debug.xcconfig"; sourceTree = "<group>"; };
+		AEA8E0F32F5FC240007B39EB /* ResearchKit-Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "ResearchKit-Release.xcconfig"; sourceTree = "<group>"; };
+		AEA8E0F42F5FC240007B39EB /* ResearchKit-Shared.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "ResearchKit-Shared.xcconfig"; sourceTree = "<group>"; };
+		AEA8E0F62F5FC240007B39EB /* ResearchKitActiveTask-Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "ResearchKitActiveTask-Debug.xcconfig"; sourceTree = "<group>"; };
+		AEA8E0F72F5FC240007B39EB /* ResearchKitActiveTask-Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "ResearchKitActiveTask-Release.xcconfig"; sourceTree = "<group>"; };
+		AEA8E0F82F5FC240007B39EB /* ResearchKitActiveTask-Shared.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "ResearchKitActiveTask-Shared.xcconfig"; sourceTree = "<group>"; };
+		AEA8E0FA2F5FC240007B39EB /* ResearchKitTests-Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "ResearchKitTests-Debug.xcconfig"; sourceTree = "<group>"; };
+		AEA8E0FB2F5FC240007B39EB /* ResearchKitTests-Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "ResearchKitTests-Release.xcconfig"; sourceTree = "<group>"; };
+		AEA8E0FC2F5FC240007B39EB /* ResearchKitTests-Shared.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "ResearchKitTests-Shared.xcconfig"; sourceTree = "<group>"; };
+		AEA8E0FE2F5FC240007B39EB /* ResearchKitUI-iOS-Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "ResearchKitUI-iOS-Debug.xcconfig"; sourceTree = "<group>"; };
+		AEA8E0FF2F5FC240007B39EB /* ResearchKitUI-iOS-Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "ResearchKitUI-iOS-Release.xcconfig"; sourceTree = "<group>"; };
+		AEA8E1002F5FC240007B39EB /* ResearchKitUI-iOS-Shared.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "ResearchKitUI-iOS-Shared.xcconfig"; sourceTree = "<group>"; };
+		AEA8E1032F5FC240007B39EB /* ORKInstructionStepHTMLFormatter.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKInstructionStepHTMLFormatter.h; sourceTree = "<group>"; };
+		AEA8E1042F5FC240007B39EB /* ORKInstructionStepHTMLFormatter.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ORKInstructionStepHTMLFormatter.m; sourceTree = "<group>"; };
+		AEA8E1052F5FC240007B39EB /* ORKSignatureFormatter.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKSignatureFormatter.h; sourceTree = "<group>"; };
+		AEA8E1062F5FC240007B39EB /* ORKSignatureFormatter.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ORKSignatureFormatter.m; sourceTree = "<group>"; };
+		AEA8E1082F5FC240007B39EB /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/ResearchKit.strings; sourceTree = "<group>"; };
+		AEA8E1092F5FC240007B39EB /* ar */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ar; path = ar.lproj/ResearchKit.strings; sourceTree = "<group>"; };
+		AEA8E10A2F5FC240007B39EB /* ca */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ca; path = ca.lproj/ResearchKit.strings; sourceTree = "<group>"; };
+		AEA8E10B2F5FC240007B39EB /* cs */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = cs; path = cs.lproj/ResearchKit.strings; sourceTree = "<group>"; };
+		AEA8E10C2F5FC240007B39EB /* da */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = da; path = da.lproj/ResearchKit.strings; sourceTree = "<group>"; };
+		AEA8E10D2F5FC240007B39EB /* de */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = de; path = de.lproj/ResearchKit.strings; sourceTree = "<group>"; };
+		AEA8E10E2F5FC240007B39EB /* el */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = el; path = el.lproj/ResearchKit.strings; sourceTree = "<group>"; };
+		AEA8E10F2F5FC240007B39EB /* en_AU */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en_AU; path = en_AU.lproj/ResearchKit.strings; sourceTree = "<group>"; };
+		AEA8E1102F5FC240007B39EB /* en_GB */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en_GB; path = en_GB.lproj/ResearchKit.strings; sourceTree = "<group>"; };
+		AEA8E1112F5FC240007B39EB /* es */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = es; path = es.lproj/ResearchKit.strings; sourceTree = "<group>"; };
+		AEA8E1122F5FC240007B39EB /* es_419 */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = es_419; path = es_419.lproj/ResearchKit.strings; sourceTree = "<group>"; };
+		AEA8E1132F5FC240007B39EB /* fi */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = fi; path = fi.lproj/ResearchKit.strings; sourceTree = "<group>"; };
+		AEA8E1142F5FC240007B39EB /* fr */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = fr; path = fr.lproj/ResearchKit.strings; sourceTree = "<group>"; };
+		AEA8E1152F5FC240007B39EB /* fr_CA */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = fr_CA; path = fr_CA.lproj/ResearchKit.strings; sourceTree = "<group>"; };
+		AEA8E1162F5FC240007B39EB /* he */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = he; path = he.lproj/ResearchKit.strings; sourceTree = "<group>"; };
+		AEA8E1172F5FC240007B39EB /* hi */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = hi; path = hi.lproj/ResearchKit.strings; sourceTree = "<group>"; };
+		AEA8E1182F5FC240007B39EB /* hr */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = hr; path = hr.lproj/ResearchKit.strings; sourceTree = "<group>"; };
+		AEA8E1192F5FC240007B39EB /* hu */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = hu; path = hu.lproj/ResearchKit.strings; sourceTree = "<group>"; };
+		AEA8E11A2F5FC240007B39EB /* id */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = id; path = id.lproj/ResearchKit.strings; sourceTree = "<group>"; };
+		AEA8E11B2F5FC240007B39EB /* it */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = it; path = it.lproj/ResearchKit.strings; sourceTree = "<group>"; };
+		AEA8E11C2F5FC240007B39EB /* ja */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ja; path = ja.lproj/ResearchKit.strings; sourceTree = "<group>"; };
+		AEA8E11D2F5FC240007B39EB /* ko */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ko; path = ko.lproj/ResearchKit.strings; sourceTree = "<group>"; };
+		AEA8E11E2F5FC240007B39EB /* ms */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ms; path = ms.lproj/ResearchKit.strings; sourceTree = "<group>"; };
+		AEA8E11F2F5FC240007B39EB /* nl */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = nl; path = nl.lproj/ResearchKit.strings; sourceTree = "<group>"; };
+		AEA8E1202F5FC240007B39EB /* no */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = no; path = no.lproj/ResearchKit.strings; sourceTree = "<group>"; };
+		AEA8E1212F5FC240007B39EB /* pl */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = pl; path = pl.lproj/ResearchKit.strings; sourceTree = "<group>"; };
+		AEA8E1222F5FC240007B39EB /* pt_BR */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = pt_BR; path = pt_BR.lproj/ResearchKit.strings; sourceTree = "<group>"; };
+		AEA8E1232F5FC240007B39EB /* pt_PT */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = pt_PT; path = pt_PT.lproj/ResearchKit.strings; sourceTree = "<group>"; };
+		AEA8E1242F5FC240007B39EB /* ro */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ro; path = ro.lproj/ResearchKit.strings; sourceTree = "<group>"; };
+		AEA8E1252F5FC240007B39EB /* ru */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ru; path = ru.lproj/ResearchKit.strings; sourceTree = "<group>"; };
+		AEA8E1262F5FC240007B39EB /* sk */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = sk; path = sk.lproj/ResearchKit.strings; sourceTree = "<group>"; };
+		AEA8E1272F5FC240007B39EB /* sv */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = sv; path = sv.lproj/ResearchKit.strings; sourceTree = "<group>"; };
+		AEA8E1282F5FC240007B39EB /* th */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = th; path = th.lproj/ResearchKit.strings; sourceTree = "<group>"; };
+		AEA8E1292F5FC240007B39EB /* tr */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = tr; path = tr.lproj/ResearchKit.strings; sourceTree = "<group>"; };
+		AEA8E12A2F5FC240007B39EB /* uk */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = uk; path = uk.lproj/ResearchKit.strings; sourceTree = "<group>"; };
+		AEA8E12B2F5FC240007B39EB /* vi */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = vi; path = vi.lproj/ResearchKit.strings; sourceTree = "<group>"; };
+		AEA8E12C2F5FC240007B39EB /* zh_CN */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = zh_CN; path = zh_CN.lproj/ResearchKit.strings; sourceTree = "<group>"; };
+		AEA8E12D2F5FC240007B39EB /* zh_HK */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = zh_HK; path = zh_HK.lproj/ResearchKit.strings; sourceTree = "<group>"; };
+		AEA8E12E2F5FC240007B39EB /* zh_TW */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = zh_TW; path = zh_TW.lproj/ResearchKit.strings; sourceTree = "<group>"; };
+		AEA8E1302F5FC240007B39EB /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.stringsdict; name = en; path = en.lproj/ResearchKit.stringsdict; sourceTree = "<group>"; };
+		AEA8E1312F5FC240007B39EB /* ar */ = {isa = PBXFileReference; lastKnownFileType = text.plist.stringsdict; name = ar; path = ar.lproj/ResearchKit.stringsdict; sourceTree = "<group>"; };
+		AEA8E1322F5FC240007B39EB /* ca */ = {isa = PBXFileReference; lastKnownFileType = text.plist.stringsdict; name = ca; path = ca.lproj/ResearchKit.stringsdict; sourceTree = "<group>"; };
+		AEA8E1332F5FC240007B39EB /* cs */ = {isa = PBXFileReference; lastKnownFileType = text.plist.stringsdict; name = cs; path = cs.lproj/ResearchKit.stringsdict; sourceTree = "<group>"; };
+		AEA8E1342F5FC240007B39EB /* da */ = {isa = PBXFileReference; lastKnownFileType = text.plist.stringsdict; name = da; path = da.lproj/ResearchKit.stringsdict; sourceTree = "<group>"; };
+		AEA8E1352F5FC240007B39EB /* de */ = {isa = PBXFileReference; lastKnownFileType = text.plist.stringsdict; name = de; path = de.lproj/ResearchKit.stringsdict; sourceTree = "<group>"; };
+		AEA8E1362F5FC240007B39EB /* el */ = {isa = PBXFileReference; lastKnownFileType = text.plist.stringsdict; name = el; path = el.lproj/ResearchKit.stringsdict; sourceTree = "<group>"; };
+		AEA8E1372F5FC240007B39EB /* en_AU */ = {isa = PBXFileReference; lastKnownFileType = text.plist.stringsdict; name = en_AU; path = en_AU.lproj/ResearchKit.stringsdict; sourceTree = "<group>"; };
+		AEA8E1382F5FC240007B39EB /* en_GB */ = {isa = PBXFileReference; lastKnownFileType = text.plist.stringsdict; name = en_GB; path = en_GB.lproj/ResearchKit.stringsdict; sourceTree = "<group>"; };
+		AEA8E1392F5FC240007B39EB /* es */ = {isa = PBXFileReference; lastKnownFileType = text.plist.stringsdict; name = es; path = es.lproj/ResearchKit.stringsdict; sourceTree = "<group>"; };
+		AEA8E13A2F5FC240007B39EB /* es_419 */ = {isa = PBXFileReference; lastKnownFileType = text.plist.stringsdict; name = es_419; path = es_419.lproj/ResearchKit.stringsdict; sourceTree = "<group>"; };
+		AEA8E13B2F5FC240007B39EB /* fi */ = {isa = PBXFileReference; lastKnownFileType = text.plist.stringsdict; name = fi; path = fi.lproj/ResearchKit.stringsdict; sourceTree = "<group>"; };
+		AEA8E13C2F5FC240007B39EB /* fr */ = {isa = PBXFileReference; lastKnownFileType = text.plist.stringsdict; name = fr; path = fr.lproj/ResearchKit.stringsdict; sourceTree = "<group>"; };
+		AEA8E13D2F5FC240007B39EB /* fr_CA */ = {isa = PBXFileReference; lastKnownFileType = text.plist.stringsdict; name = fr_CA; path = fr_CA.lproj/ResearchKit.stringsdict; sourceTree = "<group>"; };
+		AEA8E13E2F5FC240007B39EB /* he */ = {isa = PBXFileReference; lastKnownFileType = text.plist.stringsdict; name = he; path = he.lproj/ResearchKit.stringsdict; sourceTree = "<group>"; };
+		AEA8E13F2F5FC240007B39EB /* hi */ = {isa = PBXFileReference; lastKnownFileType = text.plist.stringsdict; name = hi; path = hi.lproj/ResearchKit.stringsdict; sourceTree = "<group>"; };
+		AEA8E1402F5FC240007B39EB /* hr */ = {isa = PBXFileReference; lastKnownFileType = text.plist.stringsdict; name = hr; path = hr.lproj/ResearchKit.stringsdict; sourceTree = "<group>"; };
+		AEA8E1412F5FC240007B39EB /* hu */ = {isa = PBXFileReference; lastKnownFileType = text.plist.stringsdict; name = hu; path = hu.lproj/ResearchKit.stringsdict; sourceTree = "<group>"; };
+		AEA8E1422F5FC240007B39EB /* id */ = {isa = PBXFileReference; lastKnownFileType = text.plist.stringsdict; name = id; path = id.lproj/ResearchKit.stringsdict; sourceTree = "<group>"; };
+		AEA8E1432F5FC240007B39EB /* it */ = {isa = PBXFileReference; lastKnownFileType = text.plist.stringsdict; name = it; path = it.lproj/ResearchKit.stringsdict; sourceTree = "<group>"; };
+		AEA8E1442F5FC240007B39EB /* ja */ = {isa = PBXFileReference; lastKnownFileType = text.plist.stringsdict; name = ja; path = ja.lproj/ResearchKit.stringsdict; sourceTree = "<group>"; };
+		AEA8E1452F5FC240007B39EB /* ko */ = {isa = PBXFileReference; lastKnownFileType = text.plist.stringsdict; name = ko; path = ko.lproj/ResearchKit.stringsdict; sourceTree = "<group>"; };
+		AEA8E1462F5FC240007B39EB /* ms */ = {isa = PBXFileReference; lastKnownFileType = text.plist.stringsdict; name = ms; path = ms.lproj/ResearchKit.stringsdict; sourceTree = "<group>"; };
+		AEA8E1472F5FC240007B39EB /* nl */ = {isa = PBXFileReference; lastKnownFileType = text.plist.stringsdict; name = nl; path = nl.lproj/ResearchKit.stringsdict; sourceTree = "<group>"; };
+		AEA8E1482F5FC240007B39EB /* no */ = {isa = PBXFileReference; lastKnownFileType = text.plist.stringsdict; name = no; path = no.lproj/ResearchKit.stringsdict; sourceTree = "<group>"; };
+		AEA8E1492F5FC240007B39EB /* pl */ = {isa = PBXFileReference; lastKnownFileType = text.plist.stringsdict; name = pl; path = pl.lproj/ResearchKit.stringsdict; sourceTree = "<group>"; };
+		AEA8E14A2F5FC240007B39EB /* pt_BR */ = {isa = PBXFileReference; lastKnownFileType = text.plist.stringsdict; name = pt_BR; path = pt_BR.lproj/ResearchKit.stringsdict; sourceTree = "<group>"; };
+		AEA8E14B2F5FC240007B39EB /* pt_PT */ = {isa = PBXFileReference; lastKnownFileType = text.plist.stringsdict; name = pt_PT; path = pt_PT.lproj/ResearchKit.stringsdict; sourceTree = "<group>"; };
+		AEA8E14C2F5FC240007B39EB /* ro */ = {isa = PBXFileReference; lastKnownFileType = text.plist.stringsdict; name = ro; path = ro.lproj/ResearchKit.stringsdict; sourceTree = "<group>"; };
+		AEA8E14D2F5FC240007B39EB /* ru */ = {isa = PBXFileReference; lastKnownFileType = text.plist.stringsdict; name = ru; path = ru.lproj/ResearchKit.stringsdict; sourceTree = "<group>"; };
+		AEA8E14E2F5FC240007B39EB /* sk */ = {isa = PBXFileReference; lastKnownFileType = text.plist.stringsdict; name = sk; path = sk.lproj/ResearchKit.stringsdict; sourceTree = "<group>"; };
+		AEA8E14F2F5FC240007B39EB /* sv */ = {isa = PBXFileReference; lastKnownFileType = text.plist.stringsdict; name = sv; path = sv.lproj/ResearchKit.stringsdict; sourceTree = "<group>"; };
+		AEA8E1502F5FC240007B39EB /* th */ = {isa = PBXFileReference; lastKnownFileType = text.plist.stringsdict; name = th; path = th.lproj/ResearchKit.stringsdict; sourceTree = "<group>"; };
+		AEA8E1512F5FC240007B39EB /* tr */ = {isa = PBXFileReference; lastKnownFileType = text.plist.stringsdict; name = tr; path = tr.lproj/ResearchKit.stringsdict; sourceTree = "<group>"; };
+		AEA8E1522F5FC240007B39EB /* uk */ = {isa = PBXFileReference; lastKnownFileType = text.plist.stringsdict; name = uk; path = uk.lproj/ResearchKit.stringsdict; sourceTree = "<group>"; };
+		AEA8E1532F5FC240007B39EB /* vi */ = {isa = PBXFileReference; lastKnownFileType = text.plist.stringsdict; name = vi; path = vi.lproj/ResearchKit.stringsdict; sourceTree = "<group>"; };
+		AEA8E1542F5FC240007B39EB /* zh_CN */ = {isa = PBXFileReference; lastKnownFileType = text.plist.stringsdict; name = zh_CN; path = zh_CN.lproj/ResearchKit.stringsdict; sourceTree = "<group>"; };
+		AEA8E1552F5FC240007B39EB /* zh_HK */ = {isa = PBXFileReference; lastKnownFileType = text.plist.stringsdict; name = zh_HK; path = zh_HK.lproj/ResearchKit.stringsdict; sourceTree = "<group>"; };
+		AEA8E1562F5FC240007B39EB /* zh_TW */ = {isa = PBXFileReference; lastKnownFileType = text.plist.stringsdict; name = zh_TW; path = zh_TW.lproj/ResearchKit.stringsdict; sourceTree = "<group>"; };
+		AEA8E1592F5FC240007B39EB /* ORKLoginStep.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKLoginStep.h; sourceTree = "<group>"; };
+		AEA8E15A2F5FC240007B39EB /* ORKLoginStep.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ORKLoginStep.m; sourceTree = "<group>"; };
+		AEA8E15B2F5FC240007B39EB /* ORKLoginStep_Internal.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKLoginStep_Internal.h; sourceTree = "<group>"; };
+		AEA8E15C2F5FC240007B39EB /* ORKRegistrationStep.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKRegistrationStep.h; sourceTree = "<group>"; };
+		AEA8E15D2F5FC240007B39EB /* ORKRegistrationStep.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ORKRegistrationStep.m; sourceTree = "<group>"; };
+		AEA8E15E2F5FC240007B39EB /* ORKRegistrationStep_Internal.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKRegistrationStep_Internal.h; sourceTree = "<group>"; };
+		AEA8E15F2F5FC240007B39EB /* ORKVerificationStep.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKVerificationStep.h; sourceTree = "<group>"; };
+		AEA8E1602F5FC240007B39EB /* ORKVerificationStep.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ORKVerificationStep.m; sourceTree = "<group>"; };
+		AEA8E1612F5FC240007B39EB /* ORKVerificationStep_Internal.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKVerificationStep_Internal.h; sourceTree = "<group>"; };
+		AEA8E1632F5FC240007B39EB /* ORKConsentDocument.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKConsentDocument.h; sourceTree = "<group>"; };
+		AEA8E1642F5FC240007B39EB /* ORKConsentDocument.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ORKConsentDocument.m; sourceTree = "<group>"; };
+		AEA8E1652F5FC240007B39EB /* ORKConsentDocument_Internal.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKConsentDocument_Internal.h; sourceTree = "<group>"; };
+		AEA8E1662F5FC240007B39EB /* ORKConsentDocument_Private.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKConsentDocument_Private.h; sourceTree = "<group>"; };
+		AEA8E1672F5FC240007B39EB /* ORKConsentDocument+ORKInstructionStep.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "ORKConsentDocument+ORKInstructionStep.h"; sourceTree = "<group>"; };
+		AEA8E1682F5FC240007B39EB /* ORKConsentDocument+ORKInstructionStep.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = "ORKConsentDocument+ORKInstructionStep.m"; sourceTree = "<group>"; };
+		AEA8E1692F5FC240007B39EB /* ORKConsentReviewStep.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKConsentReviewStep.h; sourceTree = "<group>"; };
+		AEA8E16A2F5FC240007B39EB /* ORKConsentReviewStep.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ORKConsentReviewStep.m; sourceTree = "<group>"; };
+		AEA8E16B2F5FC240007B39EB /* ORKConsentSection.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKConsentSection.h; sourceTree = "<group>"; };
+		AEA8E16C2F5FC240007B39EB /* ORKConsentSection.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ORKConsentSection.m; sourceTree = "<group>"; };
+		AEA8E16D2F5FC240007B39EB /* ORKConsentSection_Private.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKConsentSection_Private.h; sourceTree = "<group>"; };
+		AEA8E16E2F5FC240007B39EB /* ORKConsentSectionFormatter.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKConsentSectionFormatter.h; sourceTree = "<group>"; };
+		AEA8E16F2F5FC240007B39EB /* ORKConsentSectionFormatter.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ORKConsentSectionFormatter.m; sourceTree = "<group>"; };
+		AEA8E1702F5FC240007B39EB /* ORKConsentSharingStep.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKConsentSharingStep.h; sourceTree = "<group>"; };
+		AEA8E1712F5FC240007B39EB /* ORKConsentSharingStep.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ORKConsentSharingStep.m; sourceTree = "<group>"; };
+		AEA8E1722F5FC240007B39EB /* ORKConsentSignature.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKConsentSignature.h; sourceTree = "<group>"; };
+		AEA8E1732F5FC240007B39EB /* ORKConsentSignature.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ORKConsentSignature.m; sourceTree = "<group>"; };
+		AEA8E1742F5FC240007B39EB /* ORKConsentSignatureFormatter.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKConsentSignatureFormatter.h; sourceTree = "<group>"; };
+		AEA8E1752F5FC240007B39EB /* ORKConsentSignatureFormatter.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ORKConsentSignatureFormatter.m; sourceTree = "<group>"; };
+		AEA8E1762F5FC240007B39EB /* ORKConsentSignatureResult.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKConsentSignatureResult.h; sourceTree = "<group>"; };
+		AEA8E1772F5FC240007B39EB /* ORKConsentSignatureResult.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ORKConsentSignatureResult.m; sourceTree = "<group>"; };
+		AEA8E1782F5FC240007B39EB /* ORKQuestionStep.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKQuestionStep.h; sourceTree = "<group>"; };
+		AEA8E1792F5FC240007B39EB /* ORKQuestionStep.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ORKQuestionStep.m; sourceTree = "<group>"; };
+		AEA8E17A2F5FC240007B39EB /* ORKQuestionStep_Internal.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKQuestionStep_Internal.h; sourceTree = "<group>"; };
+		AEA8E17B2F5FC240007B39EB /* ORKQuestionStep_Private.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKQuestionStep_Private.h; sourceTree = "<group>"; };
+		AEA8E17D2F5FC240007B39EB /* Artwork.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Artwork.xcassets; sourceTree = "<group>"; };
+		AEA8E17E2F5FC240007B39EB /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		AEA8E17F2F5FC240007B39EB /* ORKDeprecated.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ORKDeprecated.h; sourceTree = "<group>"; };
+		AEA8E1802F5FC240007B39EB /* ORKDeprecated.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ORKDeprecated.m; sourceTree = "<group>"; };
+		AEA8E1812F5FC240007B39EB /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		AEA8E1822F5FC240007B39EB /* ResearchKit.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ResearchKit.h; sourceTree = "<group>"; };
+		AEA8E1832F5FC240007B39EB /* ResearchKit.docc */ = {isa = PBXFileReference; lastKnownFileType = folder.documentationcatalog; path = ResearchKit.docc; sourceTree = "<group>"; };
+		AEA8E1842F5FC240007B39EB /* ResearchKit.modulemap */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.module-map"; path = ResearchKit.modulemap; sourceTree = "<group>"; };
+		AEA8E1852F5FC240007B39EB /* ResearchKit_Prefix.pch */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ResearchKit_Prefix.pch; sourceTree = "<group>"; };
+		AEA8E1862F5FC240007B39EB /* ResearchKit_Private.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ResearchKit_Private.h; sourceTree = "<group>"; };
+		AEA8E1872F5FC240007B39EB /* ResearchKit_Private.modulemap */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.module-map"; path = ResearchKit_Private.modulemap; sourceTree = "<group>"; };
+		AEA8E1892F5FC2AE007B39EB /* ResearchKit.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = ResearchKit.xcodeproj; path = "../../../../../../../../Downloads/ResearchKit-dev-SwiftUI/ResearchKit.xcodeproj"; sourceTree = "<group>"; };
 		AEABF3882EA06D020055052F /* SensingApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SensingApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AEABF39A2EA06D040055052F /* SensingAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SensingAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		AEABF3A42EA06D040055052F /* SensingAppUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SensingAppUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -125,8 +453,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				FABC186F2EC29BB90071EC17 /* ResearchKit.framework in Frameworks */,
-				FABC186C2EC29BB60071EC17 /* ResearchKitSwiftUI.framework in Frameworks */,
+				AEA8E19F2F5FC2BF007B39EB /* ResearchKitUI.framework in Frameworks */,
+				AEA8E19D2F5FC2BB007B39EB /* ResearchKitSwiftUI.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -147,6 +475,375 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		AEA8E0252F5FC1AA007B39EB /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				AEA8E02C2F5FC1AA007B39EB /* ResearchKitSwiftUI.framework */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		AEA8E0EB2F5FC240007B39EB /* Common */ = {
+			isa = PBXGroup;
+			children = (
+				AEA8E0342F5FC240007B39EB /* CLLocationManager+ResearchKit.h */,
+				AEA8E0352F5FC240007B39EB /* CLLocationManager+ResearchKit.m */,
+				AEA8E0362F5FC240007B39EB /* CMMotionActivity+ORKJSONDictionary.h */,
+				AEA8E0372F5FC240007B39EB /* CMMotionActivity+ORKJSONDictionary.m */,
+				AEA8E0382F5FC240007B39EB /* HKSample+ORKJSONDictionary.h */,
+				AEA8E0392F5FC240007B39EB /* HKSample+ORKJSONDictionary.m */,
+				AEA8E03A2F5FC240007B39EB /* ORKActiveStep.h */,
+				AEA8E03B2F5FC240007B39EB /* ORKActiveStep.m */,
+				AEA8E03C2F5FC240007B39EB /* ORKActiveStep_Internal.h */,
+				AEA8E03D2F5FC240007B39EB /* ORKAnswerFormat.h */,
+				AEA8E03E2F5FC240007B39EB /* ORKAnswerFormat.m */,
+				AEA8E03F2F5FC240007B39EB /* ORKAnswerFormat_Internal.h */,
+				AEA8E0402F5FC240007B39EB /* ORKAnswerFormat_Private.h */,
+				AEA8E0412F5FC240007B39EB /* ORKAnswerFormat+FormStepViewControllerAdditions.h */,
+				AEA8E0422F5FC240007B39EB /* ORKAnswerFormat+FormStepViewControllerAdditions.m */,
+				AEA8E0432F5FC240007B39EB /* ORKBodyItem.h */,
+				AEA8E0442F5FC240007B39EB /* ORKBodyItem.m */,
+				AEA8E0452F5FC240007B39EB /* ORKBodyItem_Internal.h */,
+				AEA8E0462F5FC240007B39EB /* ORKBundleAsset.h */,
+				AEA8E0472F5FC240007B39EB /* ORKBundleAsset.m */,
+				AEA8E0482F5FC240007B39EB /* ORKChoiceAnswerFormatHelper.h */,
+				AEA8E0492F5FC240007B39EB /* ORKChoiceAnswerFormatHelper.m */,
+				AEA8E04A2F5FC240007B39EB /* ORKChoiceViewCell+ORKTextChoice.h */,
+				AEA8E04B2F5FC240007B39EB /* ORKCollectionResult.h */,
+				AEA8E04C2F5FC240007B39EB /* ORKCollectionResult.m */,
+				AEA8E04D2F5FC240007B39EB /* ORKCollectionResult_Private.h */,
+				AEA8E04E2F5FC240007B39EB /* ORKCollector.h */,
+				AEA8E04F2F5FC240007B39EB /* ORKCollector.m */,
+				AEA8E0502F5FC240007B39EB /* ORKCollector_Internal.h */,
+				AEA8E0512F5FC240007B39EB /* ORKCompletionStep.h */,
+				AEA8E0522F5FC240007B39EB /* ORKCompletionStep.m */,
+				AEA8E0532F5FC240007B39EB /* ORKConditionStepConfiguration.h */,
+				AEA8E0542F5FC240007B39EB /* ORKConditionStepConfiguration.m */,
+				AEA8E0552F5FC240007B39EB /* ORKCustomStep.h */,
+				AEA8E0562F5FC240007B39EB /* ORKCustomStep.m */,
+				AEA8E0572F5FC240007B39EB /* ORKDataCollectionManager.h */,
+				AEA8E0582F5FC240007B39EB /* ORKDataCollectionManager.m */,
+				AEA8E0592F5FC240007B39EB /* ORKDataCollectionManager_Internal.h */,
+				AEA8E05A2F5FC240007B39EB /* ORKDataLogger.h */,
+				AEA8E05B2F5FC240007B39EB /* ORKDataLogger.m */,
+				AEA8E05C2F5FC240007B39EB /* ORKDefines.h */,
+				AEA8E05D2F5FC240007B39EB /* ORKDevice.h */,
+				AEA8E05E2F5FC240007B39EB /* ORKDevice.m */,
+				AEA8E05F2F5FC240007B39EB /* ORKDevice_Private.h */,
+				AEA8E0602F5FC240007B39EB /* ORKEarlyTerminationConfiguration.h */,
+				AEA8E0612F5FC240007B39EB /* ORKEarlyTerminationConfiguration.m */,
+				AEA8E0622F5FC240007B39EB /* ORKErrors.h */,
+				AEA8E0632F5FC240007B39EB /* ORKErrors.m */,
+				AEA8E0642F5FC240007B39EB /* ORKFamilyHistoryResult.h */,
+				AEA8E0652F5FC240007B39EB /* ORKFamilyHistoryResult.m */,
+				AEA8E0662F5FC240007B39EB /* ORKFamilyHistoryStep.h */,
+				AEA8E0672F5FC240007B39EB /* ORKFamilyHistoryStep.m */,
+				AEA8E0682F5FC240007B39EB /* ORKFileResult.h */,
+				AEA8E0692F5FC240007B39EB /* ORKFileResult.m */,
+				AEA8E06A2F5FC240007B39EB /* ORKFormItem_Internal.h */,
+				AEA8E06B2F5FC240007B39EB /* ORKFormItemVisibilityRule.h */,
+				AEA8E06C2F5FC240007B39EB /* ORKFormItemVisibilityRule.m */,
+				AEA8E06D2F5FC240007B39EB /* ORKFormStep.h */,
+				AEA8E06E2F5FC240007B39EB /* ORKFormStep.m */,
+				AEA8E06F2F5FC240007B39EB /* ORKFormStep_Internal.h */,
+				AEA8E0702F5FC240007B39EB /* ORKFrontFacingCameraStep.h */,
+				AEA8E0712F5FC240007B39EB /* ORKFrontFacingCameraStep.m */,
+				AEA8E0722F5FC240007B39EB /* ORKFrontFacingCameraStepResult.h */,
+				AEA8E0732F5FC240007B39EB /* ORKFrontFacingCameraStepResult.m */,
+				AEA8E0742F5FC240007B39EB /* ORKHealthAnswerFormat.h */,
+				AEA8E0752F5FC240007B39EB /* ORKHealthAnswerFormat.m */,
+				AEA8E0762F5FC240007B39EB /* ORKHealthCondition.h */,
+				AEA8E0772F5FC240007B39EB /* ORKHealthCondition.m */,
+				AEA8E0782F5FC240007B39EB /* ORKHealthKitPermissionType.h */,
+				AEA8E0792F5FC240007B39EB /* ORKHealthKitPermissionType.m */,
+				AEA8E07A2F5FC240007B39EB /* ORKHealthSampleQueryOperation.h */,
+				AEA8E07B2F5FC240007B39EB /* ORKHealthSampleQueryOperation.m */,
+				AEA8E07C2F5FC240007B39EB /* ORKHelpers.m */,
+				AEA8E07D2F5FC240007B39EB /* ORKHelpers_Internal.h */,
+				AEA8E07E2F5FC240007B39EB /* ORKHelpers_Private.h */,
+				AEA8E07F2F5FC240007B39EB /* ORKHTMLPDFPageRenderer.h */,
+				AEA8E0802F5FC240007B39EB /* ORKHTMLPDFPageRenderer.m */,
+				AEA8E0812F5FC240007B39EB /* ORKHTMLPDFWriter.h */,
+				AEA8E0822F5FC240007B39EB /* ORKHTMLPDFWriter.m */,
+				AEA8E0832F5FC240007B39EB /* ORKImageCaptureStep.h */,
+				AEA8E0842F5FC240007B39EB /* ORKImageCaptureStep.m */,
+				AEA8E0852F5FC240007B39EB /* ORKInstructionStep.h */,
+				AEA8E0862F5FC240007B39EB /* ORKInstructionStep.m */,
+				AEA8E0872F5FC240007B39EB /* ORKKeychainWrapper.h */,
+				AEA8E0882F5FC240007B39EB /* ORKKeychainWrapper.m */,
+				AEA8E0892F5FC240007B39EB /* ORKLearnMoreInstructionStep.h */,
+				AEA8E08A2F5FC240007B39EB /* ORKLearnMoreInstructionStep.m */,
+				AEA8E08B2F5FC240007B39EB /* ORKLearnMoreItem.h */,
+				AEA8E08C2F5FC240007B39EB /* ORKLearnMoreItem.m */,
+				AEA8E08D2F5FC240007B39EB /* ORKLocationPermissionType.h */,
+				AEA8E08E2F5FC240007B39EB /* ORKLocationPermissionType.m */,
+				AEA8E08F2F5FC240007B39EB /* ORKMotionActivityPermissionType.h */,
+				AEA8E0902F5FC240007B39EB /* ORKMotionActivityPermissionType.m */,
+				AEA8E0912F5FC240007B39EB /* ORKMotionActivityQueryOperation.h */,
+				AEA8E0922F5FC240007B39EB /* ORKMotionActivityQueryOperation.m */,
+				AEA8E0932F5FC240007B39EB /* ORKNavigableOrderedTask.h */,
+				AEA8E0942F5FC240007B39EB /* ORKNavigableOrderedTask.m */,
+				AEA8E0952F5FC240007B39EB /* ORKNavigablePageStep.h */,
+				AEA8E0962F5FC240007B39EB /* ORKNavigablePageStep.m */,
+				AEA8E0972F5FC240007B39EB /* ORKNotificationPermissionType.h */,
+				AEA8E0982F5FC240007B39EB /* ORKNotificationPermissionType.m */,
+				AEA8E0992F5FC240007B39EB /* ORKOperation.h */,
+				AEA8E09A2F5FC240007B39EB /* ORKOperation.m */,
+				AEA8E09B2F5FC240007B39EB /* ORKOrderedTask.h */,
+				AEA8E09C2F5FC240007B39EB /* ORKOrderedTask.m */,
+				AEA8E09D2F5FC240007B39EB /* ORKOrderedTask_Private.h */,
+				AEA8E09E2F5FC240007B39EB /* ORKPageStep.h */,
+				AEA8E09F2F5FC240007B39EB /* ORKPageStep.m */,
+				AEA8E0A02F5FC240007B39EB /* ORKPageStep_Private.h */,
+				AEA8E0A12F5FC240007B39EB /* ORKPasscodeResult.h */,
+				AEA8E0A22F5FC240007B39EB /* ORKPasscodeResult.m */,
+				AEA8E0A32F5FC240007B39EB /* ORKPasscodeStep.h */,
+				AEA8E0A42F5FC240007B39EB /* ORKPasscodeStep.m */,
+				AEA8E0A52F5FC240007B39EB /* ORKPDFViewerStep.h */,
+				AEA8E0A62F5FC240007B39EB /* ORKPDFViewerStep.m */,
+				AEA8E0A72F5FC240007B39EB /* ORKPermissionType.h */,
+				AEA8E0A82F5FC240007B39EB /* ORKPermissionType.m */,
+				AEA8E0A92F5FC240007B39EB /* ORKPredicateFormItemVisibilityRule.h */,
+				AEA8E0AA2F5FC240007B39EB /* ORKPredicateFormItemVisibilityRule.m */,
+				AEA8E0AB2F5FC240007B39EB /* ORKPredicateFormItemVisibilityRule_Private.h */,
+				AEA8E0AC2F5FC240007B39EB /* ORKQuestionResult.h */,
+				AEA8E0AD2F5FC240007B39EB /* ORKQuestionResult.m */,
+				AEA8E0AE2F5FC240007B39EB /* ORKQuestionResult_Private.h */,
+				AEA8E0AF2F5FC240007B39EB /* ORKRecorder.h */,
+				AEA8E0B02F5FC240007B39EB /* ORKRecorder.m */,
+				AEA8E0B12F5FC240007B39EB /* ORKRecorder_Internal.h */,
+				AEA8E0B22F5FC240007B39EB /* ORKRecorder_Private.h */,
+				AEA8E0B32F5FC240007B39EB /* ORKRelatedPerson.h */,
+				AEA8E0B42F5FC240007B39EB /* ORKRelatedPerson.m */,
+				AEA8E0B52F5FC240007B39EB /* ORKRelativeGroup.h */,
+				AEA8E0B62F5FC240007B39EB /* ORKRelativeGroup.m */,
+				AEA8E0B72F5FC240007B39EB /* ORKRequestPermissionsStep.h */,
+				AEA8E0B82F5FC240007B39EB /* ORKRequestPermissionsStep.m */,
+				AEA8E0B92F5FC240007B39EB /* ORKResult.h */,
+				AEA8E0BA2F5FC240007B39EB /* ORKResult.m */,
+				AEA8E0BB2F5FC240007B39EB /* ORKResult_Private.h */,
+				AEA8E0BC2F5FC240007B39EB /* ORKResultPredicate.h */,
+				AEA8E0BD2F5FC240007B39EB /* ORKResultPredicate.m */,
+				AEA8E0BE2F5FC240007B39EB /* ORKReviewStep.h */,
+				AEA8E0BF2F5FC240007B39EB /* ORKReviewStep.m */,
+				AEA8E0C02F5FC240007B39EB /* ORKReviewStep_Internal.h */,
+				AEA8E0C12F5FC240007B39EB /* ORKSecondaryTaskStep.h */,
+				AEA8E0C22F5FC240007B39EB /* ORKSecondaryTaskStep.m */,
+				AEA8E0C32F5FC240007B39EB /* ORKSensorPermissionType.h */,
+				AEA8E0C42F5FC240007B39EB /* ORKSensorPermissionType.m */,
+				AEA8E0C52F5FC240007B39EB /* ORKSignatureResult.h */,
+				AEA8E0C62F5FC240007B39EB /* ORKSignatureResult.m */,
+				AEA8E0C72F5FC240007B39EB /* ORKSignatureResult_Private.h */,
+				AEA8E0C82F5FC240007B39EB /* ORKSignatureStep.h */,
+				AEA8E0C92F5FC240007B39EB /* ORKSignatureStep.m */,
+				AEA8E0CA2F5FC240007B39EB /* ORKSkin.h */,
+				AEA8E0CB2F5FC240007B39EB /* ORKSkin.m */,
+				AEA8E0CC2F5FC240007B39EB /* ORKSkin_Private.h */,
+				AEA8E0CD2F5FC240007B39EB /* ORKStep.h */,
+				AEA8E0CE2F5FC240007B39EB /* ORKStep.m */,
+				AEA8E0CF2F5FC240007B39EB /* ORKStep_Private.h */,
+				AEA8E0D02F5FC240007B39EB /* ORKStepNavigationRule.h */,
+				AEA8E0D12F5FC240007B39EB /* ORKStepNavigationRule.m */,
+				AEA8E0D22F5FC240007B39EB /* ORKStepNavigationRule.swift */,
+				AEA8E0D32F5FC240007B39EB /* ORKStepNavigationRule_Internal.h */,
+				AEA8E0D42F5FC240007B39EB /* ORKStepNavigationRule_Private.h */,
+				AEA8E0D52F5FC240007B39EB /* ORKTableStep.h */,
+				AEA8E0D62F5FC240007B39EB /* ORKTableStep.m */,
+				AEA8E0D72F5FC240007B39EB /* ORKTask.h */,
+				AEA8E0D82F5FC240007B39EB /* ORKTask_Util.m */,
+				AEA8E0D92F5FC240007B39EB /* ORKTypes.h */,
+				AEA8E0DA2F5FC240007B39EB /* ORKTypes.m */,
+				AEA8E0DB2F5FC240007B39EB /* ORKTypes_Private.h */,
+				AEA8E0DC2F5FC240007B39EB /* ORKVideoCaptureStep.h */,
+				AEA8E0DD2F5FC240007B39EB /* ORKVideoCaptureStep.m */,
+				AEA8E0DE2F5FC240007B39EB /* ORKVideoInstructionStep.h */,
+				AEA8E0DF2F5FC240007B39EB /* ORKVideoInstructionStep.m */,
+				AEA8E0E02F5FC240007B39EB /* ORKVideoInstructionStepResult.h */,
+				AEA8E0E12F5FC240007B39EB /* ORKVideoInstructionStepResult.m */,
+				AEA8E0E22F5FC240007B39EB /* ORKWaitStep.h */,
+				AEA8E0E32F5FC240007B39EB /* ORKWaitStep.m */,
+				AEA8E0E42F5FC240007B39EB /* ORKWebViewStep.h */,
+				AEA8E0E52F5FC240007B39EB /* ORKWebViewStep.m */,
+				AEA8E0E62F5FC240007B39EB /* ORKWebViewStepResult.h */,
+				AEA8E0E72F5FC240007B39EB /* ORKWebViewStepResult.m */,
+				AEA8E0E82F5FC240007B39EB /* ORKWebViewStepResult_Private.h */,
+				AEA8E0E92F5FC240007B39EB /* UIImageView+ResearchKit.h */,
+				AEA8E0EA2F5FC240007B39EB /* UIImageView+ResearchKit.m */,
+			);
+			path = Common;
+			sourceTree = "<group>";
+		};
+		AEA8E0ED2F5FC240007B39EB /* docs */ = {
+			isa = PBXGroup;
+			children = (
+				AEA8E0EC2F5FC240007B39EB /* docs-Shared.xcconfig */,
+			);
+			path = docs;
+			sourceTree = "<group>";
+		};
+		AEA8E0F12F5FC240007B39EB /* Project */ = {
+			isa = PBXGroup;
+			children = (
+				AEA8E0EE2F5FC240007B39EB /* Project-Debug.xcconfig */,
+				AEA8E0EF2F5FC240007B39EB /* Project-Release.xcconfig */,
+				AEA8E0F02F5FC240007B39EB /* Project-Shared.xcconfig */,
+			);
+			path = Project;
+			sourceTree = "<group>";
+		};
+		AEA8E0F52F5FC240007B39EB /* ResearchKit */ = {
+			isa = PBXGroup;
+			children = (
+				AEA8E0F22F5FC240007B39EB /* ResearchKit-Debug.xcconfig */,
+				AEA8E0F32F5FC240007B39EB /* ResearchKit-Release.xcconfig */,
+				AEA8E0F42F5FC240007B39EB /* ResearchKit-Shared.xcconfig */,
+			);
+			path = ResearchKit;
+			sourceTree = "<group>";
+		};
+		AEA8E0F92F5FC240007B39EB /* ResearchKitActiveTask */ = {
+			isa = PBXGroup;
+			children = (
+				AEA8E0F62F5FC240007B39EB /* ResearchKitActiveTask-Debug.xcconfig */,
+				AEA8E0F72F5FC240007B39EB /* ResearchKitActiveTask-Release.xcconfig */,
+				AEA8E0F82F5FC240007B39EB /* ResearchKitActiveTask-Shared.xcconfig */,
+			);
+			path = ResearchKitActiveTask;
+			sourceTree = "<group>";
+		};
+		AEA8E0FD2F5FC240007B39EB /* ResearchKitTests */ = {
+			isa = PBXGroup;
+			children = (
+				AEA8E0FA2F5FC240007B39EB /* ResearchKitTests-Debug.xcconfig */,
+				AEA8E0FB2F5FC240007B39EB /* ResearchKitTests-Release.xcconfig */,
+				AEA8E0FC2F5FC240007B39EB /* ResearchKitTests-Shared.xcconfig */,
+			);
+			path = ResearchKitTests;
+			sourceTree = "<group>";
+		};
+		AEA8E1012F5FC240007B39EB /* ResearchKitUI-iOS */ = {
+			isa = PBXGroup;
+			children = (
+				AEA8E0FE2F5FC240007B39EB /* ResearchKitUI-iOS-Debug.xcconfig */,
+				AEA8E0FF2F5FC240007B39EB /* ResearchKitUI-iOS-Release.xcconfig */,
+				AEA8E1002F5FC240007B39EB /* ResearchKitUI-iOS-Shared.xcconfig */,
+			);
+			path = "ResearchKitUI-iOS";
+			sourceTree = "<group>";
+		};
+		AEA8E1022F5FC240007B39EB /* Configuration */ = {
+			isa = PBXGroup;
+			children = (
+				AEA8E0ED2F5FC240007B39EB /* docs */,
+				AEA8E0F12F5FC240007B39EB /* Project */,
+				AEA8E0F52F5FC240007B39EB /* ResearchKit */,
+				AEA8E0F92F5FC240007B39EB /* ResearchKitActiveTask */,
+				AEA8E0FD2F5FC240007B39EB /* ResearchKitTests */,
+				AEA8E1012F5FC240007B39EB /* ResearchKitUI-iOS */,
+			);
+			path = Configuration;
+			sourceTree = "<group>";
+		};
+		AEA8E1072F5FC240007B39EB /* Consent */ = {
+			isa = PBXGroup;
+			children = (
+				AEA8E1032F5FC240007B39EB /* ORKInstructionStepHTMLFormatter.h */,
+				AEA8E1042F5FC240007B39EB /* ORKInstructionStepHTMLFormatter.m */,
+				AEA8E1052F5FC240007B39EB /* ORKSignatureFormatter.h */,
+				AEA8E1062F5FC240007B39EB /* ORKSignatureFormatter.m */,
+			);
+			path = Consent;
+			sourceTree = "<group>";
+		};
+		AEA8E1582F5FC240007B39EB /* Localized */ = {
+			isa = PBXGroup;
+			children = (
+				AEA8E12F2F5FC240007B39EB /* ResearchKit.strings */,
+				AEA8E1572F5FC240007B39EB /* ResearchKit.stringsdict */,
+			);
+			path = Localized;
+			sourceTree = "<group>";
+		};
+		AEA8E1622F5FC240007B39EB /* Onboarding */ = {
+			isa = PBXGroup;
+			children = (
+				AEA8E1592F5FC240007B39EB /* ORKLoginStep.h */,
+				AEA8E15A2F5FC240007B39EB /* ORKLoginStep.m */,
+				AEA8E15B2F5FC240007B39EB /* ORKLoginStep_Internal.h */,
+				AEA8E15C2F5FC240007B39EB /* ORKRegistrationStep.h */,
+				AEA8E15D2F5FC240007B39EB /* ORKRegistrationStep.m */,
+				AEA8E15E2F5FC240007B39EB /* ORKRegistrationStep_Internal.h */,
+				AEA8E15F2F5FC240007B39EB /* ORKVerificationStep.h */,
+				AEA8E1602F5FC240007B39EB /* ORKVerificationStep.m */,
+				AEA8E1612F5FC240007B39EB /* ORKVerificationStep_Internal.h */,
+			);
+			path = Onboarding;
+			sourceTree = "<group>";
+		};
+		AEA8E17C2F5FC240007B39EB /* Stale */ = {
+			isa = PBXGroup;
+			children = (
+				AEA8E1632F5FC240007B39EB /* ORKConsentDocument.h */,
+				AEA8E1642F5FC240007B39EB /* ORKConsentDocument.m */,
+				AEA8E1652F5FC240007B39EB /* ORKConsentDocument_Internal.h */,
+				AEA8E1662F5FC240007B39EB /* ORKConsentDocument_Private.h */,
+				AEA8E1672F5FC240007B39EB /* ORKConsentDocument+ORKInstructionStep.h */,
+				AEA8E1682F5FC240007B39EB /* ORKConsentDocument+ORKInstructionStep.m */,
+				AEA8E1692F5FC240007B39EB /* ORKConsentReviewStep.h */,
+				AEA8E16A2F5FC240007B39EB /* ORKConsentReviewStep.m */,
+				AEA8E16B2F5FC240007B39EB /* ORKConsentSection.h */,
+				AEA8E16C2F5FC240007B39EB /* ORKConsentSection.m */,
+				AEA8E16D2F5FC240007B39EB /* ORKConsentSection_Private.h */,
+				AEA8E16E2F5FC240007B39EB /* ORKConsentSectionFormatter.h */,
+				AEA8E16F2F5FC240007B39EB /* ORKConsentSectionFormatter.m */,
+				AEA8E1702F5FC240007B39EB /* ORKConsentSharingStep.h */,
+				AEA8E1712F5FC240007B39EB /* ORKConsentSharingStep.m */,
+				AEA8E1722F5FC240007B39EB /* ORKConsentSignature.h */,
+				AEA8E1732F5FC240007B39EB /* ORKConsentSignature.m */,
+				AEA8E1742F5FC240007B39EB /* ORKConsentSignatureFormatter.h */,
+				AEA8E1752F5FC240007B39EB /* ORKConsentSignatureFormatter.m */,
+				AEA8E1762F5FC240007B39EB /* ORKConsentSignatureResult.h */,
+				AEA8E1772F5FC240007B39EB /* ORKConsentSignatureResult.m */,
+				AEA8E1782F5FC240007B39EB /* ORKQuestionStep.h */,
+				AEA8E1792F5FC240007B39EB /* ORKQuestionStep.m */,
+				AEA8E17A2F5FC240007B39EB /* ORKQuestionStep_Internal.h */,
+				AEA8E17B2F5FC240007B39EB /* ORKQuestionStep_Private.h */,
+			);
+			path = Stale;
+			sourceTree = "<group>";
+		};
+		AEA8E1882F5FC240007B39EB /* ResearchKit */ = {
+			isa = PBXGroup;
+			children = (
+				AEA8E0EB2F5FC240007B39EB /* Common */,
+				AEA8E1022F5FC240007B39EB /* Configuration */,
+				AEA8E1072F5FC240007B39EB /* Consent */,
+				AEA8E1582F5FC240007B39EB /* Localized */,
+				AEA8E1622F5FC240007B39EB /* Onboarding */,
+				AEA8E17C2F5FC240007B39EB /* Stale */,
+				AEA8E17D2F5FC240007B39EB /* Artwork.xcassets */,
+				AEA8E17E2F5FC240007B39EB /* Info.plist */,
+				AEA8E17F2F5FC240007B39EB /* ORKDeprecated.h */,
+				AEA8E1802F5FC240007B39EB /* ORKDeprecated.m */,
+				AEA8E1812F5FC240007B39EB /* PrivacyInfo.xcprivacy */,
+				AEA8E1822F5FC240007B39EB /* ResearchKit.h */,
+				AEA8E1832F5FC240007B39EB /* ResearchKit.docc */,
+				AEA8E1842F5FC240007B39EB /* ResearchKit.modulemap */,
+				AEA8E1852F5FC240007B39EB /* ResearchKit_Prefix.pch */,
+				AEA8E1862F5FC240007B39EB /* ResearchKit_Private.h */,
+				AEA8E1872F5FC240007B39EB /* ResearchKit_Private.modulemap */,
+			);
+			path = ResearchKit;
+			sourceTree = "<group>";
+		};
+		AEA8E18A2F5FC2AE007B39EB /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				AEA8E1972F5FC2AE007B39EB /* ResearchKitUI.framework */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
 		AEABF37F2EA06D020055052F = {
 			isa = PBXGroup;
 			children = (
@@ -171,6 +868,9 @@
 		FABC18502EC29B9A0071EC17 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				AEA8E1892F5FC2AE007B39EB /* ResearchKit.xcodeproj */,
+				AEA8E1882F5FC240007B39EB /* ResearchKit */,
+				AEA8E0242F5FC1AA007B39EB /* ResearchKitSwiftUI.xcodeproj */,
 				FABC185C2EC29BA20071EC17 /* ResearchKit.xcodeproj */,
 				FABC18512EC29B9A0071EC17 /* ResearchKitSwiftUI.xcodeproj */,
 			);
@@ -180,7 +880,6 @@
 		FABC18522EC29B9A0071EC17 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				FABC18592EC29B9A0071EC17 /* ResearchKitSwiftUI.framework */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -188,7 +887,6 @@
 		FABC185D2EC29BA20071EC17 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				FABC18652EC29BA20071EC17 /* ResearchKit.framework */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -203,7 +901,7 @@
 				AEABF3842EA06D020055052F /* Sources */,
 				AEABF3852EA06D020055052F /* Frameworks */,
 				AEABF3862EA06D020055052F /* Resources */,
-				FABC186E2EC29BB60071EC17 /* Embed Frameworks */,
+				AEA8E19C2F5FC2B7007B39EB /* Embed Frameworks */,
 			);
 			buildRules = (
 			);
@@ -295,6 +993,45 @@
 			knownRegions = (
 				en,
 				Base,
+				de,
+				he,
+				en_AU,
+				ar,
+				el,
+				ja,
+				uk,
+				es_419,
+				zh_CN,
+				es,
+				pt_BR,
+				da,
+				it,
+				sk,
+				pt_PT,
+				ms,
+				sv,
+				cs,
+				ko,
+				no,
+				hu,
+				zh_HK,
+				tr,
+				pl,
+				zh_TW,
+				en_GB,
+				vi,
+				ru,
+				fr_CA,
+				fr,
+				fi,
+				id,
+				nl,
+				th,
+				ro,
+				hr,
+				hi,
+				ca,
+				nb,
 			);
 			mainGroup = AEABF37F2EA06D020055052F;
 			minimizedProjectReferenceProxies = 1;
@@ -306,8 +1043,16 @@
 			projectDirPath = "";
 			projectReferences = (
 				{
+					ProductGroup = AEA8E18A2F5FC2AE007B39EB /* Products */;
+					ProjectRef = AEA8E1892F5FC2AE007B39EB /* ResearchKit.xcodeproj */;
+				},
+				{
 					ProductGroup = FABC185D2EC29BA20071EC17 /* Products */;
 					ProjectRef = FABC185C2EC29BA20071EC17 /* ResearchKit.xcodeproj */;
+				},
+				{
+					ProductGroup = AEA8E0252F5FC1AA007B39EB /* Products */;
+					ProjectRef = AEA8E0242F5FC1AA007B39EB /* ResearchKitSwiftUI.xcodeproj */;
 				},
 				{
 					ProductGroup = FABC18522EC29B9A0071EC17 /* Products */;
@@ -324,18 +1069,18 @@
 /* End PBXProject section */
 
 /* Begin PBXReferenceProxy section */
-		FABC18592EC29B9A0071EC17 /* ResearchKitSwiftUI.framework */ = {
+		AEA8E02C2F5FC1AA007B39EB /* ResearchKitSwiftUI.framework */ = {
 			isa = PBXReferenceProxy;
 			fileType = wrapper.framework;
 			path = ResearchKitSwiftUI.framework;
-			remoteRef = FABC18582EC29B9A0071EC17 /* PBXContainerItemProxy */;
+			remoteRef = AEA8E02B2F5FC1AA007B39EB /* PBXContainerItemProxy */;
 			sourceTree = BUILT_PRODUCTS_DIR;
 		};
-		FABC18652EC29BA20071EC17 /* ResearchKit.framework */ = {
+		AEA8E1972F5FC2AE007B39EB /* ResearchKitUI.framework */ = {
 			isa = PBXReferenceProxy;
 			fileType = wrapper.framework;
-			path = ResearchKit.framework;
-			remoteRef = FABC18642EC29BA20071EC17 /* PBXContainerItemProxy */;
+			path = ResearchKitUI.framework;
+			remoteRef = AEA8E1962F5FC2AE007B39EB /* PBXContainerItemProxy */;
 			sourceTree = BUILT_PRODUCTS_DIR;
 		};
 /* End PBXReferenceProxy section */
@@ -400,6 +1145,101 @@
 			targetProxy = AEABF3A52EA06D040055052F /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
+
+/* Begin PBXVariantGroup section */
+		AEA8E12F2F5FC240007B39EB /* ResearchKit.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				AEA8E1082F5FC240007B39EB /* en */,
+				AEA8E1092F5FC240007B39EB /* ar */,
+				AEA8E10A2F5FC240007B39EB /* ca */,
+				AEA8E10B2F5FC240007B39EB /* cs */,
+				AEA8E10C2F5FC240007B39EB /* da */,
+				AEA8E10D2F5FC240007B39EB /* de */,
+				AEA8E10E2F5FC240007B39EB /* el */,
+				AEA8E10F2F5FC240007B39EB /* en_AU */,
+				AEA8E1102F5FC240007B39EB /* en_GB */,
+				AEA8E1112F5FC240007B39EB /* es */,
+				AEA8E1122F5FC240007B39EB /* es_419 */,
+				AEA8E1132F5FC240007B39EB /* fi */,
+				AEA8E1142F5FC240007B39EB /* fr */,
+				AEA8E1152F5FC240007B39EB /* fr_CA */,
+				AEA8E1162F5FC240007B39EB /* he */,
+				AEA8E1172F5FC240007B39EB /* hi */,
+				AEA8E1182F5FC240007B39EB /* hr */,
+				AEA8E1192F5FC240007B39EB /* hu */,
+				AEA8E11A2F5FC240007B39EB /* id */,
+				AEA8E11B2F5FC240007B39EB /* it */,
+				AEA8E11C2F5FC240007B39EB /* ja */,
+				AEA8E11D2F5FC240007B39EB /* ko */,
+				AEA8E11E2F5FC240007B39EB /* ms */,
+				AEA8E11F2F5FC240007B39EB /* nl */,
+				AEA8E1202F5FC240007B39EB /* no */,
+				AEA8E1212F5FC240007B39EB /* pl */,
+				AEA8E1222F5FC240007B39EB /* pt_BR */,
+				AEA8E1232F5FC240007B39EB /* pt_PT */,
+				AEA8E1242F5FC240007B39EB /* ro */,
+				AEA8E1252F5FC240007B39EB /* ru */,
+				AEA8E1262F5FC240007B39EB /* sk */,
+				AEA8E1272F5FC240007B39EB /* sv */,
+				AEA8E1282F5FC240007B39EB /* th */,
+				AEA8E1292F5FC240007B39EB /* tr */,
+				AEA8E12A2F5FC240007B39EB /* uk */,
+				AEA8E12B2F5FC240007B39EB /* vi */,
+				AEA8E12C2F5FC240007B39EB /* zh_CN */,
+				AEA8E12D2F5FC240007B39EB /* zh_HK */,
+				AEA8E12E2F5FC240007B39EB /* zh_TW */,
+			);
+			name = ResearchKit.strings;
+			sourceTree = "<group>";
+		};
+		AEA8E1572F5FC240007B39EB /* ResearchKit.stringsdict */ = {
+			isa = PBXVariantGroup;
+			children = (
+				AEA8E1302F5FC240007B39EB /* en */,
+				AEA8E1312F5FC240007B39EB /* ar */,
+				AEA8E1322F5FC240007B39EB /* ca */,
+				AEA8E1332F5FC240007B39EB /* cs */,
+				AEA8E1342F5FC240007B39EB /* da */,
+				AEA8E1352F5FC240007B39EB /* de */,
+				AEA8E1362F5FC240007B39EB /* el */,
+				AEA8E1372F5FC240007B39EB /* en_AU */,
+				AEA8E1382F5FC240007B39EB /* en_GB */,
+				AEA8E1392F5FC240007B39EB /* es */,
+				AEA8E13A2F5FC240007B39EB /* es_419 */,
+				AEA8E13B2F5FC240007B39EB /* fi */,
+				AEA8E13C2F5FC240007B39EB /* fr */,
+				AEA8E13D2F5FC240007B39EB /* fr_CA */,
+				AEA8E13E2F5FC240007B39EB /* he */,
+				AEA8E13F2F5FC240007B39EB /* hi */,
+				AEA8E1402F5FC240007B39EB /* hr */,
+				AEA8E1412F5FC240007B39EB /* hu */,
+				AEA8E1422F5FC240007B39EB /* id */,
+				AEA8E1432F5FC240007B39EB /* it */,
+				AEA8E1442F5FC240007B39EB /* ja */,
+				AEA8E1452F5FC240007B39EB /* ko */,
+				AEA8E1462F5FC240007B39EB /* ms */,
+				AEA8E1472F5FC240007B39EB /* nl */,
+				AEA8E1482F5FC240007B39EB /* no */,
+				AEA8E1492F5FC240007B39EB /* pl */,
+				AEA8E14A2F5FC240007B39EB /* pt_BR */,
+				AEA8E14B2F5FC240007B39EB /* pt_PT */,
+				AEA8E14C2F5FC240007B39EB /* ro */,
+				AEA8E14D2F5FC240007B39EB /* ru */,
+				AEA8E14E2F5FC240007B39EB /* sk */,
+				AEA8E14F2F5FC240007B39EB /* sv */,
+				AEA8E1502F5FC240007B39EB /* th */,
+				AEA8E1512F5FC240007B39EB /* tr */,
+				AEA8E1522F5FC240007B39EB /* uk */,
+				AEA8E1532F5FC240007B39EB /* vi */,
+				AEA8E1542F5FC240007B39EB /* zh_CN */,
+				AEA8E1552F5FC240007B39EB /* zh_HK */,
+				AEA8E1562F5FC240007B39EB /* zh_TW */,
+			);
+			name = ResearchKit.stringsdict;
+			sourceTree = "<group>";
+		};
+/* End PBXVariantGroup section */
 
 /* Begin XCBuildConfiguration section */
 		AEABF3AC2EA06D040055052F /* Debug */ = {
