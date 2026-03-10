@@ -8,6 +8,7 @@
 import Foundation
 internal import Combine
 
+
 class AppState: ObservableObject {
     @Published var lastCompletedDate: String? = nil
     @Published var missedDays: [String] = []

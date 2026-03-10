@@ -9,6 +9,7 @@ import SwiftUI
 import CoreData
 import BackgroundTasks
 
+
 @main
 struct SensingAppApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
@@ -33,7 +34,7 @@ struct SensingAppApp: App {
         //        BackgroundScheduler.shared.scheduleAppRefresh()
         
     }
-    
+
     var body: some Scene {
         WindowGroup {
             ContentView()
@@ -54,6 +55,7 @@ struct SensingAppApp: App {
         }
     }
 }
+
 
 
 class AppDelegate: NSObject, UIApplicationDelegate {
