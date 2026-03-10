@@ -6,7 +6,8 @@
 //
 
 import Foundation
-import Combine
+internal import Combine
+
 
 class AppState: ObservableObject {
     @Published var lastCompletedDate: String? = nil

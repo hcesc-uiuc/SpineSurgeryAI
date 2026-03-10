@@ -82,16 +82,28 @@
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
+				Survey/Persistence.swift,
 			);
 			target = AEABF3872EA06D020055052F /* SensingApp */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
+/* Begin PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet section */
+		AE952C502F4E2675001764E1 /* Exceptions for "SensingApp" folder in "Copy Bundle Resources" phase from "SensingApp" target */ = {
+			isa = PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet;
+			buildPhase = AEABF3862EA06D020055052F /* Resources */;
+			membershipExceptions = (
+				Survey/Persistence.swift,
+			);
+		};
+/* End PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		AEABF38A2EA06D020055052F /* SensingApp */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
 				AEF7FA892EA0704300735EF7 /* Exceptions for "SensingApp" folder in "SensingApp" target */,
+				AE952C502F4E2675001764E1 /* Exceptions for "SensingApp" folder in "Copy Bundle Resources" phase from "SensingApp" target */,
 			);
 			path = SensingApp;
 			sourceTree = "<group>";
@@ -514,7 +526,7 @@
 				CODE_SIGN_ENTITLEMENTS = SensingApp/SensingApp.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 55S274VKZG;
+				DEVELOPMENT_TEAM = G77DW2U5YC;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
@@ -522,6 +534,12 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = SensingApp/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Journey;
+				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
+				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "We need your permissions to update your health records";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "This app sends reminders to complete your recovery survey.";
+				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "App needs location for background tasks.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "App needs location for background tasks.";
+				INFOPLIST_KEY_NSMotionUsageDescription = "This app needs to be able to access your motion use";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
@@ -541,7 +559,7 @@
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 15.6;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = edu.uiuc.cs.hcesc.SensingApp;
+				PRODUCT_BUNDLE_IDENTIFIER = edu.uiuc.cs.hcesc.SensingApp.v2;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
 				SDKROOT = iphoneos;
@@ -568,7 +586,7 @@
 				CODE_SIGN_ENTITLEMENTS = SensingApp/SensingApp.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 55S274VKZG;
+				DEVELOPMENT_TEAM = G77DW2U5YC;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
@@ -576,6 +594,12 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = SensingApp/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Journey;
+				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
+				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "We need your permissions to update your health records";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "This app sends reminders to complete your recovery survey.";
+				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "App needs location for background tasks.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "App needs location for background tasks.";
+				INFOPLIST_KEY_NSMotionUsageDescription = "This app needs to be able to access your motion use";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
@@ -595,7 +619,7 @@
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 15.6;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = edu.uiuc.cs.hcesc.SensingApp;
+				PRODUCT_BUNDLE_IDENTIFIER = edu.uiuc.cs.hcesc.SensingApp.v2;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
 				SDKROOT = iphoneos;

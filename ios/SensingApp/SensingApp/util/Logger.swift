@@ -5,6 +5,7 @@
 //  Created by Mohammod Mashfiqui Rabbi Shuvo on 10/19/25.
 //
 import Foundation
+import UIKit
 
 final class Logger {
     static let shared = Logger()
@@ -18,7 +19,7 @@ final class Logger {
         let filename = "log_\(dateString).txt"
         
         let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
-        return dir.appendingPathComponent(filename)
+        return dir.appendingPathComponent("logs").appendingPathComponent(filename)
     }
     
     func append(_ message: String) {
@@ -126,6 +127,28 @@ final class Logger {
     //
     func currentLogFilePath() -> URL {
         return logFileURL
+    }
+    
+    func getBatteryStatus() -> String {
+        UIDevice.current.isBatteryMonitoringEnabled = true
+        let level = UIDevice.current.batteryLevel
+
+        let state = UIDevice.current.batteryState
+        var chargingState = ""
+        switch state {
+            case .charging:
+                chargingState = "Charging"
+            case .full:
+                chargingState = "Full"
+            case .unplugged:
+                chargingState = "On battery power"
+            default:
+                chargingState = "Unknown"
+        }
+        
+        let battryLevelString = String(format: "%.2f", level * 100) + "%" + ", " + chargingState
+        
+        return battryLevelString
     }
     
     /// Returns current timestamp string

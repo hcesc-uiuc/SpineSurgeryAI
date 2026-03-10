@@ -6,7 +6,7 @@
 //
 import Foundation
 import CoreMotion
-import Combine
+internal import Combine
 
 class MotionManager: ObservableObject {
     private let motion = CMMotionManager()
