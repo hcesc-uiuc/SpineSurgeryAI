@@ -70,7 +70,6 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		AEA8E0242F5FC1AA007B39EB /* ResearchKitSwiftUI.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = ResearchKitSwiftUI.xcodeproj; path = ResearchKitSwiftUI/ResearchKitSwiftUI.xcodeproj; sourceTree = "<group>"; };
 		AEA8E1892F5FC2AE007B39EB /* ResearchKit.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = ResearchKit.xcodeproj; path = "../../../../../../../../Downloads/ResearchKit-dev-SwiftUI/ResearchKit.xcodeproj"; sourceTree = "<group>"; };
 		AEA8E2042F5FC730007B39EB /* ResearchKitSwiftUI.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = ResearchKitSwiftUI.xcodeproj; path = "../../../../../../../../Downloads/ResearchKit-dev-SwiftUI/ResearchKitSwiftUI/ResearchKitSwiftUI.xcodeproj"; sourceTree = "<group>"; };
 		AEABF3882EA06D020055052F /* SensingApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SensingApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -148,13 +147,6 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		AEA8E0252F5FC1AA007B39EB /* Products */ = {
-			isa = PBXGroup;
-			children = (
-			);
-			name = Products;
-			sourceTree = "<group>";
-		};
 		AEA8E18A2F5FC2AE007B39EB /* Products */ = {
 			isa = PBXGroup;
 			children = (
@@ -197,7 +189,6 @@
 			children = (
 				AEA8E2042F5FC730007B39EB /* ResearchKitSwiftUI.xcodeproj */,
 				AEA8E1892F5FC2AE007B39EB /* ResearchKit.xcodeproj */,
-				AEA8E0242F5FC1AA007B39EB /* ResearchKitSwiftUI.xcodeproj */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -360,10 +351,6 @@
 				{
 					ProductGroup = AEA8E2052F5FC730007B39EB /* Products */;
 					ProjectRef = AEA8E2042F5FC730007B39EB /* ResearchKitSwiftUI.xcodeproj */;
-				},
-				{
-					ProductGroup = AEA8E0252F5FC1AA007B39EB /* Products */;
-					ProjectRef = AEA8E0242F5FC1AA007B39EB /* ResearchKitSwiftUI.xcodeproj */;
 				},
 			);
 			projectRoot = "";
