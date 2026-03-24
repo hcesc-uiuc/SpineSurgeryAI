@@ -6,28 +6,7 @@
 	objectVersion = 77;
 	objects = {
 
-/* Begin PBXBuildFile section */
-		AEA8E2002F5FC650007B39EB /* ResearchKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AEA8E1932F5FC2AE007B39EB /* ResearchKit.framework */; };
-		AEA8E2012F5FC650007B39EB /* ResearchKit.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = AEA8E1932F5FC2AE007B39EB /* ResearchKit.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
-		AEA8E20F2F5FC734007B39EB /* ResearchKitSwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AEA8E20C2F5FC730007B39EB /* ResearchKitSwiftUI.framework */; };
-		AEA8E2102F5FC734007B39EB /* ResearchKitSwiftUI.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = AEA8E20C2F5FC730007B39EB /* ResearchKitSwiftUI.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
-/* End PBXBuildFile section */
-
 /* Begin PBXContainerItemProxy section */
-		AEA8E1922F5FC2AE007B39EB /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = AEA8E1892F5FC2AE007B39EB /* ResearchKit.xcodeproj */;
-			proxyType = 2;
-			remoteGlobalIDString = B183A5951A8535D100C76870;
-			remoteInfo = ResearchKit;
-		};
-		AEA8E20B2F5FC730007B39EB /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = AEA8E2042F5FC730007B39EB /* ResearchKitSwiftUI.xcodeproj */;
-			proxyType = 2;
-			remoteGlobalIDString = 0BF86B1D2B4F360000E3790E;
-			remoteInfo = ResearchKitSwiftUI;
-		};
 		AEABF39B2EA06D040055052F /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = AEABF3802EA06D020055052F /* Project object */;
@@ -45,18 +24,6 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
-		AEA8E1FF2F5FC64D007B39EB /* Embed Frameworks */ = {
-			isa = PBXCopyFilesBuildPhase;
-			buildActionMask = 2147483647;
-			dstPath = "";
-			dstSubfolderSpec = 10;
-			files = (
-				AEA8E2102F5FC734007B39EB /* ResearchKitSwiftUI.framework in Embed Frameworks */,
-				AEA8E2012F5FC650007B39EB /* ResearchKit.framework in Embed Frameworks */,
-			);
-			name = "Embed Frameworks";
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 		FABC183D2EC299760071EC17 /* Embed Frameworks */ = {
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
@@ -126,8 +93,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				AEA8E20F2F5FC734007B39EB /* ResearchKitSwiftUI.framework in Frameworks */,
-				AEA8E2002F5FC650007B39EB /* ResearchKit.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -158,7 +123,6 @@
 		AEA8E18A2F5FC2AE007B39EB /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				AEA8E1932F5FC2AE007B39EB /* ResearchKit.framework */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -166,7 +130,6 @@
 		AEA8E2052F5FC730007B39EB /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				AEA8E20C2F5FC730007B39EB /* ResearchKitSwiftUI.framework */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -212,7 +175,6 @@
 				AEABF3842EA06D020055052F /* Sources */,
 				AEABF3852EA06D020055052F /* Frameworks */,
 				AEABF3862EA06D020055052F /* Resources */,
-				AEA8E1FF2F5FC64D007B39EB /* Embed Frameworks */,
 			);
 			buildRules = (
 			);
@@ -347,7 +309,6 @@
 			mainGroup = AEABF37F2EA06D020055052F;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				FA050AE52EB40715005A867A /* XCRemoteSwiftPackageReference "ResearchKit" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = AEABF3892EA06D020055052F /* Products */;
@@ -374,23 +335,6 @@
 			);
 		};
 /* End PBXProject section */
-
-/* Begin PBXReferenceProxy section */
-		AEA8E1932F5FC2AE007B39EB /* ResearchKit.framework */ = {
-			isa = PBXReferenceProxy;
-			fileType = wrapper.framework;
-			path = ResearchKit.framework;
-			remoteRef = AEA8E1922F5FC2AE007B39EB /* PBXContainerItemProxy */;
-			sourceTree = BUILT_PRODUCTS_DIR;
-		};
-		AEA8E20C2F5FC730007B39EB /* ResearchKitSwiftUI.framework */ = {
-			isa = PBXReferenceProxy;
-			fileType = wrapper.framework;
-			path = ResearchKitSwiftUI.framework;
-			remoteRef = AEA8E20B2F5FC730007B39EB /* PBXContainerItemProxy */;
-			sourceTree = BUILT_PRODUCTS_DIR;
-		};
-/* End PBXReferenceProxy section */
 
 /* Begin PBXResourcesBuildPhase section */
 		AEABF3862EA06D020055052F /* Resources */ = {
@@ -832,18 +776,6 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
-
-/* Begin XCRemoteSwiftPackageReference section */
-		FA050AE52EB40715005A867A /* XCRemoteSwiftPackageReference "ResearchKit" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/ResearchKit/ResearchKit.git";
-			requirement = {
-				kind = versionRange;
-				maximumVersion = 4.0.0;
-				minimumVersion = 3.2.0;
-			};
-		};
-/* End XCRemoteSwiftPackageReference section */
 	};
 	rootObject = AEABF3802EA06D020055052F /* Project object */;
 }
