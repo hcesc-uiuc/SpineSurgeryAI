@@ -7,3 +7,6 @@ __pycache__/
 
 .DS_Store
 ios/.DS_Store
+
+AuthKey_*.p8
+config.ini
