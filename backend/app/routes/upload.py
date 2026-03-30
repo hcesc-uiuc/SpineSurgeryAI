@@ -2,6 +2,7 @@ from flask import Blueprint, request, jsonify
 # from services import s3_service, db_service
 from flask import current_app
 from datetime import datetime
+from auth.middleware import require_auth
 
 #S3 imports
 from flask import Blueprint, request, jsonify
@@ -34,6 +35,7 @@ s3 = boto3.client(
 upload_bp = Blueprint("upload", __name__)
 
 @upload_bp.route("/uploadjson", methods=["POST"])
+@require_auth
 def upload():
     db = current_app.config["DB"]
 
@@ -84,7 +86,8 @@ def upload():
 
     return jsonify({"message": "Upload successful", "key": key}), 201
 
-@upload_bp.route("/uploadfile", methods=["POST"])  
+@upload_bp.route("/uploadfile", methods=["POST"])
+@require_auth
 def uploadfile():
     db = current_app.config["DB"]
 
@@ -117,7 +120,8 @@ def uploadfile():
     return jsonify(message="Upload successful", key=key)
 
 
-@upload_bp.route("/uploadfile/accel", methods=["POST"])  
+@upload_bp.route("/uploadfile/accel", methods=["POST"])
+@require_auth
 def uploadfileaccel():
     db = current_app.config["DB"]
 
@@ -150,7 +154,8 @@ def uploadfileaccel():
     return jsonify(message="Upload successful", key=key)
 
 
-@upload_bp.route("/uploadfile/gyro", methods=["POST"])  
+@upload_bp.route("/uploadfile/gyro", methods=["POST"])
+@require_auth
 def uploadfilegyro():
     db = current_app.config["DB"]
 
@@ -183,7 +188,8 @@ def uploadfilegyro():
     return jsonify(message="Upload successful", key=key)
 
 
-@upload_bp.route("/uploadfile/heartrate", methods=["POST"])  
+@upload_bp.route("/uploadfile/heartrate", methods=["POST"])
+@require_auth
 def uploadfileheartrate():
     db = current_app.config["DB"]
 
@@ -217,6 +223,7 @@ def uploadfileheartrate():
 
 
 @upload_bp.route("/uploadjson/survey", methods=["POST"])
+@require_auth
 def upload_survey():
     """
     Upload a survey response in the format

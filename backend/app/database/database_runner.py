@@ -288,6 +288,27 @@ LEFT JOIN v_last7_strips strips  ON strips.participant_id = p.id
 ORDER BY p.id;
 """
 
+SQL_07_AUTH_TABLES = r"""
+CREATE TABLE IF NOT EXISTS users (
+    id         SERIAL PRIMARY KEY,
+    apple_id   VARCHAR(255) UNIQUE NOT NULL,
+    email      VARCHAR(255),
+    full_name  VARCHAR(255),
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS refresh_tokens (
+    id         SERIAL PRIMARY KEY,
+    user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token_hash VARCHAR(64) NOT NULL,
+    expires_at TIMESTAMPTZ NOT NULL,
+    revoked    BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS ix_refresh_tokens_hash ON refresh_tokens (token_hash);
+"""
+
 SQL_REFRESH_ALL_CONCURRENT = r"""
 REFRESH MATERIALIZED VIEW CONCURRENTLY mv_accel_daily_presence;
 REFRESH MATERIALIZED VIEW CONCURRENTLY mv_gyro_daily_presence;
@@ -322,6 +343,8 @@ DROP VIEW IF EXISTS v_hr_compliance CASCADE;
 DROP VIEW IF EXISTS v_gyro_compliance CASCADE;
 DROP VIEW IF EXISTS v_accel_compliance CASCADE;
 DROP VIEW IF EXISTS v_survey_compliance CASCADE;
+DROP TABLE IF EXISTS refresh_tokens CASCADE;
+DROP TABLE IF EXISTS users CASCADE;
 DROP TABLE IF EXISTS ingestion_health CASCADE;
 
 DROP FUNCTION IF EXISTS fn_compliance_from_presence(regclass) CASCADE;
@@ -450,6 +473,7 @@ def init_all():
         exec_sql(conn, SQL_04_COMPLIANCE_VIEWS, "04_compliance_views")
         exec_sql(conn, SQL_05_OVERVIEW, "05_overview_views")
         exec_sql(conn, SQL_06_INGESTION_HEALTH, "06_ingestion_health")
+        exec_sql(conn, SQL_07_AUTH_TABLES, "07_auth_tables")
         print("✅ init complete.")
 
 def reset_all():

@@ -680,6 +680,46 @@ class DB:
             with database_connection.cursor() as database_cursor:
                 database_cursor.execute(update_sql, (file_size_megabytes, row_id))
 
+    # ---------------------------
+    # Auth helpers
+    # ---------------------------
+    def get_user_by_apple_id(self, apple_id: str) -> Optional[Dict[str, Any]]:
+        """Return user dict (id, apple_id, email, full_name) or None if not found."""
+        sql_text = "SELECT id, apple_id, email, full_name FROM users WHERE apple_id = %s"
+        with self.temporary_database_connection() as conn, conn.cursor(cursor_factory=DictCursor) as cur:
+            cur.execute(sql_text, (apple_id,))
+            row = cur.fetchone()
+            return dict(row) if row else None
+
+    def create_user(self, apple_id: str, email: Optional[str], full_name: Optional[str]) -> Dict[str, Any]:
+        """Insert a new user and return dict with id."""
+        sql_text = (
+            "INSERT INTO users (apple_id, email, full_name) VALUES (%s, %s, %s) RETURNING id, apple_id, email, full_name"
+        )
+        with self.temporary_database_connection() as conn, conn.cursor(cursor_factory=DictCursor) as cur:
+            cur.execute(sql_text, (apple_id, email, full_name))
+            return dict(cur.fetchone())
+
+    def create_refresh_token(self, user_id: int, token_hash: str, expires_at: Any) -> None:
+        """Insert a refresh token record (stores SHA-256 hash, not raw token)."""
+        sql_text = "INSERT INTO refresh_tokens (user_id, token_hash, expires_at) VALUES (%s, %s, %s)"
+        with self.temporary_database_connection() as conn, conn.cursor() as cur:
+            cur.execute(sql_text, (user_id, token_hash, expires_at))
+
+    def get_refresh_token_by_hash(self, token_hash: str) -> Optional[Dict[str, Any]]:
+        """Return refresh token record dict (user_id, revoked, expires_at) or None."""
+        sql_text = "SELECT id, user_id, token_hash, expires_at, revoked FROM refresh_tokens WHERE token_hash = %s"
+        with self.temporary_database_connection() as conn, conn.cursor(cursor_factory=DictCursor) as cur:
+            cur.execute(sql_text, (token_hash,))
+            row = cur.fetchone()
+            return dict(row) if row else None
+
+    def revoke_refresh_token(self, token_hash: str) -> None:
+        """Mark a refresh token as revoked by its hash."""
+        sql_text = "UPDATE refresh_tokens SET revoked = TRUE WHERE token_hash = %s"
+        with self.temporary_database_connection() as conn, conn.cursor() as cur:
+            cur.execute(sql_text, (token_hash,))
+
 # db = DB()
 
 # # Create or ensure a participant exists

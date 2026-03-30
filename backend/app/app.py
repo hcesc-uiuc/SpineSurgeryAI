@@ -7,6 +7,7 @@ from flask import current_app
 from routes.dashboard_api import dashboard_api
 from routes.dashboard_page import dashboard_page
 from heatmap import generate_compliance_report, generate_participant_heatmap
+from auth.routes import auth_bp
 
 import logging
 import sys
@@ -30,6 +31,7 @@ def create_app():
 
     app.register_blueprint(dashboard_api)
     app.register_blueprint(dashboard_page)
+    app.register_blueprint(auth_bp)
     
     
     @app.route("/")
