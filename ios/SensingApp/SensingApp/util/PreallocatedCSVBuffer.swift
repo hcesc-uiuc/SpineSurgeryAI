@@ -21,7 +21,7 @@ final class PreallocatedCSVBuffer {
         // Prepare file path
         let fileManager = FileManager.default
         let docsURL = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first!
-        fileURL = docsURL.appendingPathComponent(filename)
+        fileURL = docsURL.appendingPathComponent("to-be-processed").appendingPathComponent(filename)
 
         // Create file with header if needed
         if !fileManager.fileExists(atPath: fileURL.path) {

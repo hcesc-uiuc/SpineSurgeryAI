@@ -6,13 +6,6 @@
 	objectVersion = 77;
 	objects = {
 
-/* Begin PBXBuildFile section */
-		FABC186C2EC29BB60071EC17 /* ResearchKitSwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = FABC18592EC29B9A0071EC17 /* ResearchKitSwiftUI.framework */; };
-		FABC186D2EC29BB60071EC17 /* ResearchKitSwiftUI.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = FABC18592EC29B9A0071EC17 /* ResearchKitSwiftUI.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
-		FABC186F2EC29BB90071EC17 /* ResearchKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = FABC18652EC29BA20071EC17 /* ResearchKit.framework */; };
-		FABC18702EC29BB90071EC17 /* ResearchKit.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = FABC18652EC29BA20071EC17 /* ResearchKit.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
-/* End PBXBuildFile section */
-
 /* Begin PBXContainerItemProxy section */
 		AEABF39B2EA06D040055052F /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -28,20 +21,6 @@
 			remoteGlobalIDString = AEABF3872EA06D020055052F;
 			remoteInfo = SensingApp;
 		};
-		FABC18582EC29B9A0071EC17 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = FABC18512EC29B9A0071EC17 /* ResearchKitSwiftUI.xcodeproj */;
-			proxyType = 2;
-			remoteGlobalIDString = 0BF86B1D2B4F360000E3790E;
-			remoteInfo = ResearchKitSwiftUI;
-		};
-		FABC18642EC29BA20071EC17 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = FABC185C2EC29BA20071EC17 /* ResearchKit.xcodeproj */;
-			proxyType = 2;
-			remoteGlobalIDString = B183A5951A8535D100C76870;
-			remoteInfo = ResearchKit;
-		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -55,26 +34,15 @@
 			name = "Embed Frameworks";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		FABC186E2EC29BB60071EC17 /* Embed Frameworks */ = {
-			isa = PBXCopyFilesBuildPhase;
-			buildActionMask = 2147483647;
-			dstPath = "";
-			dstSubfolderSpec = 10;
-			files = (
-				FABC18702EC29BB90071EC17 /* ResearchKit.framework in Embed Frameworks */,
-				FABC186D2EC29BB60071EC17 /* ResearchKitSwiftUI.framework in Embed Frameworks */,
-			);
-			name = "Embed Frameworks";
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		AEA8E0242F5FC1AA007B39EB /* ResearchKitSwiftUI.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = ResearchKitSwiftUI.xcodeproj; path = ResearchKitSwiftUI/ResearchKitSwiftUI.xcodeproj; sourceTree = "<group>"; };
+		AEA8E1892F5FC2AE007B39EB /* ResearchKit.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = ResearchKit.xcodeproj; path = "../../../../../../../../Downloads/ResearchKit-dev-SwiftUI/ResearchKit.xcodeproj"; sourceTree = "<group>"; };
+		AEA8E2042F5FC730007B39EB /* ResearchKitSwiftUI.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = ResearchKitSwiftUI.xcodeproj; path = "../../../../../../../../Downloads/ResearchKit-dev-SwiftUI/ResearchKitSwiftUI/ResearchKitSwiftUI.xcodeproj"; sourceTree = "<group>"; };
 		AEABF3882EA06D020055052F /* SensingApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SensingApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AEABF39A2EA06D040055052F /* SensingAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SensingAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		AEABF3A42EA06D040055052F /* SensingAppUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SensingAppUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		FABC18512EC29B9A0071EC17 /* ResearchKitSwiftUI.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = ResearchKitSwiftUI.xcodeproj; path = "../../../ResearchKit-dev-SwiftUI/ResearchKitSwiftUI/ResearchKitSwiftUI.xcodeproj"; sourceTree = "<group>"; };
-		FABC185C2EC29BA20071EC17 /* ResearchKit.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = ResearchKit.xcodeproj; path = "../../../ResearchKit-dev-SwiftUI/ResearchKit.xcodeproj"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -82,16 +50,28 @@
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
+				Survey/Persistence.swift,
 			);
 			target = AEABF3872EA06D020055052F /* SensingApp */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
+/* Begin PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet section */
+		AE952C502F4E2675001764E1 /* Exceptions for "SensingApp" folder in "Copy Bundle Resources" phase from "SensingApp" target */ = {
+			isa = PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet;
+			buildPhase = AEABF3862EA06D020055052F /* Resources */;
+			membershipExceptions = (
+				Survey/Persistence.swift,
+			);
+		};
+/* End PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		AEABF38A2EA06D020055052F /* SensingApp */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
 				AEF7FA892EA0704300735EF7 /* Exceptions for "SensingApp" folder in "SensingApp" target */,
+				AE952C502F4E2675001764E1 /* Exceptions for "SensingApp" folder in "Copy Bundle Resources" phase from "SensingApp" target */,
 			);
 			path = SensingApp;
 			sourceTree = "<group>";
@@ -113,8 +93,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				FABC186F2EC29BB90071EC17 /* ResearchKit.framework in Frameworks */,
-				FABC186C2EC29BB60071EC17 /* ResearchKitSwiftUI.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -135,6 +113,27 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		AEA8E0252F5FC1AA007B39EB /* Products */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		AEA8E18A2F5FC2AE007B39EB /* Products */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		AEA8E2052F5FC730007B39EB /* Products */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
 		AEABF37F2EA06D020055052F = {
 			isa = PBXGroup;
 			children = (
@@ -159,26 +158,11 @@
 		FABC18502EC29B9A0071EC17 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
-				FABC185C2EC29BA20071EC17 /* ResearchKit.xcodeproj */,
-				FABC18512EC29B9A0071EC17 /* ResearchKitSwiftUI.xcodeproj */,
+				AEA8E2042F5FC730007B39EB /* ResearchKitSwiftUI.xcodeproj */,
+				AEA8E1892F5FC2AE007B39EB /* ResearchKit.xcodeproj */,
+				AEA8E0242F5FC1AA007B39EB /* ResearchKitSwiftUI.xcodeproj */,
 			);
 			name = Frameworks;
-			sourceTree = "<group>";
-		};
-		FABC18522EC29B9A0071EC17 /* Products */ = {
-			isa = PBXGroup;
-			children = (
-				FABC18592EC29B9A0071EC17 /* ResearchKitSwiftUI.framework */,
-			);
-			name = Products;
-			sourceTree = "<group>";
-		};
-		FABC185D2EC29BA20071EC17 /* Products */ = {
-			isa = PBXGroup;
-			children = (
-				FABC18652EC29BA20071EC17 /* ResearchKit.framework */,
-			);
-			name = Products;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -191,7 +175,6 @@
 				AEABF3842EA06D020055052F /* Sources */,
 				AEABF3852EA06D020055052F /* Frameworks */,
 				AEABF3862EA06D020055052F /* Resources */,
-				FABC186E2EC29BB60071EC17 /* Embed Frameworks */,
 			);
 			buildRules = (
 			);
@@ -283,23 +266,65 @@
 			knownRegions = (
 				en,
 				Base,
+				de,
+				he,
+				en_AU,
+				ar,
+				el,
+				ja,
+				uk,
+				es_419,
+				zh_CN,
+				es,
+				pt_BR,
+				da,
+				it,
+				sk,
+				pt_PT,
+				ms,
+				sv,
+				cs,
+				ko,
+				no,
+				hu,
+				zh_HK,
+				tr,
+				pl,
+				zh_TW,
+				en_GB,
+				vi,
+				ru,
+				fr_CA,
+				fr,
+				fi,
+				id,
+				nl,
+				th,
+				ro,
+				hr,
+				hi,
+				ca,
+				nb,
 			);
 			mainGroup = AEABF37F2EA06D020055052F;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				FA050AE52EB40715005A867A /* XCRemoteSwiftPackageReference "ResearchKit" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = AEABF3892EA06D020055052F /* Products */;
 			projectDirPath = "";
 			projectReferences = (
 				{
-					ProductGroup = FABC185D2EC29BA20071EC17 /* Products */;
-					ProjectRef = FABC185C2EC29BA20071EC17 /* ResearchKit.xcodeproj */;
+					ProductGroup = AEA8E18A2F5FC2AE007B39EB /* Products */;
+					ProjectRef = AEA8E1892F5FC2AE007B39EB /* ResearchKit.xcodeproj */;
 				},
 				{
-					ProductGroup = FABC18522EC29B9A0071EC17 /* Products */;
-					ProjectRef = FABC18512EC29B9A0071EC17 /* ResearchKitSwiftUI.xcodeproj */;
+					ProductGroup = AEA8E2052F5FC730007B39EB /* Products */;
+					ProjectRef = AEA8E2042F5FC730007B39EB /* ResearchKitSwiftUI.xcodeproj */;
+				},
+				{
+					ProductGroup = AEA8E0252F5FC1AA007B39EB /* Products */;
+					ProjectRef = AEA8E0242F5FC1AA007B39EB /* ResearchKitSwiftUI.xcodeproj */;
 				},
 			);
 			projectRoot = "";
@@ -310,23 +335,6 @@
 			);
 		};
 /* End PBXProject section */
-
-/* Begin PBXReferenceProxy section */
-		FABC18592EC29B9A0071EC17 /* ResearchKitSwiftUI.framework */ = {
-			isa = PBXReferenceProxy;
-			fileType = wrapper.framework;
-			path = ResearchKitSwiftUI.framework;
-			remoteRef = FABC18582EC29B9A0071EC17 /* PBXContainerItemProxy */;
-			sourceTree = BUILT_PRODUCTS_DIR;
-		};
-		FABC18652EC29BA20071EC17 /* ResearchKit.framework */ = {
-			isa = PBXReferenceProxy;
-			fileType = wrapper.framework;
-			path = ResearchKit.framework;
-			remoteRef = FABC18642EC29BA20071EC17 /* PBXContainerItemProxy */;
-			sourceTree = BUILT_PRODUCTS_DIR;
-		};
-/* End PBXReferenceProxy section */
 
 /* Begin PBXResourcesBuildPhase section */
 		AEABF3862EA06D020055052F /* Resources */ = {
@@ -514,7 +522,7 @@
 				CODE_SIGN_ENTITLEMENTS = SensingApp/SensingApp.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 55S274VKZG;
+				DEVELOPMENT_TEAM = G77DW2U5YC;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
@@ -522,6 +530,12 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = SensingApp/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Journey;
+				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
+				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "We need your permissions to update your health records";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "This app sends reminders to complete your recovery survey.";
+				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "App needs location for background tasks.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "App needs location for background tasks.";
+				INFOPLIST_KEY_NSMotionUsageDescription = "This app needs to be able to access your motion use";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
@@ -541,7 +555,7 @@
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 15.6;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = edu.uiuc.cs.hcesc.SensingApp;
+				PRODUCT_BUNDLE_IDENTIFIER = edu.uiuc.cs.hcesc.SensingApp.v2;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
 				SDKROOT = iphoneos;
@@ -568,7 +582,7 @@
 				CODE_SIGN_ENTITLEMENTS = SensingApp/SensingApp.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 55S274VKZG;
+				DEVELOPMENT_TEAM = G77DW2U5YC;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
@@ -576,6 +590,12 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = SensingApp/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Journey;
+				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
+				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "We need your permissions to update your health records";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "This app sends reminders to complete your recovery survey.";
+				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "App needs location for background tasks.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "App needs location for background tasks.";
+				INFOPLIST_KEY_NSMotionUsageDescription = "This app needs to be able to access your motion use";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
@@ -595,7 +615,7 @@
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 15.6;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = edu.uiuc.cs.hcesc.SensingApp;
+				PRODUCT_BUNDLE_IDENTIFIER = edu.uiuc.cs.hcesc.SensingApp.v2;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
 				SDKROOT = iphoneos;
@@ -756,18 +776,6 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
-
-/* Begin XCRemoteSwiftPackageReference section */
-		FA050AE52EB40715005A867A /* XCRemoteSwiftPackageReference "ResearchKit" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/ResearchKit/ResearchKit.git";
-			requirement = {
-				kind = versionRange;
-				maximumVersion = 4.0.0;
-				minimumVersion = 3.2.0;
-			};
-		};
-/* End XCRemoteSwiftPackageReference section */
 	};
 	rootObject = AEABF3802EA06D020055052F /* Project object */;
 }
