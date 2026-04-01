@@ -108,6 +108,11 @@ struct ContentView: View {
                     self.printCurrentLogFile()
                 }
             }.padding(.top, 30)
+            Button("Save accel data"){
+                Task{
+                    AcclerometerRecorder.shared.fetchAndSaveRecordedAcclerometerData()
+                }
+            }.padding(.top, 30)
             Button("Get HealthKit data"){
                 Task{
                     self.getHealthKitData()

@@ -87,6 +87,9 @@ class AppDelegate: NSObject, UIApplicationDelegate {
             print("Ready to use: \(folderURL)")
         }
         
+        //forcing sqlite files to initialize
+        _ = SQLiteSaver.shared
+        
         registerForPushNotifications()
         // Start background location updates immediately
         // LocationManager.shared.start()
