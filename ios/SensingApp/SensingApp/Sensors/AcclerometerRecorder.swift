@@ -47,17 +47,29 @@ class AcclerometerRecorder {
             past = Calendar.current.date(byAdding: .day, value: -2, to: Date())! //record only last 2 days of data.
         }
         
-        let writer = PreallocatedCSVBuffer(filename: "accelerometer_\(currentTimestampString()).csv", capacity: 100000)
+        
+        //saving data to a csv folder
+        //let writer = PreallocatedCSVBuffer(filename: "accelerometer_\(currentTimestampString()).csv", capacity: 100000)
+        
+        SQLiteSaver.shared.open()
         if let dataList = recorder.accelerometerData(from: past, to: now) {
             for case let data as CMRecordedAccelerometerData in dataList {
                 let accel = data.acceleration
-                let unixTime = Int64(data.startDate.timeIntervalSince1970 * 1000)
+                let unixTime = data.startDate.timeIntervalSince1970 * 1000
                 //print("\(unixTime),\(accel.x),\(accel.y),\(accel.z)")
-                writer.addRowStr(rowOfData: "\(unixTime),\(accel.x),\(accel.y),\(accel.z)")
+                // writer.addRowStr(rowOfData: "\(unixTime),\(accel.x),\(accel.y),\(accel.z)")
+                
+                //database writes
+                SQLiteSaver.shared.addRow(
+                    timestamp: unixTime,
+                    dataType: SQLiteSaver.DataType.accelerometer,
+                    blob: accelToBlob(x: accel.x, y: accel.y, z: accel.z)
+                )
             }
         }
-        writer.flush()
-        writer.closeFile()
+        SQLiteSaver.shared.close()
+        // writer.flush()
+        // writer.closeFile()
         
         //save last save date
         UserDefaults.standard.set(now, forKey: key)
@@ -137,6 +149,11 @@ class AcclerometerRecorder {
         formatter.timeZone = .current       // user’s current timezone
         formatter.locale = .current         // user’s locale (e.g., 12/24h preference)
         return formatter.string(from: date)
+    }
+    
+    func accelToBlob(x: Double, y: Double, z: Double) -> Data {
+        var values: [Float32] = [Float32(x), Float32(y), Float32(z)]
+        return Data(bytes: &values, count: values.count * MemoryLayout<Float32>.size)
     }
 }
 

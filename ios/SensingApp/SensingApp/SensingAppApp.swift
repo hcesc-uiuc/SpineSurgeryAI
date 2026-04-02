@@ -8,7 +8,7 @@
 import SwiftUI
 import CoreData
 import BackgroundTasks
-
+import Firebase
 
 @main
 struct SensingAppApp: App {
@@ -86,6 +86,12 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         if let folderURL = createFolder(named: "processed") {
             print("Ready to use: \(folderURL)")
         }
+        
+        //forcing sqlite files to initialize
+        _ = SQLiteSaver.shared
+        
+        // Use the Firebase library to configure APIs.
+        FirebaseApp.configure()
         
         registerForPushNotifications()
         // Start background location updates immediately
