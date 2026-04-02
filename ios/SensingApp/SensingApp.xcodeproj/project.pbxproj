@@ -41,7 +41,6 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		AEA8E0242F5FC1AA007B39EB /* ResearchKitSwiftUI.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = ResearchKitSwiftUI.xcodeproj; path = ResearchKitSwiftUI/ResearchKitSwiftUI.xcodeproj; sourceTree = "<group>"; };
 		AEA8E1892F5FC2AE007B39EB /* ResearchKit.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = ResearchKit.xcodeproj; path = "../../../../../../../../Downloads/ResearchKit-dev-SwiftUI/ResearchKit.xcodeproj"; sourceTree = "<group>"; };
 		AEA8E2042F5FC730007B39EB /* ResearchKitSwiftUI.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = ResearchKitSwiftUI.xcodeproj; path = "../../../../../../../../Downloads/ResearchKit-dev-SwiftUI/ResearchKitSwiftUI/ResearchKitSwiftUI.xcodeproj"; sourceTree = "<group>"; };
 		AEABF3882EA06D020055052F /* SensingApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SensingApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -50,24 +49,18 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		AE4673232F7D92F4002F1AD9 /* Exceptions for "SensingApp" folder in "SensingAppTests" target */ = {
+		625CE5582F7982B80094758E /* Exceptions for "SensingApp" folder in "SensingAppTests" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
-				"GoogleService-Info.plist",
+				login/MockURLProtocol.swift,
 			);
 			target = AEABF3992EA06D040055052F /* SensingAppTests */;
-		};
-		AE4673242F7D92F4002F1AD9 /* Exceptions for "SensingApp" folder in "SensingAppUITests" target */ = {
-			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
-			membershipExceptions = (
-				"GoogleService-Info.plist",
-			);
-			target = AEABF3A32EA06D040055052F /* SensingAppUITests */;
 		};
 		AEF7FA892EA0704300735EF7 /* Exceptions for "SensingApp" folder in "SensingApp" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
+				login/MockURLProtocol.swift,
 				Survey/Persistence.swift,
 			);
 			target = AEABF3872EA06D020055052F /* SensingApp */;
@@ -90,8 +83,7 @@
 			exceptions = (
 				AEF7FA892EA0704300735EF7 /* Exceptions for "SensingApp" folder in "SensingApp" target */,
 				AE952C502F4E2675001764E1 /* Exceptions for "SensingApp" folder in "Copy Bundle Resources" phase from "SensingApp" target */,
-				AE4673232F7D92F4002F1AD9 /* Exceptions for "SensingApp" folder in "SensingAppTests" target */,
-				AE4673242F7D92F4002F1AD9 /* Exceptions for "SensingApp" folder in "SensingAppUITests" target */,
+				625CE5582F7982B80094758E /* Exceptions for "SensingApp" folder in "SensingAppTests" target */,
 			);
 			path = SensingApp;
 			sourceTree = "<group>";
@@ -134,13 +126,6 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		AEA8E0252F5FC1AA007B39EB /* Products */ = {
-			isa = PBXGroup;
-			children = (
-			);
-			name = Products;
-			sourceTree = "<group>";
-		};
 		AEA8E18A2F5FC2AE007B39EB /* Products */ = {
 			isa = PBXGroup;
 			children = (
@@ -181,7 +166,6 @@
 			children = (
 				AEA8E2042F5FC730007B39EB /* ResearchKitSwiftUI.xcodeproj */,
 				AEA8E1892F5FC2AE007B39EB /* ResearchKit.xcodeproj */,
-				AEA8E0242F5FC1AA007B39EB /* ResearchKitSwiftUI.xcodeproj */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -345,10 +329,6 @@
 				{
 					ProductGroup = AEA8E2052F5FC730007B39EB /* Products */;
 					ProjectRef = AEA8E2042F5FC730007B39EB /* ResearchKitSwiftUI.xcodeproj */;
-				},
-				{
-					ProductGroup = AEA8E0252F5FC1AA007B39EB /* Products */;
-					ProjectRef = AEA8E0242F5FC1AA007B39EB /* ResearchKitSwiftUI.xcodeproj */;
 				},
 			);
 			projectRoot = "";
