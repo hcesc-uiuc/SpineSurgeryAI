@@ -97,6 +97,9 @@ struct ContentView: View {
                     Uploader.shared.uploadFile(fileURL: fileURL)
                 }
             }.padding(.top, 30)
+            Button("Crash") {
+              fatalError("Crash was triggered")
+            }.padding(.top, 30)
             Button("Upload All Files"){
                 Task{
                     let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!

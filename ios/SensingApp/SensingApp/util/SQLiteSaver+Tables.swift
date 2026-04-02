@@ -62,9 +62,11 @@ extension SQLiteSaver {
                               Int32(blob.count),
                               SQLITE_TRANSIENT)
         }
-
-        guard sqlite3_step(stmt) == SQLITE_DONE else {
+        
+        let stepResult = sqlite3_step(stmt)
+        guard stepResult == SQLITE_DONE else {
             print("❌ insertData step failed: \(lastError())")
+            sqlite3_finalize(stmt)
             return false
         }
 
