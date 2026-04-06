@@ -1,0 +1,147 @@
+Branch: device-token-api-backgroundrefresh-issue-15
+Base:   mash-sensing-branch-issue-9
+
+====================================================
+WHAT THIS BRANCH DOES
+====================================================
+
+This branch integrates the standalone device token Flask app and the APNs
+notification script into the main backend. Previously these were two separate,
+disconnected pieces of code. This branch merges them into the main app so that:
+
+  1. The main Flask backend can receive and store iOS device tokens.
+  2. The notification script fetches those tokens from the database instead
+     of using a hardcoded value, meaning it sends to ALL registered devices.
+
+
+====================================================
+CHANGES MADE
+====================================================
+
+1. backend/app/database/database.py
+   - Added create_device_tokens_table()
+       Creates the device_tokens table on app startup if it doesn't exist.
+       Table columns: id, device_token (unique), user_id, created_at.
+
+   - Added upsert_device_token(device_token, user_id)
+       Inserts a new device token into the table.
+       If the token already exists (e.g. app relaunched), it updates the
+       user_id and resets created_at. No duplicates.
+
+   - Added get_all_device_tokens()
+       Returns a list of every device token string stored in the table.
+       Used by the notification script to know who to notify.
+
+----------------------------------------------------
+
+2. backend/app/routes/device_token.py  (NEW FILE)
+   - Blueprint registered at /api/uploadDeviceToken
+   - Accepts POST requests with JSON body: { "deviceToken": "...", "userId": "..." }
+   - Validates both fields are present
+   - Calls db.upsert_device_token() to save to the database
+   - Returns 200 on success
+
+----------------------------------------------------
+
+3. backend/app/app.py
+   - Imports and registers the new device_token_bp blueprint under /api
+   - Calls create_device_tokens_table() on app startup so the table is
+     always ready without manual DB migration steps
+
+----------------------------------------------------
+
+4. backend/background_notification/notification_script/sendAPNSNotification2.py
+   - Removed the hardcoded DEVICE_TOKEN constant
+   - Added get_device_tokens() function which connects to the database using
+     the DATABASE_URL environment variable and fetches all stored tokens
+   - Updated send_apns_notification() to accept a device_token parameter
+   - Updated task() to call get_device_tokens() and loop over every token,
+     sending a silent push notification to each one
+
+
+====================================================
+FULL WORKFLOW
+====================================================
+
+STEP 1 — iOS App Registers Its Device Token
+  When the iOS app launches, Apple assigns it a device token (unique ID for
+  that device + app). The app sends it to the backend:
+
+    POST /api/uploadDeviceToken
+    Body: { "deviceToken": "abc123...", "userId": "P0001" }
+
+  The backend saves it to the device_tokens table. If the token already
+  exists it is updated, not duplicated.
+
+STEP 2 — Cron Job Fires Every 15 Minutes
+  On the EC2 server a cron job runs send_apns_notification.sh every 15 minutes.
+  The shell script activates the Python virtual environment and runs
+  sendAPNSNotification2.py.
+
+    Cron entry: */15 * * * * /home/ubuntu/code/scripts/send_apns_notification.sh
+
+STEP 3 — Script Fetches All Tokens from the Database
+  sendAPNSNotification2.py connects to the database via DATABASE_URL and
+  retrieves every device token that has been registered.
+
+STEP 4 — Silent Push Sent to Every Device
+  For each token, a silent background notification is sent to Apple's APNs
+  server. Silent means no alert, sound, or badge is shown to the user.
+  The payload is:
+
+    { "aps": { "content-available": 1 }, "data": { "action": "refresh" } }
+
+STEP 5 — iOS App Wakes Up and Refreshes
+  When the silent push arrives iOS wakes the app in the background. The app
+  sees action: refresh and fetches new data from the backend (sensor uploads,
+  survey responses, etc.) without any user interaction.
+
+Diagram:
+
+  iOS App --> POST /api/uploadDeviceToken --> DB (device_tokens table)
+                                                        |
+  EC2 Cron (every 15 min) --> sendAPNSNotification2.py reads DB
+                                                        |
+                              Apple APNs --> Silent push --> iOS App wakes & refreshes
+
+
+====================================================
+CONFIGURATION
+====================================================
+
+Environment variable required (already in .env):
+  DATABASE_URL — PostgreSQL connection string used by both the main app
+                 and the notification script to connect to the database.
+
+APNs credentials required on EC2 (for notification script):
+  AuthKey_JMZVBP4J48.p8 — Apple private key file, must be in the same
+                           directory as sendAPNSNotification2.py
+
+  TEAM_ID    = G77DW2U5YC
+  KEY_ID     = JMZVBP4J48
+  BUNDLE_ID  = edu.uiuc.cs.hcesc.SensingApp.v2
+  USE_SANDBOX = True  (change to False for production builds)
+
+
+====================================================
+TESTING
+====================================================
+
+1. Test the endpoint:
+   curl -X POST http://localhost:5000/api/uploadDeviceToken \
+     -H "Content-Type: application/json" \
+     -d '{"deviceToken": "testtoken123", "userId": "P0001"}'
+   Expected: {"message": "Device token saved successfully"}
+
+2. Verify DB:
+   SELECT * FROM device_tokens;
+
+3. Test notification script manually on EC2:
+   cd /home/ubuntu/code/scripts/
+   source /home/ubuntu/code/SpineSurveyVenv/bin/activate
+   python sendAPNSNotification2.py
+   Expected: Notification sent successfully for each token in the DB.
+
+NOTE: Push notifications require a real physical iOS device.
+      Simulators do not receive APNs notifications.
+      USE_SANDBOX must match the build type (debug = sandbox, release = production).
