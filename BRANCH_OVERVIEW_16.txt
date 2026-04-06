@@ -1,0 +1,134 @@
+Branch: 16-add-accesstoken-and-refreshtoken-flow
+
+====================================================
+WHAT THIS BRANCH DOES
+====================================================
+
+Implements Google OAuth 2.0 login with a JWT access/refresh token system.
+The iOS app authenticates users via Google, and the backend issues short-lived
+access tokens and long-lived refresh tokens to manage sessions securely.
+
+
+====================================================
+FILES
+====================================================
+
+backend/app/auth/routes.py       — Auth endpoints (authorize, login, refresh, logout)
+backend/app/auth/oauth.py        — Google OAuth helpers (build URL, exchange code)
+backend/app/auth/middleware.py   — require_auth decorator for protected routes
+backend/app/auth/apple.py        — Replaced (Apple Sign In removed, Google OAuth used instead)
+backend/app/auth/passwords.py    — Removed (username/password login no longer used)
+backend/app/database/database.py — Auth DB methods (users, refresh_tokens table helpers)
+backend/app/config.py            — Added OAUTH_CLIENT_ID, OAUTH_CLIENT_SECRET, OAUTH_REDIRECT_URI
+
+
+====================================================
+FULL AUTH FLOW
+====================================================
+
+--- LOGIN (FIRST TIME) ---
+
+  1. iOS calls GET /auth/authorize
+       - Backend builds a Google OAuth URL with client_id, scope, and a
+         random state value (for CSRF protection)
+       - Returns: { authorization_url, state }
+
+  2. iOS opens the URL in ASWebAuthenticationSession
+       - User sees Google's login screen in a secure browser view
+       - After login, Google redirects back to the iOS app with ?code=...
+
+  3. iOS calls POST /auth/login  { code: "...", redirect_uri: "..." }
+       - Backend sends the code to Google's token endpoint
+       - Google returns a Google access token
+       - Backend uses that to fetch the user's identity from Google:
+         { sub (unique Google user ID), email, name }
+       - Looks up the user in the DB by oauth_sub
+       - If user doesn't exist, creates them (upsert)
+       - Generates:
+           access_token  — JWT signed with JWT_SECRET, expires in 15 minutes
+           refresh_token — random 64-byte URL-safe string, expires in 1 year
+       - Stores SHA-256 hash of the refresh_token in the DB (never raw)
+       - Returns: { access_token, refresh_token }
+
+
+--- MAKING AUTHENTICATED API REQUESTS ---
+
+  iOS attaches the access token to every request:
+    Authorization: Bearer <access_token>
+
+  The require_auth middleware decorator on protected routes:
+    - Reads the Bearer token from the Authorization header
+    - Decodes and verifies it using JWT_SECRET
+    - If valid     → sets g.user_id and allows the request through
+    - If expired   → returns 401 { error: token_expired }
+    - If invalid   → returns 401 { error: invalid_token }
+
+
+--- REFRESHING THE ACCESS TOKEN (every 15 min) ---
+
+  iOS calls POST /auth/refresh  { refresh_token: "..." }
+    - Backend hashes the raw token with SHA-256
+    - Looks it up in the refresh_tokens table
+    - Checks: not revoked AND not expired (1 year TTL)
+    - Returns a new: { access_token }
+
+  The refresh token is NOT rotated — same one is valid for 1 year.
+
+
+--- LOGOUT ---
+
+  iOS calls POST /auth/logout  { refresh_token: "..." }
+    - Backend hashes the token and sets revoked = TRUE in the DB
+    - That refresh token can never be used again
+    - Returns: { ok: true }
+
+
+====================================================
+SECURITY DESIGN
+====================================================
+
+  Access token TTL = 15 min
+    Short-lived so a stolen token expires quickly with minimal damage.
+
+  Refresh token stored as SHA-256 hash
+    A database breach does not expose usable tokens.
+
+  state param in OAuth URL
+    Prevents CSRF attacks during the login redirect flow.
+
+  Google OAuth instead of passwords
+    No password storage on our end. Google handles credential security,
+    MFA, and account recovery.
+
+
+====================================================
+CONFIGURATION
+====================================================
+
+Environment variables required (add to .env):
+
+  JWT_SECRET          — Secret key used to sign and verify JWTs.
+                        Generate with: python -c "import secrets; print(secrets.token_urlsafe(64))"
+
+  OAUTH_CLIENT_ID     — Google OAuth 2.0 client ID (from Google Cloud Console)
+  OAUTH_CLIENT_SECRET — Google OAuth 2.0 client secret (from Google Cloud Console)
+  OAUTH_REDIRECT_URI  — Custom URL scheme registered in the iOS app
+                        e.g. com.yourcompany.yourapp://auth/callback
+
+
+====================================================
+DATABASE TABLES REQUIRED
+====================================================
+
+  users
+    id          SERIAL PRIMARY KEY
+    oauth_sub   TEXT UNIQUE NOT NULL   -- Google's unique user identifier
+    email       TEXT
+    full_name   TEXT
+
+  refresh_tokens
+    id          SERIAL PRIMARY KEY
+    user_id     INTEGER REFERENCES users(id)
+    token_hash  TEXT UNIQUE NOT NULL   -- SHA-256 hash of the raw token
+    expires_at  TIMESTAMP WITH TIME ZONE
+    revoked     BOOLEAN DEFAULT FALSE
