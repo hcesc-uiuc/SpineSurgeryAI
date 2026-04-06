@@ -683,6 +683,33 @@ class DB:
     # ---------------------------
     # Auth helpers
     # ---------------------------
+    def create_users_table(self) -> None:
+        """Create the users table if it doesn't exist."""
+        sql_text = """
+        CREATE TABLE IF NOT EXISTS users (
+            id          SERIAL PRIMARY KEY,
+            apple_id    TEXT UNIQUE NOT NULL,
+            email       TEXT,
+            full_name   TEXT
+        );
+        """
+        with self.temporary_database_connection() as conn, conn.cursor() as cur:
+            cur.execute(sql_text)
+
+    def create_refresh_tokens_table(self) -> None:
+        """Create the refresh_tokens table if it doesn't exist."""
+        sql_text = """
+        CREATE TABLE IF NOT EXISTS refresh_tokens (
+            id          SERIAL PRIMARY KEY,
+            user_id     INTEGER NOT NULL REFERENCES users(id),
+            token_hash  TEXT UNIQUE NOT NULL,
+            expires_at  TIMESTAMP WITH TIME ZONE NOT NULL,
+            revoked     BOOLEAN DEFAULT FALSE
+        );
+        """
+        with self.temporary_database_connection() as conn, conn.cursor() as cur:
+            cur.execute(sql_text)
+
     def get_user_by_apple_id(self, apple_id: str) -> Optional[Dict[str, Any]]:
         """Return user dict (id, apple_id, email, full_name) or None if not found."""
         sql_text = "SELECT id, apple_id, email, full_name FROM users WHERE apple_id = %s"

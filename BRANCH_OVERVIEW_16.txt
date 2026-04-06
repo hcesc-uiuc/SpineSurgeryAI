@@ -1,25 +1,24 @@
-Branch: 16-add-accesstoken-and-refreshtoken-flow
+Branch: 17-add-access-token-and-refreshtoken-flow
 
 ====================================================
 WHAT THIS BRANCH DOES
 ====================================================
 
-Implements Google OAuth 2.0 login with a JWT access/refresh token system.
-The iOS app authenticates users via Google, and the backend issues short-lived
-access tokens and long-lived refresh tokens to manage sessions securely.
+Implements Apple Sign In authentication with a JWT access/refresh token system.
+The iOS app authenticates users natively via Apple, sends the identity token to
+the backend, and receives short-lived access tokens and long-lived refresh tokens
+to manage sessions securely.
 
 
 ====================================================
 FILES
 ====================================================
 
-backend/app/auth/routes.py       — Auth endpoints (authorize, login, refresh, logout)
-backend/app/auth/oauth.py        — Google OAuth helpers (build URL, exchange code)
+backend/app/auth/routes.py       — Auth endpoints (login, refresh, logout)
+backend/app/auth/apple.py        — Apple identity token verification logic
 backend/app/auth/middleware.py   — require_auth decorator for protected routes
-backend/app/auth/apple.py        — Replaced (Apple Sign In removed, Google OAuth used instead)
-backend/app/auth/passwords.py    — Removed (username/password login no longer used)
 backend/app/database/database.py — Auth DB methods (users, refresh_tokens table helpers)
-backend/app/config.py            — Added OAUTH_CLIENT_ID, OAUTH_CLIENT_SECRET, OAUTH_REDIRECT_URI
+backend/app/config.py            — Added JWT_SECRET and APPLE_BUNDLE_ID
 
 
 ====================================================
@@ -28,22 +27,23 @@ FULL AUTH FLOW
 
 --- LOGIN (FIRST TIME) ---
 
-  1. iOS calls GET /auth/authorize
-       - Backend builds a Google OAuth URL with client_id, scope, and a
-         random state value (for CSRF protection)
-       - Returns: { authorization_url, state }
+  1. iOS user taps "Sign in with Apple"
+       - Apple handles the login natively on device
+       - Apple returns an identity_token (a signed JWT) to the iOS app
+       - Apple also returns the user's full_name on first login only
+         (Apple never sends the name again after the first time)
 
-  2. iOS opens the URL in ASWebAuthenticationSession
-       - User sees Google's login screen in a secure browser view
-       - After login, Google redirects back to the iOS app with ?code=...
-
-  3. iOS calls POST /auth/login  { code: "...", redirect_uri: "..." }
-       - Backend sends the code to Google's token endpoint
-       - Google returns a Google access token
-       - Backend uses that to fetch the user's identity from Google:
-         { sub (unique Google user ID), email, name }
-       - Looks up the user in the DB by oauth_sub
-       - If user doesn't exist, creates them (upsert)
+  2. iOS calls POST /auth/login  { identity_token: "...", full_name: "..." }
+       - Backend fetches Apple's current public keys from:
+         https://appleid.apple.com/auth/keys
+       - Matches the key used to sign the token (by kid in the header)
+       - Verifies the token signature, audience (APPLE_BUNDLE_ID), and expiry
+       - Extracts from the payload:
+           sub   — Apple's stable unique user ID (used as apple_id in DB)
+           email — present on first login only, may be a relay address
+       - Looks up user in DB by apple_id
+       - If user doesn't exist, creates them (stores name/email now since
+         Apple won't send them again)
        - Generates:
            access_token  — JWT signed with JWT_SECRET, expires in 15 minutes
            refresh_token — random 64-byte URL-safe string, expires in 1 year
@@ -93,12 +93,17 @@ SECURITY DESIGN
   Refresh token stored as SHA-256 hash
     A database breach does not expose usable tokens.
 
-  state param in OAuth URL
-    Prevents CSRF attacks during the login redirect flow.
+  Apple token verified server-side
+    The identity_token is verified against Apple's live public keys,
+    checking signature, audience, issuer, and expiry. Cannot be faked.
 
-  Google OAuth instead of passwords
-    No password storage on our end. Google handles credential security,
-    MFA, and account recovery.
+  Name/email saved on first login
+    Apple only sends user info once. The backend stores it immediately
+    so it isn't lost on subsequent logins.
+
+  Apple Sign In instead of passwords
+    No password storage on our end. Apple handles credential security,
+    Face ID / Touch ID, and 2FA at the OS level.
 
 
 ====================================================
@@ -107,13 +112,11 @@ CONFIGURATION
 
 Environment variables required (add to .env):
 
-  JWT_SECRET          — Secret key used to sign and verify JWTs.
-                        Generate with: python -c "import secrets; print(secrets.token_urlsafe(64))"
+  JWT_SECRET       — Secret key used to sign and verify access tokens (JWTs).
+                     Generate with: python -c "import secrets; print(secrets.token_urlsafe(64))"
 
-  OAUTH_CLIENT_ID     — Google OAuth 2.0 client ID (from Google Cloud Console)
-  OAUTH_CLIENT_SECRET — Google OAuth 2.0 client secret (from Google Cloud Console)
-  OAUTH_REDIRECT_URI  — Custom URL scheme registered in the iOS app
-                        e.g. com.yourcompany.yourapp://auth/callback
+  APPLE_BUNDLE_ID  — Your iOS app's bundle ID (e.g. edu.uiuc.cs.hcesc.SensingApp)
+                     Used to verify the audience of Apple's identity token.
 
 
 ====================================================
@@ -122,13 +125,13 @@ DATABASE TABLES REQUIRED
 
   users
     id          SERIAL PRIMARY KEY
-    oauth_sub   TEXT UNIQUE NOT NULL   -- Google's unique user identifier
-    email       TEXT
-    full_name   TEXT
+    apple_id    TEXT UNIQUE NOT NULL   -- Apple's stable user identifier (sub)
+    email       TEXT                   -- May be a relay address, first login only
+    full_name   TEXT                   -- First login only
 
   refresh_tokens
     id          SERIAL PRIMARY KEY
     user_id     INTEGER REFERENCES users(id)
-    token_hash  TEXT UNIQUE NOT NULL   -- SHA-256 hash of the raw token
+    token_hash  TEXT UNIQUE NOT NULL   -- SHA-256 hash of the raw refresh token
     expires_at  TIMESTAMP WITH TIME ZONE
     revoked     BOOLEAN DEFAULT FALSE

@@ -22,6 +22,8 @@ def create_app():
     try:
         app.config["DB"] = DB()
         app.config["DB"].refresh_summary_cache()
+        app.config["DB"].create_users_table()
+        app.config["DB"].create_refresh_tokens_table()
 
     except Exception as e:
         app.logger.error("\033[91m" + "Cannot connect to database" + "\033[0m" + str(e))
