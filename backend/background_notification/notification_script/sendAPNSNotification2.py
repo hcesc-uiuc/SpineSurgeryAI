@@ -4,27 +4,33 @@ collections.MutableMapping = collections.abc.MutableMapping
 collections.MutableSet = collections.abc.MutableSet
 collections.MutableSequence = collections.abc.MutableSequence
 
+import os
 import time
 import jwt   # PyJWT
 import httpx
+import psycopg2
 from pathlib import Path
-import time
 from datetime import datetime
+from dotenv import load_dotenv
 
-# # --- Configuration ---
-# TEAM_ID = "55S274VKZG"
-# KEY_ID = "MQ8P3Y4342"
-# BUNDLE_ID = "edu.uiuc.cs.hcesc.SensingApp"
-# AUTH_KEY_PATH = Path("../Keys/AuthKey_MQ8P3Y4342-JourneyKey.p8")
-# DEVICE_TOKEN = "d14851092af917bd2740987d8c1b47bad855bb9bb724bd864fc8e7fb6e235abf"
-# USE_SANDBOX = True  # False for production
+load_dotenv()
 
 TEAM_ID = "G77DW2U5YC"
 KEY_ID = "JMZVBP4J48"
 BUNDLE_ID = "edu.uiuc.cs.hcesc.SensingApp.v2"
 AUTH_KEY_PATH = Path("./AuthKey_JMZVBP4J48.p8")
-DEVICE_TOKEN = "d14851092af917bd2740987d8c1b47bad855bb9bb724bd864fc8e7fb6e235abf"
 USE_SANDBOX = True  # False for production
+
+
+def get_device_tokens() -> list[str]:
+    """Fetch all device tokens from the database."""
+    conn = psycopg2.connect(dsn=os.getenv("DATABASE_URL"))
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT device_token FROM device_tokens;")
+            return [row[0] for row in cur.fetchall()]
+    finally:
+        conn.close()
 
 
 def generate_jwt_token():
@@ -47,10 +53,10 @@ def generate_jwt_token():
     return token
 
 
-def send_apns_notification():
+def send_apns_notification(device_token: str):
     jwt_token = generate_jwt_token()
     apns_host = "https://api.sandbox.push.apple.com" if USE_SANDBOX else "https://api.push.apple.com"
-    url = f"{apns_host}/3/device/{DEVICE_TOKEN}"
+    url = f"{apns_host}/3/device/{device_token}"
 
     # headers = {
     #     "apns-topic": BUNDLE_ID,
@@ -99,11 +105,10 @@ def send_apns_notification():
 
 
 def task():
-    print(f"[{datetime.now()}] Sending silent push...")
-    send_apns_notification()
+    tokens = get_device_tokens()
+    print(f"[{datetime.now()}] Sending silent push to {len(tokens)} device(s)...")
+    for token in tokens:
+        send_apns_notification(token)
 
 if __name__ == "__main__":
-    #while True:
     task()
-        # time.sleep(5 * 60)  # 5 minutes = 300 seconds
-    # send_apns_notification()

@@ -1,6 +1,7 @@
 from flask import Flask, render_template
 from config import Config
 from routes.upload import upload_bp
+from routes.device_token import device_token_bp
 from database.database import DB
 from flask import current_app
 from routes.dashboard_api import dashboard_api
@@ -20,12 +21,14 @@ def create_app():
     try:
         app.config["DB"] = DB()
         app.config["DB"].refresh_summary_cache()
+        app.config["DB"].create_device_tokens_table()
 
     except Exception as e:
         app.logger.error("\033[91m" + "Cannot connect to database" + str(e) + "\033[0m")
 
     # Register blueprints
     app.register_blueprint(upload_bp, url_prefix="/api")
+    app.register_blueprint(device_token_bp, url_prefix="/api")
 
     app.register_blueprint(dashboard_api)
     app.register_blueprint(dashboard_page)
