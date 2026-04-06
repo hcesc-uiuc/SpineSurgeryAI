@@ -111,19 +111,36 @@ class DB:
         """Insert accelerometer objects (timestamp + URL). Returns inserted row count.
 
         Accepts rows as:
-        - dict: {"ts": <str/datetime/unix>, "url": <str>}
-        - tuple: (<ts>, <url>)
+        - dict: {"url": <str>, "ts": <str/datetime/unix> (optional, defaults to placeholder)}
+        - tuple: (<url>,) or (<ts>, <url>)
+        
+        If ts is not provided, it defaults to Unix epoch (1970-01-01) as a placeholder.
+        The checker will later update ts to the actual recording time from the data file.
         """
+        # Placeholder timestamp - obviously wrong so it's clear the checker hasn't processed it yet
+        PLACEHOLDER_TS = "1970-01-01T00:00:00+00:00"
+        
         participant_id_integer = self.create_participant_if_missing(external_participant_identifier)
         accelerometer_payload_rows_list: List[Tuple[int, str, str]] = []  # (participant_id, iso8601_ts, url)
 
         for single_accel_record in accelerometer_data_rows_sequence:
             if isinstance(single_accel_record, dict):
-                timestamp_iso8601_string = self.normalize_timestamp_to_iso8601(single_accel_record["ts"])
                 object_url_string = single_accel_record.get("url")
+                # ts is optional - default to placeholder if not provided
+                if "ts" in single_accel_record:
+                    timestamp_iso8601_string = self.normalize_timestamp_to_iso8601(single_accel_record["ts"])
+                else:
+                    timestamp_iso8601_string = PLACEHOLDER_TS
             else:
-                timestamp_iso8601_string = self.normalize_timestamp_to_iso8601(single_accel_record[0])
-                object_url_string = single_accel_record[1] if len(single_accel_record) > 1 else None
+                # For tuples, check length to determine format
+                if len(single_accel_record) == 1:
+                    # Just URL provided
+                    object_url_string = single_accel_record[0]
+                    timestamp_iso8601_string = PLACEHOLDER_TS
+                else:
+                    # (ts, url) format
+                    timestamp_iso8601_string = self.normalize_timestamp_to_iso8601(single_accel_record[0])
+                    object_url_string = single_accel_record[1]
 
             if not object_url_string:
                 raise ValueError("accelerometer row missing required 'url' value")
@@ -155,24 +172,37 @@ class DB:
     ) -> int:
         """Insert gyroscope objects (timestamp + URL). Returns inserted row count.
 
-        Expects each row to be either:
-        - dict: {"ts": <str/datetime/unix>, "url": <str>}
-        - tuple: (<ts>, <url>)
+        Accepts rows as:
+        - dict: {"url": <str>, "ts": <str/datetime/unix> (optional, defaults to placeholder)}
+        - tuple: (<url>,) or (<ts>, <url>)
+        
+        If ts is not provided, it defaults to Unix epoch (1970-01-01) as a placeholder.
+        The checker will later update ts to the actual recording time from the data file.
         """
+        # Placeholder timestamp - obviously wrong so it's clear the checker hasn't processed it yet
+        PLACEHOLDER_TS = "1970-01-01T00:00:00+00:00"
+        
         participant_id_integer = self.create_participant_if_missing(external_participant_identifier)
         gyroscope_payload_rows_list: List[Tuple[int, str, str]] = []  # (participant_id, iso8601_ts, S3/HTTP url)
 
         for single_gyroscope_record in gyroscope_data_rows_sequence:
             if isinstance(single_gyroscope_record, dict):
-                timestamp_iso8601_string = self.normalize_timestamp_to_iso8601(
-                    single_gyroscope_record["ts"]
-                )
                 object_url_string = single_gyroscope_record.get("url")
+                # ts is optional - default to placeholder if not provided
+                if "ts" in single_gyroscope_record:
+                    timestamp_iso8601_string = self.normalize_timestamp_to_iso8601(single_gyroscope_record["ts"])
+                else:
+                    timestamp_iso8601_string = PLACEHOLDER_TS
             else:
-                timestamp_iso8601_string = self.normalize_timestamp_to_iso8601(
-                    single_gyroscope_record[0]
-                )
-                object_url_string = single_gyroscope_record[1] if len(single_gyroscope_record) > 1 else None
+                # For tuples, check length to determine format
+                if len(single_gyroscope_record) == 1:
+                    # Just URL provided
+                    object_url_string = single_gyroscope_record[0]
+                    timestamp_iso8601_string = PLACEHOLDER_TS
+                else:
+                    # (ts, url) format
+                    timestamp_iso8601_string = self.normalize_timestamp_to_iso8601(single_gyroscope_record[0])
+                    object_url_string = single_gyroscope_record[1]
 
             if not object_url_string:
                 raise ValueError("gyroscope row missing required 'url' value")
@@ -200,21 +230,41 @@ class DB:
         self,
         external_participant_identifier: str,
         heart_rate_data_rows_sequence: Sequence[Dict[str, Any] | Tuple[Any, Any]],
-    ) -> int: #returns how many rows inserted
+    ) -> int:
+        """Insert heart rate objects (timestamp + URL). Returns inserted row count.
+
+        Accepts rows as:
+        - dict: {"url": <str>, "ts": <str/datetime/unix> (optional, defaults to placeholder)}
+        - tuple: (<url>,) or (<ts>, <url>)
+        
+        If ts is not provided, it defaults to Unix epoch (1970-01-01) as a placeholder.
+        The checker will later update ts to the actual recording time from the data file.
+        """
+        # Placeholder timestamp - obviously wrong so it's clear the checker hasn't processed it yet
+        PLACEHOLDER_TS = "1970-01-01T00:00:00+00:00"
+        
         participant_id_integer = self.create_participant_if_missing(external_participant_identifier)
         heart_rate_payload_rows_list: List[Tuple[int, str, str]] = []  # (participant_id, iso8601_ts, S3 url)
+        
         for single_heart_rate_record in heart_rate_data_rows_sequence:
             if isinstance(single_heart_rate_record, dict):
-                timestamp_iso8601_string = self.normalize_timestamp_to_iso8601(
-                    single_heart_rate_record["ts"] # timestamp
-                )
                 object_url_string = single_heart_rate_record.get("url")
-
+                # ts is optional - default to placeholder if not provided
+                if "ts" in single_heart_rate_record:
+                    timestamp_iso8601_string = self.normalize_timestamp_to_iso8601(single_heart_rate_record["ts"])
+                else:
+                    timestamp_iso8601_string = PLACEHOLDER_TS
             else:
-                timestamp_iso8601_string = self.normalize_timestamp_to_iso8601(
-                    single_heart_rate_record[0]
-                )
-                object_url_string = single_heart_rate_record[1] if len(single_heart_rate_record) > 1 else None
+                # For tuples, check length to determine format
+                if len(single_heart_rate_record) == 1:
+                    # Just URL provided
+                    object_url_string = single_heart_rate_record[0]
+                    timestamp_iso8601_string = PLACEHOLDER_TS
+                else:
+                    # (ts, url) format
+                    timestamp_iso8601_string = self.normalize_timestamp_to_iso8601(single_heart_rate_record[0])
+                    object_url_string = single_heart_rate_record[1]
+                    
             if not object_url_string:
                 raise ValueError("heart_rate row missing required 'url' value")
 
@@ -236,67 +286,239 @@ class DB:
             )
         return database_cursor.rowcount or len(heart_rate_payload_rows_list)
 
-    # fix with parser also look at HR 
     def insert_survey(
-        self,
-        external_participant_identifier: str,
-        survey_date_value_any: Any,
-        survey_payload_dictionary: Dict[str, Any],
-    ) -> None:
-        """Upsert a daily survey JSON by (participant_id, survey_date)."""
+    self,
+    external_participant_identifier: str,
+    survey_data_rows_sequence: Sequence[Dict[str, Any] | Tuple[Any, ...]],
+    ) -> int:
+        """
+        Insert survey rows (date + URL + optional payload) for a participant.
+
+        Each row can be:
+        - dict: {"survey_date": <str/date>, "url": <str>, "payload": <dict or JSON-serializable, optional>}
+        - tuple: (<survey_date>, <url>, <payload_optional>)
+
+        Upserts on (participant_id, survey_date) like before.
+        """
         import datetime as _dt
-        participant_id_integer = self.create_participant_if_missing(external_participant_identifier)
-        if isinstance(survey_date_value_any, str):
-            survey_date_iso8601_string = survey_date_value_any
-        elif isinstance(survey_date_value_any, _dt.date):
-            survey_date_iso8601_string = survey_date_value_any.isoformat()
-        else:
-            raise TypeError("survey_date must be date or ISO string")
-        upsert_daily_survey_sql = (
-            "INSERT INTO daily_survey (participant_id, survey_date, payload) "
-            "VALUES (%s, %s, %s) "
-            "ON CONFLICT (participant_id, survey_date) DO UPDATE SET payload = EXCLUDED.payload"
+
+        participant_id_integer = self.create_participant_if_missing(
+            external_participant_identifier
         )
-        with self.temporary_database_connection() as database_connection, database_connection.cursor() as database_cursor:
-            database_cursor.execute(
-                upsert_daily_survey_sql,
+
+        survey_payload_rows_list: List[Tuple[int, str, str, str]] = []  # (participant_id, survey_date_iso, object_url, payload_json)
+
+        for single_survey_record in survey_data_rows_sequence:
+            # ----- dict style -----
+            if isinstance(single_survey_record, dict):
+                raw_date = single_survey_record["survey_date"]
+                object_url_string = single_survey_record.get("url")
+                payload_obj = single_survey_record.get("payload", {})
+            # ----- tuple style -----
+            else:
+                raw_date = single_survey_record[0]
+                object_url_string = single_survey_record[1] if len(single_survey_record) > 1 else None
+                payload_obj = single_survey_record[2] if len(single_survey_record) > 2 else {}
+
+            # normalize survey_date to YYYY-MM-DD
+            if isinstance(raw_date, str):
+                survey_date_iso8601_string = raw_date
+            elif isinstance(raw_date, _dt.date):
+                survey_date_iso8601_string = raw_date.isoformat()
+            else:
+                raise TypeError("survey_date must be date or ISO string")
+
+            if not object_url_string:
+                raise ValueError("survey row missing required 'url' (object_url) value")
+
+            survey_payload_rows_list.append(
                 (
                     participant_id_integer,
                     survey_date_iso8601_string,
-                    json.dumps(survey_payload_dictionary),
+                    object_url_string,
+                    json.dumps(payload_obj),
+                )
+            )
+
+        if not survey_payload_rows_list:
+            return 0
+
+        upsert_daily_survey_sql = """
+            INSERT INTO daily_survey (
+                participant_id,
+                survey_date,
+                object_url,
+                payload
+            )
+            VALUES %s
+            ON CONFLICT (participant_id, survey_date)
+            DO UPDATE SET
+                object_url = EXCLUDED.object_url,
+                payload    = EXCLUDED.payload
+        """
+
+        with self.temporary_database_connection() as database_connection, database_connection.cursor() as database_cursor:
+            execute_values(
+                database_cursor,
+                upsert_daily_survey_sql,
+                survey_payload_rows_list,
+                page_size=1000,
+            )
+            return database_cursor.rowcount or len(survey_payload_rows_list)
+
+    # Writes metrics about data ingestion health, sent db
+    def insert_ingestion_health(
+        self,
+        modality: str,
+        external_participant_identifier: str,
+        window_start: Any,
+        window_end: Any,
+        analysis: Dict[str, Any],
+        status: Optional[str] = None,
+    ) -> None:
+        """
+        Insert or update ingestion health record for a participant/modality/window.
+
+        `analysis` is the dict returned by analyze_uploaded_data(...), e.g.:
+
+        {
+            "format": "csv",
+            "row_count": 90000,
+            "sampling_rate_hz": 100.0,
+            "expected_samples": 90000,
+            "actual_samples": 87000,
+            "completeness": 0.966,
+            "total_gap_seconds": 2.5,
+            "gap_fraction": 0.0027,
+            "is_usable": True,
+        }
+        """
+
+        participant_id_integer = self.create_participant_if_missing(
+            external_participant_identifier
+        )
+
+        expected_samples = int(analysis.get("expected_samples", 0))
+        actual_samples = int(analysis.get("actual_samples", 0))
+        completeness = float(analysis.get("completeness", 0.0))
+
+        pct_expected = completeness * 100.0 if expected_samples > 0 else 0.0
+
+        # If caller didn't pass explicit status, derive from is_usable
+        if status is None:
+            is_usable_flag = bool(analysis.get("is_usable", False))
+            status = "OK" if is_usable_flag else "LOW"
+
+        upsert_sql = """
+            INSERT INTO ingestion_health (
+                modality, participant_id, window_start, window_end,
+                expected_count, actual_count, pct_expected, status,
+                format, row_count, sampling_rate_hz,
+                completeness, total_gap_seconds, gap_fraction, is_usable
+            )
+            VALUES (%s, %s, %s, %s,
+                    %s, %s, %s, %s,
+                    %s, %s, %s,
+                    %s, %s, %s, %s)
+            ON CONFLICT (modality, participant_id, window_start)
+            DO UPDATE SET
+                actual_count      = EXCLUDED.actual_count,
+                expected_count    = EXCLUDED.expected_count,
+                pct_expected      = EXCLUDED.pct_expected,
+                status            = EXCLUDED.status,
+                format            = EXCLUDED.format,
+                row_count         = EXCLUDED.row_count,
+                sampling_rate_hz  = EXCLUDED.sampling_rate_hz,
+                completeness      = EXCLUDED.completeness,
+                total_gap_seconds = EXCLUDED.total_gap_seconds,
+                gap_fraction      = EXCLUDED.gap_fraction,
+                is_usable         = EXCLUDED.is_usable,
+                updated_at        = now();
+        """
+
+        with self.temporary_database_connection() as conn, conn.cursor() as cur:
+            cur.execute(
+                upsert_sql,
+                (
+                    modality,
+                    participant_id_integer,
+                    window_start,
+                    window_end,
+                    expected_samples,
+                    actual_samples,
+                    pct_expected,
+                    status,
+                    analysis.get("format"),
+                    int(analysis.get("row_count", 0)),
+                    float(analysis.get("sampling_rate_hz", 0.0)),
+                    float(analysis.get("completeness", 0.0)),
+                    float(analysis.get("total_gap_seconds", 0.0)),
+                    float(analysis.get("gap_fraction", 1.0)),
+                    bool(analysis.get("is_usable", False)),
                 ),
             )
 
     # ---------------------------
-    # Refresh cache for compliance periods
+    # Update helpers
     # ---------------------------
-    def refresh_summary_cache(self, use_concurrent_refresh: bool = True) -> None: # Use after flask push insert data then refresh
-        #Refresh all daily presence materialized views. If concurrent refresh fails (e.g., first population), falls back automatically.
+    def update_recording_timestamp(
+        self,
+        kind: str,
+        row_id: int,
+        recording_timestamp_iso: str,
+    ) -> bool:
+        """
+        Update the ts field for a timeseries row to reflect the actual recording time
+        (extracted from the uploaded data file).
         
-        refresh_all_materialized_views_sql_template = (
-            "REFRESH MATERIALIZED VIEW {mode} mv_accel_daily_presence;"
-            "REFRESH MATERIALIZED VIEW {mode} mv_gyro_daily_presence;"
-            "REFRESH MATERIALIZED VIEW {mode} mv_hr_daily_presence;"
-            "REFRESH MATERIALIZED VIEW {mode} mv_survey_daily_presence;"
-        )
- 
-        def execute_refresh_with_mode(mode_clause_string: str) -> None:
-            refresh_statement_sql = refresh_all_materialized_views_sql_template.format(
-                mode=mode_clause_string
-            )
-            with self.temporary_database_connection() as database_connection, database_connection.cursor() as database_cursor:
-                database_cursor.execute(refresh_statement_sql)
-                database_connection.commit()
+        Args:
+            kind: "accel", "gyro", or "hr"
+            row_id: The database row id to update
+            recording_timestamp_iso: ISO 8601 timestamp string of when data was actually recorded
+            
+        Returns:
+            True if update succeeded, False otherwise
+        """
+        # Map kind to table name
+        table_map = {
+            "accel": "accelerometer",
+            "gyro": "gyroscope",
+            "hr": "heart_rate",
+        }
+        
+        table_name = table_map.get(kind)
+        if not table_name:
+            raise ValueError(f"Unknown kind: {kind}. Expected 'accel', 'gyro', or 'hr'")
+        
+        update_sql = sql.SQL(
+            "UPDATE {table} SET ts = %s WHERE id = %s"
+        ).format(table=sql.Identifier(table_name))
+        
+        with self.temporary_database_connection() as conn, conn.cursor() as cur:
+            cur.execute(update_sql, (recording_timestamp_iso, row_id))
+            return cur.rowcount > 0
 
-        try:
-            if use_concurrent_refresh:
-                execute_refresh_with_mode("CONCURRENTLY ")
-            else:
-                execute_refresh_with_mode("")
-        except Exception:
-            execute_refresh_with_mode("")
+    def refresh_summary_cache(self, use_concurrent_refresh: bool = True) -> None:
+        views = [
+            "mv_accel_daily_presence",
+            "mv_gyro_daily_presence",
+            "mv_hr_daily_presence",
+            "mv_survey_daily_presence",
+        ]
 
-    
+        def do_refresh(mode: str):
+            for view in views:
+                stmt = f"REFRESH MATERIALIZED VIEW {mode}{view};"
+                with self.temporary_database_connection() as conn, conn.cursor() as cur:
+                    cur.execute(stmt)
+
+        if use_concurrent_refresh:
+            try:
+                do_refresh("CONCURRENTLY ")
+            except Exception:
+                do_refresh("")
+        else:
+            do_refresh("")
     # rewrite this 
     def get_dashboard(
         self,
@@ -346,10 +568,10 @@ class DB:
     def get_compliance_for(self, external_participant_identifier: str) -> Dict[str, Any]: # let postgres handle compliance, Return a compact compliance dict for accel/gyro/hr/survey for one participant
         select_compliance_sql = """
             SELECT p.external_id,
-                   ac.days_3  AS accel_days_3, ac.days_7  AS accel_days_7, ac.meets_1_of_3 AS accel_1of3, ac.meets_4_of_7 AS accel_4of7,
-                   gc.days_3  AS gyro_days_3,  gc.days_7  AS gyro_days_7,  gc.meets_1_of_3 AS gyro_1of3,  gc.meets_4_of_7 AS gyro_4of_7,
-                   hc.days_3  AS hr_days_3,    hc.days_7  AS hr_days_7,    hc.meets_1_of_3 AS hr_1of3,    hc.meets_4_of_7 AS hr_4of_7,
-                   sc.days_3  AS survey_days_3, sc.days_7  AS survey_days_7,sc.meets_1_of_3 AS survey_1of_3,sc.meets_4_of_7 AS survey_4_of_7
+                ac.days_3  AS accel_days_3, ac.days_7  AS accel_days_7, ac.meets_1_of_3 AS accel_1of3, ac.meets_4_of_7 AS accel_4of7,
+                gc.days_3  AS gyro_days_3,  gc.days_7  AS gyro_days_7,  gc.meets_1_of_3 AS gyro_1of3,  gc.meets_4_of_7 AS gyro_4of_7,
+                hc.days_3  AS hr_days_3,    hc.days_7  AS hr_days_7,    hc.meets_1_of_3 AS hr_1of3,    hc.meets_4_of_7 AS hr_4of_7,
+                sc.days_3  AS survey_days_3, sc.days_7  AS survey_days_7,sc.meets_1_of_3 AS survey_1of_3,sc.meets_4_of_7 AS survey_4_of_7
             FROM participants p
             LEFT JOIN v_accel_compliance ac  ON ac.participant_id = p.id
             LEFT JOIN v_gyro_compliance  gc  ON gc.participant_id = p.id
@@ -364,7 +586,7 @@ class DB:
 
     def get_table(self, table_name: str) -> list[dict]: # gets all rows from a table
         # Prevent SQL injection by validating table name
-        allowed_tables = {"accelerometer", "gyroscope", "heart_rate", "daily_survey", "participants"}
+        allowed_tables = {"accelerometer", "gyroscope", "heart_rate", "daily_survey", "participants", "ingestion_health"}
         if table_name not in allowed_tables:
             raise ValueError(f"Table '{table_name}' not allowed.")
 
@@ -398,8 +620,8 @@ class DB:
             """
             SELECT d.day::text, COALESCE(pcnt, 0) AS count
             FROM generate_series(current_date - %s::int * INTERVAL '1 day' + INTERVAL '1 day',
-                                 current_date,
-                                 '1 day') AS d(day)
+                                current_date,
+                                '1 day') AS d(day)
             LEFT JOIN (
                 SELECT m.day, COUNT(*) AS pcnt
                 FROM {mv} m
@@ -443,6 +665,20 @@ class DB:
         with self.temporary_database_connection() as database_connection, database_connection.cursor() as database_cursor:
             database_cursor.execute(truncate_all_timeseries_sql)
             database_connection.commit()
+
+    # adds file size of the upload
+    def update_file_size(self, kind: str, row_id: int, file_size_megabytes: int) -> bool:
+        table_map = {"accel": "accelerometer", "gyro": "gyroscope", "hr": "heart_rate"}
+        table_name = table_map.get(kind)
+        if not table_name:
+            raise ValueError(f"Unknown kind: {kind}")
+        
+        update_sql = sql.SQL("UPDATE {table} SET file_size_bytes = %s WHERE id = %s").format(
+            table=sql.Identifier(table_name)
+        )
+        with self.temporary_database_connection() as database_connection:
+            with database_connection.cursor() as database_cursor:
+                database_cursor.execute(update_sql, (file_size_megabytes, row_id))
 
 # db = DB()
 
