@@ -10,8 +10,9 @@ It includes:
 
 ---
 
-## Project Structure
-"SpineSurgeryProject/
+## Server side code Structure
+```
+SpineSurgeryProject/
 │
 ├── app.py                # Flask entry point (app factory)
 ├── config.py             # Centralized configuration
@@ -30,7 +31,7 @@ It includes:
 │
 ├── db_runner.py          # One‑file Postgres manager (CLI for schema, refresh, dashboard)
 └── database.py           # Connection‑pooled DB abstraction class (programmatic inserts/queries)"
-
+```
 
 ---
 

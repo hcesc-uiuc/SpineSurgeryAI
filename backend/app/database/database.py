@@ -672,7 +672,7 @@ class DB:
         table_name = table_map.get(kind)
         if not table_name:
             raise ValueError(f"Unknown kind: {kind}")
-        
+
         update_sql = sql.SQL("UPDATE {table} SET file_size_bytes = %s WHERE id = %s").format(
             table=sql.Identifier(table_name)
         )
@@ -746,6 +746,41 @@ class DB:
         sql_text = "UPDATE refresh_tokens SET revoked = TRUE WHERE token_hash = %s"
         with self.temporary_database_connection() as conn, conn.cursor() as cur:
             cur.execute(sql_text, (token_hash,))
+
+    # ---------------------------
+    # Device token helpers
+    # ---------------------------
+    def create_device_tokens_table(self) -> None:
+        """Create the device_tokens table and indexes if they don't exist."""
+        sql_text = """
+        CREATE TABLE IF NOT EXISTS device_tokens (
+            id SERIAL PRIMARY KEY,
+            device_token VARCHAR(255) NOT NULL UNIQUE,
+            user_id TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_device_token ON device_tokens(device_token);
+        """
+        with self.temporary_database_connection() as conn, conn.cursor() as cur:
+            cur.execute(sql_text)
+
+    def upsert_device_token(self, device_token: str, user_id: str) -> None:
+        """Insert a device token or update its user_id/timestamp if it already exists."""
+        sql_text = """
+        INSERT INTO device_tokens (device_token, user_id)
+        VALUES (%s, %s)
+        ON CONFLICT (device_token)
+        DO UPDATE SET user_id = EXCLUDED.user_id, created_at = CURRENT_TIMESTAMP;
+        """
+        with self.temporary_database_connection() as conn, conn.cursor() as cur:
+            cur.execute(sql_text, (device_token, user_id))
+
+    def get_all_device_tokens(self) -> List[str]:
+        """Return a list of all stored device token strings."""
+        sql_text = "SELECT device_token FROM device_tokens;"
+        with self.temporary_database_connection() as conn, conn.cursor() as cur:
+            cur.execute(sql_text)
+            return [row[0] for row in cur.fetchall()]
 
 # db = DB()
 
