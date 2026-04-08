@@ -177,24 +177,37 @@ struct MainAppView: View {
     }
     
     private func getHealthKitData() {
+        let daysRequested = 1
+        let metricsRequested: Set<SupportedMetric> = [.steps] // Empty = All
+        
         print("Requesting: HKManager.refreshWithNewRange")
-        HKManager.refreshWithNewRange(days: 7)
-        print("Requesting: HKManager.trialData. Len:\(HKManager.trialData.count)")
-        for (index, point) in HKManager.trialData.enumerated(){
-            let hkDataPointString = formatRawString(
-                point,
-                unixStartStr: String(Int(point.startDate.timeIntervalSince1970)),
-                unixEndStr: String(Int(point.endDate.timeIntervalSince1970))
-            )
-            print("\(index) - \(hkDataPointString)")
+        
+        HKManager.refreshWithNewRange(days: 1,types:metricsRequested) { data in
+            
+            print("Success! Data received. Len: \(data.count), Days:\(daysRequested), Types:\(metricsRequested)")
+                
+                for (index, point) in data.enumerated() {
+                    let hkDataPointString = formatRawString(
+                        point,
+                        unixStartStr: String(Int(point.startDate.timeIntervalSince1970)),
+                        unixEndStr: String(Int(point.endDate.timeIntervalSince1970))
+                    )
+                    print("\(index) - \(hkDataPointString)")
+                    print("")
+                }
         }
     }
     
     func formatRawString(_ p: HealthKitManager.RawDataPoint, unixStartStr: String, unixEndStr: String) -> String {
         let dateStr = p.startDate.formatted(.dateTime.month().day().hour().minute().second())
-        let metaStr = p.metadata.map { "\($0.key):\($0.value)" }.joined(separator: "|")
         
-        return "[\(dateStr)] TYPE:\(p.type) | VAL:\(p.value)\(p.unit) | UNIX_START:\(unixStartStr) | UNIX_END:\(unixEndStr) | DUR:\(Float(unixEndStr)!-Float(unixStartStr)!)ms | SRC:\(p.sourceName) | BID:\(p.bundleID) | DEV:\(p.deviceName ?? "NA") | MOD:\(p.deviceModel ?? "NA") | SW:\(p.softwareVer ?? "NA") | ID:\(p.id.uuidString) | META:{\(metaStr)}"
+        let displayValue = p.value ?? 0.0
+        
+        let metaStr = (p.metadata ?? [:]).map { "\($0.key):\($0.value)" }.joined(separator: "|")
+        
+        let durationMs = Int(p.duration * 1000)
+        
+        return "[\(dateStr)] |ID:\(p.id.uuidString)| TYPE:\(p.type) | VAL:\(displayValue) \(p.unit) | UNIX_START:\(unixStartStr) | UNIX_END:\(unixEndStr) | DUR:\(durationMs)ms | SRC:\(p.sourceName) | BID:\(p.bundleID) | DEV:\(p.deviceName ?? "NA") | MOD:\(p.deviceModel ?? "NA") | SW:\(p.softwareVer ?? "NA") | ID:\(p.id.uuidString) | META:{\(metaStr)}"
     }
 
     private var accelerometerView: some View {
