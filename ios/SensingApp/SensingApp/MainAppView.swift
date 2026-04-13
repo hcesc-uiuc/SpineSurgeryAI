@@ -203,7 +203,16 @@ struct MainAppView: View {
         
         let displayValue = p.value ?? 0.0
         
-        let metaStr = (p.metadata ?? [:]).map { "\($0.key):\($0.value)" }.joined(separator: "|")
+        let metaStr: String = {
+            guard let md = p.metadata as? [AnyHashable: Any] else { return "" }
+            return md.map { key, value in
+                let k = String(describing: key)
+                let v = String(describing: value)
+                return "\(k):\(v)"
+            }
+            .sorted() // stable order for logs
+            .joined(separator: "|")
+        }()
         
         let durationMs = Int(p.duration * 1000)
         

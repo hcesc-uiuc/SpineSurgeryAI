@@ -10,6 +10,9 @@ enum SupportedMetric: String, CaseIterable {
     case oxygen    = "Oxygen"
     case calories  = "Calories"
     case standTime     = "Stand Time"
+    case walkingSpeed       = "Walking Speed"
+    case walkingAsymmetry   = "Walking Asymmetry"
+    case walkingSteadiness  = "Walking Steadiness"
 
     /// Maps our clean label to the official HealthKit Identifier
     var hkIdentifier: HKQuantityTypeIdentifier {
@@ -20,6 +23,9 @@ enum SupportedMetric: String, CaseIterable {
         case .oxygen:    return .oxygenSaturation
         case .calories:  return .activeEnergyBurned
         case .standTime:     return .appleStandTime
+        case .walkingSpeed: return .walkingSpeed
+        case .walkingAsymmetry: return .walkingAsymmetryPercentage
+        case .walkingSteadiness: return .appleWalkingSteadiness
         }
     }
     
@@ -34,8 +40,10 @@ enum SupportedMetric: String, CaseIterable {
             return .count()
         case .calories:
             return .kilocalorie()
-        case .oxygen:
+        case .oxygen, .walkingAsymmetry, .walkingSteadiness:
             return .percent()
+        case .walkingSpeed:
+            return HKUnit.meter().unitDivided(by: .second())
         }
     }
 }
@@ -43,10 +51,10 @@ enum SupportedMetric: String, CaseIterable {
 // MARK: - HealthKit Manager
 class HealthKitManager: ObservableObject {
     let healthStore = HKHealthStore()
-
+ 
     @Published var trialData: [RawDataPoint] = []
     @Published var deepFetchDaysBack: Int = 1
-
+ 
     // Data structure for export and UI
     struct RawDataPoint: Identifiable {
         let id: UUID
@@ -68,14 +76,13 @@ class HealthKitManager: ObservableObject {
         let softwareVer: String?
         let metadata: [String: Any]?
     }
-
+ 
     init() {
         if HKHealthStore.isHealthDataAvailable() {
             requestPermissions()
         }
     }
-
-    // MARK: - Permissions & Background
+     // MARK: - Permissions & Background
     func requestPermissions() {
         let typesToRead = Set(SupportedMetric.allCases.compactMap {
             HKQuantityType.quantityType(forIdentifier: $0.hkIdentifier)
