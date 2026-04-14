@@ -1,6 +1,3 @@
-MockURLProtocol:
-
-
 //
 //  MockURLProtocol.swift
 //  SpineSurgeryUI
