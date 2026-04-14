@@ -230,10 +230,49 @@ struct MainAppView: View {
             }
         }
     }
-
-    // ============================================================
-    // MARK: - Sensor Subviews (GitHub — fully preserved)
-    // ============================================================
+    
+    private func getHealthKitData() {
+        let daysRequested = 1
+        let metricsRequested: Set<SupportedMetric> = [.steps] // Empty = All
+        
+        print("Requesting: HKManager.refreshWithNewRange")
+        
+        HKManager.refreshWithNewRange(days: 1,types:metricsRequested) { data in
+            
+            print("Success! Data received. Len: \(data.count), Days:\(daysRequested), Types:\(metricsRequested)")
+                
+                for (index, point) in data.enumerated() {
+                    let hkDataPointString = formatRawString(
+                        point,
+                        unixStartStr: String(Int(point.startDate.timeIntervalSince1970)),
+                        unixEndStr: String(Int(point.endDate.timeIntervalSince1970))
+                    )
+                    print("\(index) - \(hkDataPointString)")
+                    print("")
+                }
+        }
+    }
+    
+    func formatRawString(_ p: HealthKitManager.RawDataPoint, unixStartStr: String, unixEndStr: String) -> String {
+        let dateStr = p.startDate.formatted(.dateTime.month().day().hour().minute().second())
+        
+        let displayValue = p.value ?? 0.0
+        
+        let metaStr: String = {
+            guard let md = p.metadata as? [AnyHashable: Any] else { return "" }
+            return md.map { key, value in
+                let k = String(describing: key)
+                let v = String(describing: value)
+                return "\(k):\(v)"
+            }
+            .sorted() // stable order for logs
+            .joined(separator: "|")
+        }()
+        
+        let durationMs = Int(p.duration * 1000)
+        
+        return "[\(dateStr)] |ID:\(p.id.uuidString)| TYPE:\(p.type) | VAL:\(displayValue) \(p.unit) | UNIX_START:\(unixStartStr) | UNIX_END:\(unixEndStr) | DUR:\(durationMs)ms | SRC:\(p.sourceName) | BID:\(p.bundleID) | DEV:\(p.deviceName ?? "NA") | MOD:\(p.deviceModel ?? "NA") | SW:\(p.softwareVer ?? "NA") | ID:\(p.id.uuidString) | META:{\(metaStr)}"
+    }
 
     private var accelerometerView: some View {
         SensorCard(
