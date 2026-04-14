@@ -9,7 +9,7 @@ enum SupportedMetric: String, CaseIterable {
     case hrv       = "HRV"
     case oxygen    = "Oxygen"
     case calories  = "Calories"
-    case standTime     = "Stand Time"
+    //case standTime     = "Stand Time"
     case walkingSpeed       = "Walking Speed"
     case walkingAsymmetry   = "Walking Asymmetry"
     case walkingSteadiness  = "Walking Steadiness"
@@ -22,7 +22,7 @@ enum SupportedMetric: String, CaseIterable {
         case .hrv:       return .heartRateVariabilitySDNN
         case .oxygen:    return .oxygenSaturation
         case .calories:  return .activeEnergyBurned
-        case .standTime:     return .appleStandTime
+        //case .standTime:     return .appleStandTime
         case .walkingSpeed: return .walkingSpeed
         case .walkingAsymmetry: return .walkingAsymmetryPercentage
         case .walkingSteadiness: return .appleWalkingSteadiness
@@ -36,8 +36,10 @@ enum SupportedMetric: String, CaseIterable {
             return HKUnit.count().unitDivided(by: .minute())
         case .hrv:
             return .secondUnit(with: .milli)
-        case .steps, .standTime:
+        case .steps:
             return .count()
+        //case .standTime:
+        //   return .count()
         case .calories:
             return .kilocalorie()
         case .oxygen, .walkingAsymmetry, .walkingSteadiness:

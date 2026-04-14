@@ -50,48 +50,20 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		AE4673232F7D92F4002F1AD9 /* Exceptions for "SensingApp" folder in "SensingAppTests" target */ = {
-			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
-			membershipExceptions = (
-				"GoogleService-Info.plist",
-			);
-			target = AEABF3992EA06D040055052F /* SensingAppTests */;
-		};
-		AE4673242F7D92F4002F1AD9 /* Exceptions for "SensingApp" folder in "SensingAppUITests" target */ = {
-			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
-			membershipExceptions = (
-				"GoogleService-Info.plist",
-			);
-			target = AEABF3A32EA06D040055052F /* SensingAppUITests */;
-		};
-		AEF7FA892EA0704300735EF7 /* Exceptions for "SensingApp" folder in "SensingApp" target */ = {
+		AED91B002F8EBF8700431F53 /* Exceptions for "SensingApp" folder in "SensingApp" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
-				Survey/Persistence.swift,
 			);
 			target = AEABF3872EA06D020055052F /* SensingApp */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
-/* Begin PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet section */
-		AE952C502F4E2675001764E1 /* Exceptions for "SensingApp" folder in "Copy Bundle Resources" phase from "SensingApp" target */ = {
-			isa = PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet;
-			buildPhase = AEABF3862EA06D020055052F /* Resources */;
-			membershipExceptions = (
-				Survey/Persistence.swift,
-			);
-		};
-/* End PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet section */
-
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		AEABF38A2EA06D020055052F /* SensingApp */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
-				AEF7FA892EA0704300735EF7 /* Exceptions for "SensingApp" folder in "SensingApp" target */,
-				AE952C502F4E2675001764E1 /* Exceptions for "SensingApp" folder in "Copy Bundle Resources" phase from "SensingApp" target */,
-				AE4673232F7D92F4002F1AD9 /* Exceptions for "SensingApp" folder in "SensingAppTests" target */,
-				AE4673242F7D92F4002F1AD9 /* Exceptions for "SensingApp" folder in "SensingAppUITests" target */,
+				AED91B002F8EBF8700431F53 /* Exceptions for "SensingApp" folder in "SensingApp" target */,
 			);
 			path = SensingApp;
 			sourceTree = "<group>";
