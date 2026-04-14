@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleIdentifier</key>
+	<string></string>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>edu.uiuc.cs.hcesc.SensingApp.locationupload</string>
+		<string>edu.uiuc.cs.hcesc.SensingApp.apprefresh</string>
+		<string>edu.uiuc.cs.hcesc.SensingApp.bgProcessing</string>
+	</array>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<true/>
+	</dict>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>location</string>
+		<string>remote-notification</string>
+		<string>processing</string>
+		<string>fetch</string>
+	</array>
+	<key>UIFileSharingEnabled</key>
+	<true/>
+	<key>NSHealthShareUsageDescription</key>
+	<string>This app reads your health data to track steps and heart rate.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>This app writes health data to Apple Health.</string>
+	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<true/>
+	<key>NSMotionUsageDescription</key>
+	<string>This app needs to be able to access your motion use</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>App needs location for background tasks.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>This app sends reminders to complete your recovery survey.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<true/>
+    <key>NSApplicationCrashOnExceptions</key>
+    <true/>
+</dict>
+</plist>

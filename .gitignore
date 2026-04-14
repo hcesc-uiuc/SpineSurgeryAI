@@ -1,9 +1,12 @@
 .env
 .env.*
+
 .pyc
 __pycache__/
 .venv/
-.env
 
-ios/.DS_Store
 .DS_Store
+ios/.DS_Store
+
+AuthKey_*.p8
+config.ini
