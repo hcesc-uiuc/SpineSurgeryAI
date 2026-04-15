@@ -19,7 +19,7 @@ TEAM_ID = "G77DW2U5YC"
 KEY_ID = "JMZVBP4J48"
 BUNDLE_ID = "edu.uiuc.cs.hcesc.SensingApp.v2"
 AUTH_KEY_PATH = Path("./AuthKey_JMZVBP4J48.p8")
-USE_SANDBOX = True  # False for production
+USE_SANDBOX = False  # True for Xcode dev builds, False for TestFlight/App Store
 
 
 def get_device_tokens() -> list[str]:
