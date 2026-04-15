@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, g
 # from services import s3_service, db_service
 from flask import current_app
 from datetime import datetime
@@ -79,7 +79,7 @@ def upload():
         ServerSideEncryption="AES256",
     )
 
-    db.insert_accel("P0001", [{
+    db.insert_accel(g.user_id, [{
         "ts": 0,
         "url": key,
     }])
@@ -115,7 +115,7 @@ def uploadfile():
         ServerSideEncryption="AES256"
     )
 
-    db.insert_accel("P0001", [{"ts": 0, "url": key}])
+    db.insert_accel(g.user_id, [{"ts": 0, "url": key}])
 
     return jsonify(message="Upload successful", key=key)
 
@@ -149,7 +149,7 @@ def uploadfileaccel():
         ServerSideEncryption="AES256"
     )
 
-    db.insert_accel("P0001", [{"ts": 0, "url": key}])
+    db.insert_accel(g.user_id, [{"ts": 0, "url": key}])
 
     return jsonify(message="Upload successful", key=key)
 
@@ -183,7 +183,7 @@ def uploadfilegyro():
         ServerSideEncryption="AES256"
     )
 
-    db.insert_gyro("P0001", [{"ts": 0, "url": key}])
+    db.insert_gyro(g.user_id, [{"ts": 0, "url": key}])
 
     return jsonify(message="Upload successful", key=key)
 
@@ -217,7 +217,7 @@ def uploadfileheartrate():
         ServerSideEncryption="AES256"
     )
 
-    db.insert_hr("P0001", [{"ts": 0, "url": key}])
+    db.insert_hr(g.user_id, [{"ts": 0, "url": key}])
 
     return jsonify(message="Upload successful", key=key)
 
@@ -266,9 +266,7 @@ def upload_survey():
     if not payload:
         return jsonify(error="Missing 'payload' field"), 400
 
-    user_id = metadata.get("user_id")
-    if not user_id:
-        return jsonify(error="Missing 'user_id' in metadata"), 400
+    user_id = g.user_id  # use authenticated user from token, not client-supplied value
 
     timestamp_str = metadata.get("timestamp_utc")
     if not timestamp_str:

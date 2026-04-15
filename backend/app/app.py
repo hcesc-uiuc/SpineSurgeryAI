@@ -95,10 +95,10 @@ def create_app():
         
         return jsonify({"error": "No data for participant"}), 404
 
-    @app.route("/compliance")
-    def compliance():
+    @app.route("/compliance/<participant_id>")
+    def compliance(participant_id: str):
         try:
-            data = current_app.config["DB"].get_compliance_for("P0001") 
+            data = current_app.config["DB"].get_compliance_for(participant_id) 
             accel = current_app.config["DB"].get_table("accelerometer")
             gyro = current_app.config["DB"].get_table("gyroscope")
             ingestion_rows = current_app.config["DB"].get_table("ingestion_health")
