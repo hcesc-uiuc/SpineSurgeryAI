@@ -9,7 +9,7 @@ from .apple import verify_apple_token
 
 auth_bp = Blueprint('auth', __name__, url_prefix='/auth')
 
-ACCESS_TOKEN_TTL  = timedelta(minutes=15)
+ACCESS_TOKEN_TTL  = timedelta(hours=24)
 REFRESH_TOKEN_TTL = timedelta(days=365)
 
 
