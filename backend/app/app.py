@@ -1,6 +1,7 @@
 from flask import Flask, render_template
 from config import Config
 from routes.upload import upload_bp
+from routes.upload_noauth import upload_noauth_bp  # TEMPORARY: remove when iOS auth is ready
 from flask import Blueprint, Response, jsonify
 from routes.device_token import device_token_bp
 from database.database import DB
@@ -32,6 +33,7 @@ def create_app():
 
     # Register blueprints
     app.register_blueprint(upload_bp, url_prefix="/api")
+    app.register_blueprint(upload_noauth_bp, url_prefix="/api")  # TEMPORARY: remove when iOS auth is ready
     app.register_blueprint(device_token_bp, url_prefix="/api")
 
     app.register_blueprint(dashboard_api)
