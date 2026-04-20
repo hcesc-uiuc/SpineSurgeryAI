@@ -97,6 +97,20 @@ def create_app():
         
         return jsonify({"error": "No data for participant"}), 404
 
+    @app.route("/compliance")
+    def compliance_all():
+        try:
+            db = current_app.config["DB"]
+            participants = db.get_dashboard()
+            accel = db.get_table("accelerometer")
+            gyro = db.get_table("gyroscope")
+            hr = db.get_table("heart_rate")
+            survey = db.get_table("daily_survey")
+            ingestion_rows = db.get_table("ingestion_health")
+            return render_template("dashboard.html", participants=participants, accel=accel, gyro=gyro, hr=hr, survey=survey, ingestion_rows=ingestion_rows)
+        except Exception as e:
+            app.logger.error("\033[91m" + "Cannot connect to database" + "\033[0m" + str(e))
+
     @app.route("/compliance/<participant_id>")
     def compliance(participant_id: str):
         try:
