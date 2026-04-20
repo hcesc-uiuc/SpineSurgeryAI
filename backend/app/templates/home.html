@@ -6,7 +6,7 @@
   <hr class="my-4">
   <div class="d-flex justify-content-center gap-3">
     <a href="{{ url_for('dashboard_page.dashboard') }}" class="btn btn-primary btn-lg">View Dashboard</a>
-    <a href="{{ url_for('compliance') }}" class="btn btn-success btn-lg">Compliance Summary</a>
+    <a href="/totalcompliance" class="btn btn-success btn-lg">Compliance Summary</a>
   </div>
 </div>
 
@@ -27,7 +27,7 @@
       <div class="card-body">
         <h5 class="card-title">Compliance</h5>
         <p class="card-text">Summary of participant adherence to study protocols.</p>
-        <a href="{{ url_for('compliance') }}" class="btn btn-outline-success">Open</a>
+        <a href="/totalcompliance" class="btn btn-outline-success">Open</a>
       </div>
     </div>
   </div>
