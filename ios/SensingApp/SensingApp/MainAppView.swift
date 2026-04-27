@@ -66,7 +66,7 @@ enum JourneyTab: CaseIterable {
 struct MainAppView: View {
 
     // Injected from AuthLoginView — triggers logout + returns to login screen
-    var onLogout: () -> Void
+    @EnvironmentObject private var authManager: SecureAuthManager
 
     // ── GitHub: all original state preserved ──────────────────
     @StateObject private var motionManager = MotionManager()
@@ -127,11 +127,11 @@ struct MainAppView: View {
         case .surveys:
             SurveysView(accentColor: tab.accentColor, appState: appState, isSurveyPresented: $isSurveyPresented)
         case .progress:
-            ProgressPlaceholderView(accentColor: tab.accentColor)
+            MonthlyProgressView()
         case .debug:
             DebugView
         case .settings:
-            SettingsView(accentColor: tab.accentColor, onLogout: onLogout)
+            SettingsView(accentColor: tab.accentColor, onLogout: { authManager.logout() })
         }
     }
 
@@ -880,5 +880,4 @@ private func placeholderContent(
 // ============================================================
 
 #Preview {
-    MainAppView(onLogout: {})
-}
+    MainAppView()}

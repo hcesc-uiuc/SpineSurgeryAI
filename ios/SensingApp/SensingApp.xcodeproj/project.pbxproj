@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		626D3A2B2F967DD400CF9F66 /* HealthKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 626D3A2A2F967DD400CF9F66 /* HealthKit.framework */; };
 		AE46731D2F7D8E8B002F1AD9 /* FirebaseCrashlytics in Frameworks */ = {isa = PBXBuildFile; productRef = AE46731C2F7D8E8B002F1AD9 /* FirebaseCrashlytics */; };
 /* End PBXBuildFile section */
 
@@ -41,6 +42,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		626D3A2A2F967DD400CF9F66 /* HealthKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = HealthKit.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.2.sdk/System/Library/Frameworks/HealthKit.framework; sourceTree = DEVELOPER_DIR; };
 		AEA8E0242F5FC1AA007B39EB /* ResearchKitSwiftUI.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = ResearchKitSwiftUI.xcodeproj; path = ResearchKitSwiftUI/ResearchKitSwiftUI.xcodeproj; sourceTree = "<group>"; };
 		AEA8E1892F5FC2AE007B39EB /* ResearchKit.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = ResearchKit.xcodeproj; path = "../../../../../../../../Downloads/ResearchKit-dev-SwiftUI/ResearchKit.xcodeproj"; sourceTree = "<group>"; };
 		AEA8E2042F5FC730007B39EB /* ResearchKitSwiftUI.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = ResearchKitSwiftUI.xcodeproj; path = "../../../../../../../../Downloads/ResearchKit-dev-SwiftUI/ResearchKitSwiftUI/ResearchKitSwiftUI.xcodeproj"; sourceTree = "<group>"; };
@@ -50,7 +52,7 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		AED91B002F8EBF8700431F53 /* Exceptions for "SensingApp" folder in "SensingApp" target */ = {
+		626D3A292F967D9700CF9F66 /* Exceptions for "SensingApp" folder in "SensingApp" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
@@ -63,7 +65,7 @@
 		AEABF38A2EA06D020055052F /* SensingApp */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
-				AED91B002F8EBF8700431F53 /* Exceptions for "SensingApp" folder in "SensingApp" target */,
+				626D3A292F967D9700CF9F66 /* Exceptions for "SensingApp" folder in "SensingApp" target */,
 			);
 			path = SensingApp;
 			sourceTree = "<group>";
@@ -86,6 +88,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				AE46731D2F7D8E8B002F1AD9 /* FirebaseCrashlytics in Frameworks */,
+				626D3A2B2F967DD400CF9F66 /* HealthKit.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -151,6 +154,7 @@
 		FABC18502EC29B9A0071EC17 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				626D3A2A2F967DD400CF9F66 /* HealthKit.framework */,
 				AEA8E2042F5FC730007B39EB /* ResearchKitSwiftUI.xcodeproj */,
 				AEA8E1892F5FC2AE007B39EB /* ResearchKit.xcodeproj */,
 				AEA8E0242F5FC1AA007B39EB /* ResearchKitSwiftUI.xcodeproj */,
