@@ -351,16 +351,24 @@ struct AuthLoginView: View {
         errorMessage = nil
         isWorking = true
         defer { isWorking = false }
-        
+
         try? await Task.sleep(nanoseconds: 400_000_000)
-        
+
         if password.isEmpty || patientID.isEmpty {
             errorMessage = "Please enter your Patient ID and password."
-        } else {
-            authManager.login(password: password)
-            if !authManager.isAuthenticated {
-                errorMessage = "Incorrect credentials. Please try again."
-            }
+            return
+        }
+
+        do {
+            // In demo mode, identityToken/fullName/appleUserID are ignored —
+            // SecureAuthManager flips isAuthenticated = true immediately.
+            try await authManager.login(
+                identityToken: patientID,
+                fullName: nil,
+                appleUserID: patientID
+            )
+        } catch {
+            errorMessage = "Sign in failed. Please try again."
         }
     }
 }

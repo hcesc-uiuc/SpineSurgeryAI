@@ -171,6 +171,7 @@ struct CheckboxRow: View {
 
 struct SurgerySurveyView: View {
     @ObservedObject var appState: AppState
+    @ObservedObject var authManager: SecureAuthManager   // ← add this
     @Environment(\.dismiss) private var dismiss
 
     private var currentUserID: String { "default_user" }
@@ -778,7 +779,7 @@ struct SurgerySurveyView: View {
             let surveyJSON = buildSurveyJSON()
 
             do {
-                try await SurveyUploader.shared.uploadSurvey(surveyJSON)
+                try await SurveyUploader.shared.uploadSurvey(surveyJSON, authManager: authManager)
 
                 let validMeds: [MedicationEntry] = {
                     guard tookPainMedicationToday == true else { return [] }
