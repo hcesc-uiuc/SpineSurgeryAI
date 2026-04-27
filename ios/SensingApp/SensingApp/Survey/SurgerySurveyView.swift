@@ -15,19 +15,22 @@ struct MedicationEntry: Identifiable, Codable, Equatable {
     var dosesToday: String
     var route: MedicationRoute
     var carriedOverFromPreviousDay: Bool = false
+    var skippedToday: Bool = false
 
     init(
         medicationName: String = "",
         doseMg: String = "",
         dosesToday: String = "",
         route: MedicationRoute = .oral,
-        carriedOverFromPreviousDay: Bool = false
+        carriedOverFromPreviousDay: Bool = false,
+        skippedToday: Bool = false
     ) {
         self.medicationName = medicationName
         self.doseMg = doseMg
         self.dosesToday = dosesToday
         self.route = route
         self.carriedOverFromPreviousDay = carriedOverFromPreviousDay
+        self.skippedToday = skippedToday
     }
 
     var isEmpty: Bool {
@@ -38,21 +41,13 @@ struct MedicationEntry: Identifiable, Codable, Equatable {
 }
 
 enum MedicationRoute: String, CaseIterable, Identifiable, Codable {
-    case oral = "oral"
+    case oral  = "oral"
     case patch = "patch"
     case other = "other"
 
     var id: String { rawValue }
 
-    var displayName: String {
-        rawValue.capitalized
-    }
-}
-
-struct MedicationHistoryEntry: Identifiable, Codable {
-    var id = UUID()
-    var dateKey: String
-    var medications: [MedicationEntry]
+    var displayName: String { rawValue.capitalized }
 }
 
 struct WeekDayStatus: Identifiable {
@@ -86,9 +81,8 @@ final class SurveyLocalStore {
     static let shared = SurveyLocalStore()
     private init() {}
 
-    private let lastMedsKeyPrefix = "lastMeds_"
+    private let lastMedsKeyPrefix             = "lastMeds_"
     private let completedSurveyDatesKeyPrefix = "completedSurveyDates_"
-    private let medicationHistoryKeyPrefix = "medicationHistory_"
 
     func saveLastMedications(_ medications: [MedicationEntry], for userID: String) {
         do {
@@ -98,7 +92,8 @@ final class SurveyLocalStore {
                     doseMg: $0.doseMg,
                     dosesToday: $0.dosesToday,
                     route: $0.route,
-                    carriedOverFromPreviousDay: false
+                    carriedOverFromPreviousDay: false,
+                    skippedToday: false
                 )
             }
             let data = try JSONEncoder().encode(cleaned)
@@ -112,7 +107,6 @@ final class SurveyLocalStore {
         guard let data = UserDefaults.standard.data(forKey: lastMedsKeyPrefix + userID) else {
             return []
         }
-
         do {
             return try JSONDecoder().decode([MedicationEntry].self, from: data)
         } catch {
@@ -125,7 +119,6 @@ final class SurveyLocalStore {
         let key = completedSurveyDatesKeyPrefix + userID
         let existing = completedSurveyDateStrings(for: userID)
         let dateString = Self.dayFormatter.string(from: date)
-
         if !existing.contains(dateString) {
             UserDefaults.standard.set(existing + [dateString], forKey: key)
         }
@@ -139,51 +132,10 @@ final class SurveyLocalStore {
         Set(completedSurveyDateStrings(for: userID))
     }
 
-    func appendMedicationHistory(date: Date, medications: [MedicationEntry], for userID: String) {
-        let key = medicationHistoryKeyPrefix + userID
-        let dateKey = Self.dayFormatter.string(from: date)
-
-        let cleaned = medications.map {
-            MedicationEntry(
-                medicationName: $0.medicationName,
-                doseMg: $0.doseMg,
-                dosesToday: $0.dosesToday,
-                route: $0.route,
-                carriedOverFromPreviousDay: false
-            )
-        }
-
-        var history = loadMedicationHistory(for: userID)
-        history.removeAll { $0.dateKey == dateKey }
-        history.insert(
-            MedicationHistoryEntry(dateKey: dateKey, medications: cleaned),
-            at: 0
-        )
-
-        do {
-            let data = try JSONEncoder().encode(Array(history.prefix(14)))
-            UserDefaults.standard.set(data, forKey: key)
-        } catch {
-            print("Failed to save medication history:", error.localizedDescription)
-        }
-    }
-
-    func loadMedicationHistory(for userID: String) -> [MedicationHistoryEntry] {
-        let key = medicationHistoryKeyPrefix + userID
-        guard let data = UserDefaults.standard.data(forKey: key) else { return [] }
-
-        do {
-            return try JSONDecoder().decode([MedicationHistoryEntry].self, from: data)
-        } catch {
-            print("Failed to load medication history:", error.localizedDescription)
-            return []
-        }
-    }
-
     private static let dayFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.calendar = Calendar.current
-        formatter.locale = Locale.current
+        formatter.locale   = Locale.current
         formatter.dateFormat = "yyyy-MM-dd"
         return formatter
     }()
@@ -219,26 +171,24 @@ struct CheckboxRow: View {
 
 struct SurgerySurveyView: View {
     @ObservedObject var appState: AppState
+    @ObservedObject var authManager: SecureAuthManager   // ← add this
     @Environment(\.dismiss) private var dismiss
 
-    private var currentUserID: String {
-        "default_user"
-    }
+    private var currentUserID: String { "default_user" }
 
-    @State private var startUnix = Int(Date().timeIntervalSince1970)
+    @State private var startUnix  = Int(Date().timeIntervalSince1970)
     @State private var finishUnix = 0
 
-    @State private var painNRS: Int? = nil
-    @State private var functionCheckIn: Int? = nil
-    @State private var sleepQuality: Int? = nil
+    @State private var painNRS:         Int?  = nil
+    @State private var functionCheckIn: Int?  = nil
+    @State private var sleepQuality:    Int?  = nil
 
     @State private var tookPainMedicationToday: Bool? = nil
     @State private var medications: [MedicationEntry] = []
-    @State private var medicationHistory: [MedicationHistoryEntry] = []
 
-    @State private var hadFallsSinceYesterday: Bool? = nil
-    @State private var fallInjured = false
-    @State private var fallSoughtMedicalAttention = false
+    @State private var hadFallsSinceYesterday:    Bool? = nil
+    @State private var fallInjured                      = false
+    @State private var fallSoughtMedicalAttention       = false
 
     @State private var isSubmitting = false
     @State private var submitError: String?
@@ -248,123 +198,124 @@ struct SurgerySurveyView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    headerSection
+            ZStack {
+                // Warm cream background — matches the app's login screen
+                Color(red: 0.98, green: 0.95, blue: 0.91)
+                    .ignoresSafeArea()
 
-                    sectionCard(title: "Pain Numeric Rating Scale (NRS)") {
-                        VStack(alignment: .leading, spacing: 10) {
-                            Text("How would you rate your overall pain right now?")
-                                .font(.subheadline)
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        headerSection
 
-                            nrs0to10Row(selection: $painNRS)
+                        sectionCard(title: "Pain Numeric Rating Scale (NRS)") {
+                            VStack(alignment: .leading, spacing: 10) {
+                                Text("How would you rate your overall pain right now?")
+                                    .font(.subheadline)
 
-                            Button("Clear selection") {
-                                painNRS = nil
-                            }
-                            .font(.footnote)
+                                nrs0to10Row(selection: $painNRS)
 
-                            Text("0 = No pain • 10 = Worst possible pain")
-                                .font(.footnote)
-                                .foregroundColor(.secondary)
-                        }
-                    }
+                                Button("Clear selection") { painNRS = nil }
+                                    .font(.footnote)
 
-                    sectionCard(title: "Brief Function Check-In") {
-                        VStack(alignment: .leading, spacing: 10) {
-                            Text("Compared to yesterday, my ability to get around is:")
-                                .font(.subheadline)
-
-                            singleChoiceList(
-                                choices: [
-                                    (1, "Much better"),
-                                    (2, "Somewhat better"),
-                                    (3, "About the same"),
-                                    (4, "Somewhat worse"),
-                                    (5, "Much worse")
-                                ],
-                                selection: $functionCheckIn
-                            )
-                        }
-                    }
-
-                    sectionCard(title: "Pain Medication Intake") {
-                        VStack(alignment: .leading, spacing: 12) {
-                            Text("Did you take any pain medication today, prescribed or over-the-counter?")
-                                .font(.subheadline)
-
-                            yesNoChoice(selection: $tookPainMedicationToday)
-
-                            if tookPainMedicationToday == true {
-                                medicationTodaySection
+                                Text("0 = No pain • 10 = Worst possible pain")
+                                    .font(.footnote)
+                                    .foregroundColor(.secondary)
                             }
                         }
-                    }
 
-                    sectionCard(title: "Sleep Quality") {
-                        VStack(alignment: .leading, spacing: 10) {
-                            Text("How would you rate your sleep last night?")
-                                .font(.subheadline)
+                        sectionCard(title: "Brief Function Check-In") {
+                            VStack(alignment: .leading, spacing: 10) {
+                                Text("Compared to yesterday, my ability to get around is:")
+                                    .font(.subheadline)
 
-                            singleChoiceList(
-                                choices: [
-                                    (1, "Very good"),
-                                    (2, "Good"),
-                                    (3, "Fair"),
-                                    (4, "Poor"),
-                                    (5, "Very poor")
-                                ],
-                                selection: $sleepQuality,
-                                allowClear: true,
-                                clearLabel: "Skip this question"
-                            )
+                                singleChoiceList(
+                                    choices: [
+                                        (1, "Much better"),
+                                        (2, "Somewhat better"),
+                                        (3, "About the same"),
+                                        (4, "Somewhat worse"),
+                                        (5, "Much worse")
+                                    ],
+                                    selection: $functionCheckIn
+                                )
+                            }
                         }
-                    }
 
-                    sectionCard(title: "Falls Screen") {
-                        VStack(alignment: .leading, spacing: 10) {
-                            Text("Have you had any falls since yesterday?")
-                                .font(.subheadline)
+                        sectionCard(title: "Pain Medication Intake") {
+                            VStack(alignment: .leading, spacing: 12) {
+                                Text("Did you take any pain medication today, prescribed or over-the-counter?")
+                                    .font(.subheadline)
 
-                            yesNoChoice(selection: $hadFallsSinceYesterday)
+                                yesNoChoice(selection: $tookPainMedicationToday)
 
-                            if hadFallsSinceYesterday == true {
-                                VStack(alignment: .leading, spacing: 8) {
-                                    CheckboxRow(
-                                        title: "Were you injured?",
-                                        isChecked: $fallInjured
-                                    )
-
-                                    CheckboxRow(
-                                        title: "Did you seek medical attention?",
-                                        isChecked: $fallSoughtMedicalAttention
-                                    )
+                                if tookPainMedicationToday == true {
+                                    medicationTodaySection
                                 }
-                                .padding(.top, 4)
                             }
                         }
-                    }
 
-                    Text("You may skip any question that causes emotional discomfort. Skipped responses will be treated as missing data.")
-                        .font(.footnote)
-                        .foregroundColor(.secondary)
-                        .italic()
+                        sectionCard(title: "Sleep Quality") {
+                            VStack(alignment: .leading, spacing: 10) {
+                                Text("How would you rate your sleep last night?")
+                                    .font(.subheadline)
 
-                    submitButton
+                                singleChoiceList(
+                                    choices: [
+                                        (1, "Very good"),
+                                        (2, "Good"),
+                                        (3, "Fair"),
+                                        (4, "Poor"),
+                                        (5, "Very poor")
+                                    ],
+                                    selection: $sleepQuality,
+                                    allowClear: true,
+                                    clearLabel: "Skip this question"
+                                )
+                            }
+                        }
 
-                    if let submitError {
-                        Text(submitError)
+                        sectionCard(title: "Falls Screen") {
+                            VStack(alignment: .leading, spacing: 10) {
+                                Text("Have you had any falls since yesterday?")
+                                    .font(.subheadline)
+
+                                yesNoChoice(selection: $hadFallsSinceYesterday)
+
+                                if hadFallsSinceYesterday == true {
+                                    VStack(alignment: .leading, spacing: 8) {
+                                        CheckboxRow(
+                                            title: "Were you injured?",
+                                            isChecked: $fallInjured
+                                        )
+                                        CheckboxRow(
+                                            title: "Did you seek medical attention?",
+                                            isChecked: $fallSoughtMedicalAttention
+                                        )
+                                    }
+                                    .padding(.top, 4)
+                                }
+                            }
+                        }
+
+                        Text("You may skip any question that causes emotional discomfort. Skipped responses will be treated as missing data.")
                             .font(.footnote)
-                            .foregroundColor(.red)
+                            .foregroundColor(.secondary)
+                            .italic()
+
+                        submitButton
+
+                        if let submitError {
+                            Text(submitError)
+                                .font(.footnote)
+                                .foregroundColor(.red)
+                        }
                     }
+                    .padding(16)
                 }
-                .padding(16)
             }
             .navigationTitle("Progress Survey")
             .navigationBarTitleDisplayMode(.inline)
-            .onAppear {
-                loadPersistedSurveyData()
-            }
+            .onAppear { loadPersistedSurveyData() }
         }
     }
 
@@ -377,7 +328,7 @@ struct SurgerySurveyView: View {
                     .font(.title3)
                     .fontWeight(.bold)
 
-                Text("Track your weekly survey completion and fill out today’s check-in.")
+                Text("Track your weekly survey completion and fill out today's check-in.")
                     .font(.footnote)
                     .foregroundColor(.secondary)
             }
@@ -401,7 +352,9 @@ struct SurgerySurveyView: View {
 
                 HStack(spacing: 8) {
                     Button {
-                        selectedCalendarDate = Calendar.current.date(byAdding: .weekOfYear, value: -1, to: selectedCalendarDate) ?? selectedCalendarDate
+                        selectedCalendarDate = Calendar.current.date(
+                            byAdding: .weekOfYear, value: -1, to: selectedCalendarDate
+                        ) ?? selectedCalendarDate
                     } label: {
                         Image(systemName: "chevron.left")
                     }
@@ -409,12 +362,13 @@ struct SurgerySurveyView: View {
                     Button {
                         selectedCalendarDate = Date()
                     } label: {
-                        Text("Today")
-                            .font(.footnote)
+                        Text("Today").font(.footnote)
                     }
 
                     Button {
-                        selectedCalendarDate = Calendar.current.date(byAdding: .weekOfYear, value: 1, to: selectedCalendarDate) ?? selectedCalendarDate
+                        selectedCalendarDate = Calendar.current.date(
+                            byAdding: .weekOfYear, value: 1, to: selectedCalendarDate
+                        ) ?? selectedCalendarDate
                     } label: {
                         Image(systemName: "chevron.right")
                     }
@@ -422,7 +376,10 @@ struct SurgerySurveyView: View {
                 .buttonStyle(.bordered)
             }
 
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 7), spacing: 8) {
+            LazyVGrid(
+                columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 7),
+                spacing: 8
+            ) {
                 ForEach(weekDays(for: selectedCalendarDate)) { day in
                     Button {
                         selectedCalendarDate = day.date
@@ -442,8 +399,7 @@ struct SurgerySurveyView: View {
                                     .font(.caption)
                                     .foregroundColor(.green)
                             } else {
-                                Spacer()
-                                    .frame(height: 12)
+                                Spacer().frame(height: 12)
                             }
                         }
                         .frame(maxWidth: .infinity)
@@ -458,16 +414,10 @@ struct SurgerySurveyView: View {
                         )
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("\(day.accessibilityDate), \(day.isCompleted ? "completed" : "not completed")")
+                    .accessibilityLabel(
+                        "\(day.accessibilityDate), \(day.isCompleted ? "completed" : "not completed")"
+                    )
                 }
-            }
-
-            HStack(spacing: 6) {
-                Image(systemName: "checkmark.circle.fill")
-                    .foregroundColor(.green)
-                Text("Completed")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
             }
         }
     }
@@ -535,7 +485,8 @@ struct SurgerySurveyView: View {
                         .overlay(
                             RoundedRectangle(cornerRadius: 6)
                                 .stroke(
-                                    selection.wrappedValue == value ? Color.accentColor : Color(.separator),
+                                    selection.wrappedValue == value
+                                    ? Color.accentColor : Color(.separator),
                                     lineWidth: 1
                                 )
                         )
@@ -549,10 +500,9 @@ struct SurgerySurveyView: View {
 
     private func yesNoChoice(selection: Binding<Bool?>) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            radioRow(title: "No", isSelected: selection.wrappedValue == false) {
+            radioRow(title: "No",  isSelected: selection.wrappedValue == false) {
                 selection.wrappedValue = false
             }
-
             radioRow(title: "Yes", isSelected: selection.wrappedValue == true) {
                 selection.wrappedValue = true
             }
@@ -573,11 +523,9 @@ struct SurgerySurveyView: View {
             }
 
             if allowClear {
-                Button(clearLabel) {
-                    selection.wrappedValue = nil
-                }
-                .font(.footnote)
-                .padding(.top, 2)
+                Button(clearLabel) { selection.wrappedValue = nil }
+                    .font(.footnote)
+                    .padding(.top, 2)
             }
         }
     }
@@ -610,7 +558,7 @@ struct SurgerySurveyView: View {
                 .font(.subheadline)
                 .fontWeight(.semibold)
 
-            Text("Yesterday’s medications appear first. For those, you can update the dose or number of doses for today, or delete them if you did not take them.")
+            Text("Yesterday's medications appear first. For those, you can update the dose or number of doses for today, or mark them as skipped if you did not take them.")
                 .font(.footnote)
                 .foregroundColor(.secondary)
 
@@ -633,15 +581,12 @@ struct SurgerySurveyView: View {
                         doseMg: "",
                         dosesToday: "",
                         route: .oral,
-                        carriedOverFromPreviousDay: false
+                        carriedOverFromPreviousDay: false,
+                        skippedToday: false
                     )
                 )
             } label: {
                 Label("Add medication", systemImage: "plus.circle")
-            }
-
-            if !medicationHistory.isEmpty {
-                medicationHistorySection
             }
 
             scoringNote
@@ -653,6 +598,7 @@ struct SurgerySurveyView: View {
         onDelete: (() -> Void)? = nil
     ) -> some View {
         let isCarriedOver = entry.wrappedValue.carriedOverFromPreviousDay
+        let isSkipped     = entry.wrappedValue.skippedToday
 
         return VStack(alignment: .leading, spacing: 10) {
             HStack {
@@ -662,7 +608,7 @@ struct SurgerySurveyView: View {
                         .fontWeight(.semibold)
 
                     if isCarriedOver {
-                        Text("Edit dose or number of doses for today, or delete if not taken.")
+                        Text("Edit dose or number of doses for today, or mark skipped if not taken.")
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
@@ -713,6 +659,8 @@ struct SurgerySurveyView: View {
                     TextField("mg", text: entry.doseMg)
                         .keyboardType(.decimalPad)
                         .textFieldStyle(.roundedBorder)
+                        .disabled(isSkipped)
+                        .opacity(isSkipped ? 0.55 : 1.0)
                 }
 
                 VStack(alignment: .leading, spacing: 4) {
@@ -723,6 +671,8 @@ struct SurgerySurveyView: View {
                     TextField("Enter number", text: entry.dosesToday)
                         .keyboardType(.numbersAndPunctuation)
                         .textFieldStyle(.roundedBorder)
+                        .disabled(isSkipped)
+                        .opacity(isSkipped ? 0.55 : 1.0)
                 }
             }
 
@@ -741,6 +691,26 @@ struct SurgerySurveyView: View {
                                 .fill(Color(.tertiarySystemFill))
                         )
                 }
+
+                Button {
+                    entry.wrappedValue.skippedToday.toggle()
+                    if entry.wrappedValue.skippedToday {
+                        entry.wrappedValue.dosesToday = ""
+                    }
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: entry.wrappedValue.skippedToday ? "checkmark.circle.fill" : "circle")
+                            .foregroundColor(.blue)
+
+                        Text("Skipped medication")
+                            .foregroundColor(.blue)
+                            .fontWeight(entry.wrappedValue.skippedToday ? .semibold : .regular)
+
+                        Spacer()
+                    }
+                    .padding(.top, 2)
+                }
+                .buttonStyle(.plain)
             } else {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Route")
@@ -765,38 +735,6 @@ struct SurgerySurveyView: View {
             RoundedRectangle(cornerRadius: 12)
                 .stroke(Color(.separator), lineWidth: 1)
         )
-    }
-
-    private var medicationHistorySection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Recent medication history")
-                .font(.subheadline)
-                .fontWeight(.semibold)
-
-            ForEach(medicationHistory.prefix(7)) { day in
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(day.dateKey)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-
-                    if day.medications.isEmpty {
-                        Text("No medications recorded")
-                            .font(.footnote)
-                            .foregroundColor(.secondary)
-                    } else {
-                        ForEach(day.medications) { med in
-                            Text("\(med.medicationName) • \(med.doseMg) mg • \(med.dosesToday) dose(s)")
-                                .font(.footnote)
-                        }
-                    }
-                }
-                .padding(10)
-                .background(
-                    RoundedRectangle(cornerRadius: 10)
-                        .fill(Color(.systemBackground))
-                )
-            }
-        }
     }
 
     private var scoringNote: some View {
@@ -833,7 +771,7 @@ struct SurgerySurveyView: View {
     }
 
     private func submitSurvey() {
-        submitError = nil
+        submitError  = nil
         isSubmitting = true
 
         Task {
@@ -841,23 +779,16 @@ struct SurgerySurveyView: View {
             let surveyJSON = buildSurveyJSON()
 
             do {
-                try await SurveyUploader.shared.uploadSurvey(surveyJSON)
+                try await SurveyUploader.shared.uploadSurvey(surveyJSON, authManager: authManager)
 
-                let validMeds: [MedicationEntry]
-                if tookPainMedicationToday == true {
-                    validMeds = medications
-                        .filter { !$0.isEmpty }
-                        .uniqueByContent()
-                } else {
-                    validMeds = []
-                }
+                let validMeds: [MedicationEntry] = {
+                    guard tookPainMedicationToday == true else { return [] }
+                    return medications.filter { !$0.isEmpty && !$0.skippedToday }.uniqueByContent()
+                }()
 
                 SurveyLocalStore.shared.saveLastMedications(validMeds, for: currentUserID)
-                SurveyLocalStore.shared.appendMedicationHistory(date: Date(), medications: validMeds, for: currentUserID)
                 SurveyLocalStore.shared.markSurveyCompleted(on: Date(), for: currentUserID)
-
                 completedSurveyDates = SurveyLocalStore.shared.completedSurveyDates(for: currentUserID)
-                medicationHistory = SurveyLocalStore.shared.loadMedicationHistory(for: currentUserID)
 
                 appState.markCompletedToday()
                 isSubmitting = false
@@ -873,7 +804,6 @@ struct SurgerySurveyView: View {
 
     private func loadPersistedSurveyData() {
         completedSurveyDates = SurveyLocalStore.shared.completedSurveyDates(for: currentUserID)
-        medicationHistory = SurveyLocalStore.shared.loadMedicationHistory(for: currentUserID)
 
         let lastMeds = SurveyLocalStore.shared
             .loadLastMedications(for: currentUserID)
@@ -886,19 +816,12 @@ struct SurgerySurveyView: View {
                     doseMg: $0.doseMg,
                     dosesToday: $0.dosesToday,
                     route: $0.route,
-                    carriedOverFromPreviousDay: true
+                    carriedOverFromPreviousDay: true,
+                    skippedToday: false
                 )
             }
         } else {
-            medications = [
-                MedicationEntry(
-                    medicationName: "",
-                    doseMg: "",
-                    dosesToday: "",
-                    route: .oral,
-                    carriedOverFromPreviousDay: false
-                )
-            ]
+            medications = [MedicationEntry()]
         }
     }
 
@@ -907,42 +830,57 @@ struct SurgerySurveyView: View {
     private func buildSurveyJSON() -> [String: Any] {
         let localFormatter = DateFormatter()
         localFormatter.dateStyle = .medium
-        localFormatter.timeStyle = .medium
+        localFormatter.timeStyle  = .medium
 
         let medsToSend: [[String: Any]] = {
             guard tookPainMedicationToday == true else { return [] }
-
-            let allMeds = medications
-                .filter { !$0.isEmpty }
+            return medications
+                .filter { !$0.isEmpty && !$0.skippedToday }
                 .uniqueByContent()
+                .map { med in
+                    [
+                        "medication_name": med.medicationName,
+                        "dose_mg":         med.doseMg,
+                        "doses_today":     med.dosesToday,
+                        "route":           med.route.rawValue
+                    ] as [String: Any]
+                }
+        }()
 
-            return allMeds.map { med in
-                [
-                    "medication_name": med.medicationName,
-                    "dose_mg": med.doseMg,
-                    "doses_today": med.dosesToday,
-                    "route": med.route.rawValue
-                ] as [String: Any]
-            }
+        let skippedMedsToSend: [[String: Any]] = {
+            guard tookPainMedicationToday == true else { return [] }
+            return medications
+                .filter {
+                    $0.carriedOverFromPreviousDay && $0.skippedToday &&
+                    !$0.medicationName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                }
+                .map { med in
+                    [
+                        "medication_name": med.medicationName,
+                        "route":           med.route.rawValue,
+                        "skipped_today":   true
+                    ] as [String: Any]
+                }
         }()
 
         let questions: [String: Any] = [
-            "pain_nrs_0to10": painNRS as Any,
-            "function_checkin_1to5": functionCheckIn as Any,
-            "took_pain_medication_today": tookPainMedicationToday as Any,
-            "medications_today": medsToSend,
-            "sleep_quality_1to5_optional": sleepQuality as Any,
-            "falls_since_yesterday": hadFallsSinceYesterday as Any,
-            "fall_injured_if_yes": (hadFallsSinceYesterday == true ? fallInjured : NSNull()) as Any,
+            "pain_nrs_0to10":                 painNRS as Any,
+            "function_checkin_1to5":           functionCheckIn as Any,
+            "took_pain_medication_today":      tookPainMedicationToday as Any,
+            "medications_today":               medsToSend,
+            "skipped_medications_today":       skippedMedsToSend,
+            "sleep_quality_1to5_optional":     sleepQuality as Any,
+            "falls_since_yesterday":           hadFallsSinceYesterday as Any,
+            "fall_injured_if_yes":             (hadFallsSinceYesterday == true ? fallInjured : NSNull()) as Any,
             "sought_medical_attention_if_yes": (hadFallsSinceYesterday == true ? fallSoughtMedicalAttention : NSNull()) as Any
         ]
 
         return [
-            "survey_title": "Progress Survey",
-            "survey_start_unix": startUnix,
+            "survey_title":       "Progress Survey",
+            "survey_start_unix":  startUnix,
             "survey_finish_unix": finishUnix,
-            "survey_local_time": localFormatter.string(from: Date()),
-            "questions": questions
+            "survey_local_time":  localFormatter.string(from: Date()),
+            "questions":          questions
         ]
     }
 
@@ -950,22 +888,19 @@ struct SurgerySurveyView: View {
 
     private func weekDays(for anchorDate: Date) -> [WeekDayStatus] {
         let calendar = Calendar.current
-        let today = Date()
-        let weekInterval = calendar.dateInterval(of: .weekOfYear, for: anchorDate)
-
-        guard let startOfWeek = weekInterval?.start else { return [] }
+        let today    = Date()
+        guard let startOfWeek = calendar.dateInterval(of: .weekOfYear, for: anchorDate)?.start else {
+            return []
+        }
 
         return (0..<7).compactMap { offset in
             guard let date = calendar.date(byAdding: .day, value: offset, to: startOfWeek) else {
                 return nil
             }
-
-            let key = dayKey(for: date)
-
             return WeekDayStatus(
-                date: date,
-                isCompleted: completedSurveyDates.contains(key),
-                isToday: calendar.isDate(date, inSameDayAs: today)
+                date:        date,
+                isCompleted: completedSurveyDates.contains(dayKey(for: date)),
+                isToday:     calendar.isDate(date, inSameDayAs: today)
             )
         }
     }
@@ -975,18 +910,16 @@ struct SurgerySurveyView: View {
         guard let interval = calendar.dateInterval(of: .weekOfYear, for: date) else {
             return "This Week"
         }
-
         let formatter = DateFormatter()
         formatter.dateFormat = "MMM d"
-
         let endDate = calendar.date(byAdding: .day, value: 6, to: interval.start) ?? interval.start
         return "\(formatter.string(from: interval.start)) – \(formatter.string(from: endDate))"
     }
 
     private func dayKey(for date: Date) -> String {
         let formatter = DateFormatter()
-        formatter.calendar = Calendar.current
-        formatter.locale = Locale.current
+        formatter.calendar   = Calendar.current
+        formatter.locale     = Locale.current
         formatter.dateFormat = "yyyy-MM-dd"
         return formatter.string(from: date)
     }
@@ -997,7 +930,6 @@ struct SurgerySurveyView: View {
 private extension Array where Element == MedicationEntry {
     func uniqueByContent() -> [MedicationEntry] {
         var seen = Set<String>()
-
         return self.filter { med in
             let key = [
                 med.medicationName.lowercased().trimmingCharacters(in: .whitespacesAndNewlines),
@@ -1005,13 +937,8 @@ private extension Array where Element == MedicationEntry {
                 med.dosesToday.trimmingCharacters(in: .whitespacesAndNewlines),
                 med.route.rawValue
             ].joined(separator: "|")
-
-            if seen.contains(key) {
-                return false
-            } else {
-                seen.insert(key)
-                return true
-            }
+            if seen.contains(key) { return false }
+            seen.insert(key); return true
         }
     }
 }

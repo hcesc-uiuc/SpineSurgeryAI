@@ -1,80 +1,79 @@
+//  SecureAuthManager.swift
+//  SensingApp
+//
+
 import Foundation
-import CryptoKit
 import SwiftUI
 internal import Combine
+
 // ============================================================
 // MARK: - SecureAuthManager Overview
 // ============================================================
 //
 // PURPOSE:
 // Manages all authentication state and network auth calls for
-// the Journey app. Handles login, logout, token storage, silent
-// token refresh, and authenticated API requests.
+// the Journey app. Handles Apple Sign In login, logout, token
+// storage, silent token refresh, and authenticated API requests.
 //
 // ARCHITECTURE:
-// This class follows a token-based auth pattern using two tokens:
+// Token-based auth using two JWTs issued by the Journey backend
+// after it verifies Apple's identity token:
 //
-//   ACCESS TOKEN  — short-lived (typically 15min–1hr)
+//   ACCESS TOKEN  — short-lived (15 min)
 //                   attached to every API request as a Bearer token
 //                   stored in Keychain
 //
-//   REFRESH TOKEN — long-lived (days/weeks)
+//   REFRESH TOKEN — long-lived (365 days)
 //                   used only to silently obtain a new access token
-//                   when the current one expires
 //                   stored in Keychain
 //
 // FLOW:
-//   1. Patient enters userID + password
-//   2. App hashes password locally using SHA256 + salt
-//   3. App sends { user_id, password_hash } to POST /auth/login
-//   4. Server verifies and returns { access_token, refresh_token }
+//   1. Patient taps "Sign in with Apple"
+//   2. Apple returns a one-time identity token (JWT) + optional full name
+//   3. App sends { identity_token, full_name? } to POST /auth/login
+//   4. Backend verifies Apple's JWT and returns { access_token, refresh_token }
 //   5. Both tokens stored securely in iOS Keychain
 //   6. Every subsequent API call uses access token as Bearer header
-//   7. On app relaunch, silentRefresh() is called automatically
-//      to restore session without requiring re-login
-//   8. If access token expires mid-session, authenticatedRequest()
-//      retries once after silently refreshing
-//   9. Logout clears all tokens from Keychain
+//   7. On app relaunch, silentRefresh() restores session automatically
+//   8. On 401 from any API call → refresh access token → retry once
+//   9. If refresh returns 401 invalid_grant → fully expired → force login
+//  10. Logout calls POST /auth/logout (invalidates refresh token server-side)
+//      then clears all tokens from Keychain
 //
-// SECURITY NOTES:
-//   - Passwords are NEVER sent in plaintext — always SHA256 hashed
-//   - Tokens are stored in iOS Keychain, not UserDefaults
-//   - Salt is constant for now — consider per-user salt in v2
-//   - Hash is returned as hex string for safe JSON transport
+// IMPORTANT — FULL NAME:
+//   Apple only provides the user's full name on the very first login ever.
+//   It is nil on all subsequent logins. Send it when present — backend
+//   discards it if the user already exists.
 //
-// TESTING:
-//   See MockURLProtocol.swift for local mock server setup.
-//   Swap baseURL to "mock://journey" to run without a real server.
-//
-// TODO:
-//   - Replace baseURL placeholder with real endpoint when ready
-//   - Consider per-user salt stored server-side for stronger hashing
-//   - Add biometric (FaceID) re-auth for sensitive actions
 // ============================================================
-// MARK: - Demo Mode
-//
-// TEMPORARY — for simulator testing only while server is not yet ready.
-// Set to false before shipping to production or connecting a real server.
-// When true, any login attempt with these exact credentials will succeed
-// locally without making any network calls.
-//
-// Demo credentials:
-//   Patient ID : demo_patient
-//   Password   : journey2026
 
+// ============================================================
+// MARK: - ⚠️ DEMO MODE
+// ============================================================
+// TEMPORARY — for simulator/testing use only while server is not ready.
+//
+// When true: Apple Sign In still fires on-device but the backend
+// call is bypassed — isAuthenticated flips to true immediately.
+// No tokens are stored in Keychain during demo mode.
+//
+// TO REMOVE FOR PRODUCTION (3 steps):
+//   1. Delete the three lines below (demoMode declaration)
+//   2. Delete the demo block inside login(identityToken:fullName:appleUserID:)
+//   3. Delete the demo guard inside logout()
 private let demoMode = true
-private let demoID       = "demo_patient"
-private let demoPassword = "journey2026"
-// MARK: - Token Response Model
+// ============================================================
+
+// MARK: - Backend Error Response
 //
-// Maps the JSON response from POST /auth/login and POST /auth/refresh
-// to a Swift struct. CodingKeys handle snake_case → camelCase conversion.
-//
-// Expected server JSON:
-// {
-//   "access_token":  "eyJhbGci...",
-//   "refresh_token": "dGhpcyBp..."
-// }
+// The backend returns { "error": "some_code" } on all auth failures.
+// We decode this to distinguish invalid_grant (session dead) from
+// token_expired (just needs refresh).
+private struct BackendErrorResponse: Decodable {
+    let error: String
+}
+
+// MARK: - Token Response Models
+
 struct AuthTokenResponse: Codable {
     let accessToken: String
     let refreshToken: String
@@ -83,28 +82,35 @@ struct AuthTokenResponse: Codable {
         case refreshToken = "refresh_token"
     }
 }
+
+// Refresh only returns a new access token — refresh token is unchanged
+private struct RefreshTokenResponse: Decodable {
+    let accessToken: String
+    enum CodingKeys: String, CodingKey {
+        case accessToken = "access_token"
+    }
+}
+
 // MARK: - Auth Error
-//
-// Typed error enum covering all failure states in the auth flow.
-// Each case maps to a patient-friendly error message shown in the UI.
-// Using LocalizedError allows these to be caught and displayed directly.
+
 enum AuthError: LocalizedError {
-    case invalidCredentials  // 401 from server — wrong ID or password
-    case networkError(String)// URLSession failure — no connection etc.
-    case tokenExpired        // Access token expired and refresh failed
-    case noRefreshToken      // No stored session — must log in fresh
-    case serverError(Int)    // Unexpected HTTP status code from server
-    case decodingError       // Server returned unexpected JSON shape
+    case invalidToken            // Apple identity token rejected by backend (400/401)
+    case networkError(String)    // URLSession failure — no connection etc.
+    case tokenExpired            // Access token expired and refresh failed
+    case noRefreshToken          // No stored session — must log in fresh
+    case serverError(Int)        // Unexpected HTTP status from server
+    case decodingError           // Server returned unexpected JSON shape
+
     var errorDescription: String? {
         switch self {
-        case .invalidCredentials:
-            return "Incorrect Patient ID or password."
+        case .invalidToken:
+            return "Sign in failed. Please try again."
         case .networkError(let msg):
             return "Network error: \(msg)"
         case .tokenExpired:
-            return "Your session has expired. Please log in again."
+            return "Your session has expired. Please sign in again."
         case .noRefreshToken:
-            return "No session found. Please log in again."
+            return "No session found. Please sign in again."
         case .serverError(let code):
             return "Server error (\(code)). Please try again."
         case .decodingError:
@@ -112,283 +118,276 @@ enum AuthError: LocalizedError {
         }
     }
 }
+
 // MARK: - Secure Auth Manager
+
 /// Central authentication manager for the Journey app.
-/// Marked @MainActor so all @Published property updates
-/// happen on the main thread, keeping the UI in sync.
+/// @MainActor ensures all @Published updates happen on the main thread.
 @MainActor
 class SecureAuthManager: ObservableObject {
+
     // MARK: - Published State
-    //
-    // These drive the UI directly via SwiftUI's observation system.
-    // isAuthenticated → controls whether login or main app is shown
-    // isRefreshing    → can be used to show a loading state on launch
     @Published var isAuthenticated = false
     @Published var isRefreshing    = false
-    
+
     // MARK: - Keychain Keys
-    //
-    // String keys used to store/retrieve each value from iOS Keychain.
-    // Kept private — nothing outside this class should read tokens directly.
-    // All sensitive data access goes through this class's methods.
     private let accessTokenKey  = "journey_access_token"
     private let refreshTokenKey = "journey_refresh_token"
-    private let userIDKey       = "journey_user_id"
-    // MARK: - Password Hashing Config
-    //
-    // Salt is appended to the password before hashing to prevent
-    // rainbow table attacks. Currently a constant — ideally this
-    // would be a per-user salt stored server-side in production.
-    private let salt = "study_app_salt_2026"
+    private let appleUserIDKey  = "journey_apple_user_id"
+
     // MARK: - API Configuration
     //
-    // Base URL for all auth endpoints. Swap this string when the
-    // real backend is ready — nothing else needs to change.
-    //
-    // For local mock testing, this is overridden by MockURLProtocol.
-    // See MockURLProtocol.swift for setup instructions.
-    var baseURL = "https://placeholder.journeyapi.com"
-    // URLSession used for all network calls. Exposed as a var so
-    // tests can inject a mock session (see MockURLProtocol.swift).
+    // Swap this string when the backend URL is confirmed.
+    // Nothing else needs to change — all endpoints build from this.
+    var baseURL = "http://18.116.67.186"
+
     var session: URLSession = .shared
-    // MARK: - Initializer
-    //
-    // On launch, checks if a refresh token exists in Keychain.
-    // If yes → silently attempts to restore the session.
-    // If no  → stays logged out, login screen is shown.
-    //
-    // This is what keeps patients logged in between app launches
-    // without requiring them to re-enter their password every time.
+
+    // MARK: - Init
     init() {
         if KeychainManager.shared.read(key: refreshTokenKey) != nil {
-            // Refresh token found — attempt silent session restore
             Task { await silentRefresh() }
         }
-        // No refresh token → isAuthenticated stays false → login shown
     }
-    // MARK: - Login
+
+    // MARK: - Login (Apple Sign In)
     //
-    // Called when the patient taps "Sign In" on the login screen.
+    // Called after a successful Apple Sign In authorization.
     //
-    // Steps:
-    //   1. Hash the password locally (never sent as plaintext)
-    //   2. Build a POST request with { user_id, password_hash }
-    //   3. Send to /auth/login
-    //   4. On 200 → decode tokens → store in Keychain → set authenticated
-    //   5. On 401 → throw invalidCredentials (wrong ID or password)
-    //   6. On other → throw serverError
+    // Parameters:
+    //   identityToken — one-time JWT from Apple (credential.identityToken)
+    //   fullName      — user's name; only present on very first Apple login.
+    //                   Pass nil when empty — backend only needs it once.
+    //   appleUserID   — Apple's stable per-user identifier (credential.user)
     //
-    // Throws: AuthError — caught in AuthLoginView.attemptLogin()
-    func login(userID: String, password: String) async throws {
-        
-        // Demo mode — bypass network entirely for simulator testing
-            // Remove this block when real server is connected
-           
-   // TEMPORARY DEMO MODE — comment out when running      tests or connecting real server
-        
+    // Throws: AuthError
+    func login(identityToken: String, fullName: String?, appleUserID: String) async throws {
+
+        // ── ⚠️ DEMO MODE BLOCK — DELETE BEFORE SHIPPING ─────────────
         if demoMode {
-                if userID == demoID && password == demoPassword {
-                    isAuthenticated = true
-                    return
-                } else {
-                    throw AuthError.invalidCredentials
-                }
-            }
-             
-        // Step 1: Hash password — result is a hex string safe for JSON
-        let passwordHash = hashPassword(password)
-        // Step 2: Build the login request
+            isAuthenticated = true
+            return
+        }
+       // ── END DEMO MODE BLOCK ──────────────────────────────────────
+
         guard let url = URL(string: "\(baseURL)/auth/login") else { return }
         var request        = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.timeoutInterval = 15 // fail fast on no connection
-        // Encode request body as JSON
-        let body: [String: String] = [
-            "user_id":       userID,
-            "password_hash": passwordHash
-        ]
+        request.timeoutInterval = 15
+
+        // Only include full_name when Apple actually provided it.
+        // Backend ignores it for existing users; stores it for new ones.
+        var body: [String: String] = ["identity_token": identityToken]
+        if let name = fullName { body["full_name"] = name }
         request.httpBody = try JSONEncoder().encode(body)
-        // Step 3: Fire the request
+
         let (data, response) = try await session.data(for: request)
-        // Step 4: Validate HTTP response
+
         guard let http = response as? HTTPURLResponse else {
             throw AuthError.networkError("No response from server.")
         }
+
         switch http.statusCode {
         case 200:
-            // Success — decode the token pair from response body
-            guard let tokens = try? JSONDecoder().decode(
-                AuthTokenResponse.self, from: data
-            ) else {
+            guard let tokens = try? JSONDecoder().decode(AuthTokenResponse.self, from: data) else {
                 throw AuthError.decodingError
             }
-            // Persist tokens to Keychain and flip auth state
             storeTokens(
-                access:  tokens.accessToken,
-                refresh: tokens.refreshToken,
-                userID:  userID
+                access:      tokens.accessToken,
+                refresh:     tokens.refreshToken,
+                appleUserID: appleUserID
             )
             isAuthenticated = true
-        case 401:
-            // Server rejected credentials
-            throw AuthError.invalidCredentials
+
+        case 400, 401:
+            throw AuthError.invalidToken
+
         default:
-            // Unexpected status code
             throw AuthError.serverError(http.statusCode)
         }
     }
+
     // MARK: - Silent Refresh
     //
-    // Silently exchanges the stored refresh token for a new access token.
-    // Called automatically on app launch (in init) and when a 401 is
-    // received mid-session inside authenticatedRequest().
+    // Exchanges the stored refresh token for a new access token.
+    // Called on app launch (init) and on 401 inside authenticatedRequest().
     //
-    // If refresh fails for any reason (expired, revoked, network error),
-    // all tokens are cleared and the patient is sent back to login.
-    // This is intentional — a failed refresh means the session is invalid.
+    // 401 → session fully dead → clear tokens, force login
+    // Any other failure → same result (conservative — avoids stale state)
+    //
+    // Note: per the backend spec, only the access token is rotated on refresh.
+    // The refresh token stays the same until logout or expiry (365 days).
     func silentRefresh() async {
-        // Read stored refresh token — if missing, nothing to refresh
         guard let refreshToken = readToken(key: refreshTokenKey) else {
             isAuthenticated = false
             return
         }
+
         isRefreshing = true
-        defer { isRefreshing = false } // always runs when function exits
-        // Build refresh request — only sends the refresh token
+        defer { isRefreshing = false }
+
         guard let url = URL(string: "\(baseURL)/auth/refresh") else { return }
         var request        = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.timeoutInterval = 15
-        let body = ["refresh_token": refreshToken]
-        request.httpBody = try? JSONEncoder().encode(body)
-        // Attempt the refresh — if anything fails, force re-login
+        request.httpBody = try? JSONEncoder().encode(["refresh_token": refreshToken])
+
         guard
             let (data, response) = try? await session.data(for: request),
-            let http = response as? HTTPURLResponse,
-            http.statusCode == 200,
-            let tokens = try? JSONDecoder().decode(AuthTokenResponse.self, from: data)
+            let http = response as? HTTPURLResponse
         else {
-            // Refresh failed — wipe tokens and force patient to log in again
             clearTokens()
             isAuthenticated = false
             return
         }
-        // Store the new access token
-        // Note: some servers also rotate the refresh token on each refresh —
-        // we update both here to handle either case
-        KeychainManager.shared.save(
-            key: accessTokenKey,
-            data: Data(tokens.accessToken.utf8)
-        )
-        KeychainManager.shared.save(
-            key: refreshTokenKey,
-            data: Data(tokens.refreshToken.utf8)
-        )
-        isAuthenticated = true
+
+        switch http.statusCode {
+        case 200:
+            guard let refreshed = try? JSONDecoder().decode(RefreshTokenResponse.self, from: data) else {
+                clearTokens()
+                isAuthenticated = false
+                return
+            }
+            // Only replace the access token — refresh token is unchanged
+            KeychainManager.shared.save(key: accessTokenKey, data: Data(refreshed.accessToken.utf8))
+            isAuthenticated = true
+
+        default:
+            // 401 invalid_grant or any other failure — session is dead
+            clearTokens()
+            isAuthenticated = false
+        }
     }
+
     // MARK: - Authenticated Request Helper
     //
-    // Use this for EVERY API call after login — do not use URLSession directly.
-    // Automatically attaches the Bearer token to each request.
-    // Handles token expiry transparently — if a 401 is received:
-    //   1. Silently refreshes the access token
-    //   2. Retries the original request once with the new token
-    //   3. If refresh also fails → throws tokenExpired
+    // Use this for EVERY API call after login.
+    // Attaches the Bearer token and handles 401 → refresh → retry once.
+    //
+    // On 401 from an API call:
+    //   - Decodes the backend error code from the response body
+    //   - invalid_grant → session dead, clear tokens, throw immediately
+    //   - token_expired / invalid_token → silentRefresh() then retry once
+    //   - If refresh also fails → throws tokenExpired
     //
     // Parameters:
-    //   endpoint — path after baseURL, e.g. "/surveys/pending"
+    //   endpoint — path after baseURL, e.g. "/api/surveys/pending"
     //   method   — HTTP method, defaults to "GET"
-    //   body     — optional dictionary encoded as JSON request body
+    //   body     — optional dictionary encoded as JSON (for POST/PUT)
     //
-    // Returns: raw Data from server response (caller decodes as needed)
+    // Returns: raw Data (caller decodes)
     // Throws:  AuthError
     func authenticatedRequest(
         endpoint: String,
         method: String = "GET",
         body: [String: Any]? = nil
     ) async throws -> Data {
-        // Retrieve current access token — if missing, session is invalid
+
+        // ── ⚠️ DEMO MODE: skip auth, send request without Bearer token ──
+        if demoMode {
+            guard let url = URL(string: "\(baseURL)\(endpoint)") else {
+                throw AuthError.networkError("Invalid URL.")
+            }
+            var request = URLRequest(url: url)
+            request.httpMethod = method
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.timeoutInterval = 15
+            if let body {
+                request.httpBody = try JSONSerialization.data(withJSONObject: body)
+            }
+            let (data, _) = try await session.data(for: request)
+            return data
+        }
+        // ── END DEMO MODE ────────────────────────────────────────────────
+
         guard let accessToken = readToken(key: accessTokenKey) else {
             throw AuthError.tokenExpired
         }
         guard let url = URL(string: "\(baseURL)\(endpoint)") else {
             throw AuthError.networkError("Invalid URL.")
         }
-        // Build request with Bearer auth header
+
         var request = URLRequest(url: url)
         request.httpMethod = method
         request.setValue("application/json",      forHTTPHeaderField: "Content-Type")
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
         request.timeoutInterval = 15
-        // Encode body if provided (for POST/PUT requests)
+
         if let body {
             request.httpBody = try JSONSerialization.data(withJSONObject: body)
         }
+
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else {
             throw AuthError.networkError("No response.")
         }
+
         switch http.statusCode {
         case 200...299:
-            // Success — return raw data for caller to decode
             return data
+
         case 401:
-            // Access token expired — attempt silent refresh then retry once
+            let errorCode = (try? JSONDecoder().decode(BackendErrorResponse.self, from: data))?.error
+            if errorCode == "invalid_grant" {
+                clearTokens()
+                isAuthenticated = false
+                throw AuthError.tokenExpired
+            }
             await silentRefresh()
             guard isAuthenticated else { throw AuthError.tokenExpired }
-            // Recursive retry with fresh token (will not recurse again
-            // because silentRefresh sets isAuthenticated = false on failure)
-            return try await authenticatedRequest(
-                endpoint: endpoint,
-                method: method,
-                body: body
-            )
+            return try await authenticatedRequest(endpoint: endpoint, method: method, body: body)
+
         default:
             throw AuthError.serverError(http.statusCode)
         }
     }
+
     // MARK: - Logout
     //
-    // Clears all tokens from Keychain and flips auth state to false.
-    // AuthLoginView observes isAuthenticated and shows login screen.
-    // Note: ideally also call POST /auth/logout on the server to
-    // invalidate the refresh token server-side — add when endpoint ready.
+    // Calls POST /auth/logout to invalidate the refresh token server-side,
+    // then clears all tokens from Keychain regardless of server response.
     func logout() {
+        // ── ⚠️ DEMO MODE: skip network call ─────────────────────────
+        if !demoMode {
+        // ── END DEMO MODE GUARD ─────────────────────────────────────
+            Task {
+                guard
+                    let refreshToken = readToken(key: refreshTokenKey),
+                    let url = URL(string: "\(baseURL)/auth/logout")
+                else { return }
+
+                var request        = URLRequest(url: url)
+                request.httpMethod = "POST"
+                request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                request.httpBody = try? JSONEncoder().encode(["refresh_token": refreshToken])
+                _ = try? await session.data(for: request)
+            }
+        // ── ⚠️ DEMO MODE closing brace ──────────────────────────────
+        }
+        // ── END DEMO MODE GUARD ─────────────────────────────────────
+
         clearTokens()
         isAuthenticated = false
     }
+
     // MARK: - Private Helpers
-    /// Hashes a password string using SHA256 + constant salt.
-    /// Returns a lowercase hex string safe for JSON transport.
-    /// Example: "password123" + salt → "a3f9c2..."
-    private func hashPassword(_ password: String) -> String {
-        let combined = password + salt
-        let hashed   = SHA256.hash(data: Data(combined.utf8))
-        // Convert each byte to 2-digit hex and join into one string
-        return hashed.compactMap { String(format: "%02x", $0) }.joined()
-    }
-    /// Saves all three auth values to Keychain atomically.
-    /// Called immediately after a successful login response.
-    private func storeTokens(access: String, refresh: String, userID: String) {
+
+    private func storeTokens(access: String, refresh: String, appleUserID: String) {
         KeychainManager.shared.save(key: accessTokenKey,  data: Data(access.utf8))
         KeychainManager.shared.save(key: refreshTokenKey, data: Data(refresh.utf8))
-        KeychainManager.shared.save(key: userIDKey,       data: Data(userID.utf8))
+        KeychainManager.shared.save(key: appleUserIDKey,  data: Data(appleUserID.utf8))
     }
-    /// Removes all auth tokens from Keychain.
-    /// Called on logout and when silent refresh fails.
+
     private func clearTokens() {
         KeychainManager.shared.delete(key: accessTokenKey)
         KeychainManager.shared.delete(key: refreshTokenKey)
-        KeychainManager.shared.delete(key: userIDKey)
+        KeychainManager.shared.delete(key: appleUserIDKey)
     }
-    /// Reads a token string from Keychain by key.
-    /// Returns nil if the key doesn't exist or data is unreadable.
+
     private func readToken(key: String) -> String? {
         guard let data = KeychainManager.shared.read(key: key) else { return nil }
         return String(data: data, encoding: .utf8)
     }
 }
-
-
