@@ -18,6 +18,9 @@ struct SensingAppApp: App {
     //Singletons are lazily created so, we are forcing the location to trigger
     @StateObject private var locationManager = AdaptiveLocationManager.shared
     
+    // Makes Authorization Pathway consistent for all data files/types
+    @StateObject private var authManager = SecureAuthManager()
+    
     init(){
         print("SensingApp init called")
         
@@ -40,6 +43,7 @@ struct SensingAppApp: App {
             ContentView()
                 .environmentObject(appState)
                 .environmentObject(locationManager)
+                .environmentObject(authManager)
                 .onAppear {
                     SurveyNotificationManager.shared
                         .scheduleDailyReminder(
@@ -48,13 +52,15 @@ struct SensingAppApp: App {
                             appState: appState
                         )
                 }
+        }
+    }
             // Using @StateObject instead of passing LocationManager.shared directly
             // into .environmentObject() ensures SwiftUI owns the lifecycle and
             // the singleton is initialised immediately when the app starts.
             
-        }
-    }
 }
+
+
 
 
 

@@ -57,8 +57,8 @@ import HealthKit
 struct AuthLoginView: View {
 
     // MARK: - Auth Manager
-    @StateObject private var authManager = SecureAuthManager()
-
+    @EnvironmentObject private var authManager: SecureAuthManager
+    
     // MARK: - UI State
     @State private var isWorking = false
     @State private var appeared  = false
@@ -85,7 +85,7 @@ struct AuthLoginView: View {
     var body: some View {
         if authManager.isAuthenticated {
             if permissionsComplete {
-                MainAppView(onLogout: { authManager.logout() })
+                MainAppView()
             } else {
                 PermissionsFlowView(onComplete: {})
             }
@@ -93,7 +93,6 @@ struct AuthLoginView: View {
             loginScreen
         }
     }
-
     // MARK: - Login Screen UI
     private var loginScreen: some View {
         ZStack {

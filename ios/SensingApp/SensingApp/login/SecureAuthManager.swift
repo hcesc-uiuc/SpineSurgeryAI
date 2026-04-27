@@ -32,8 +32,8 @@ internal import Combine
 //   1. Patient taps "Sign in with Apple"
 //   2. Apple returns a one-time identity token (JWT) + optional full name
 //   3. App sends { identity_token, full_name? } to POST /auth/login
-//   4. Backend verifies Apple's JWT and returns { access_token, refresh_token }
-//   5. Both tokens stored securely in iOS Keychain
+//   4. Backend verifies our access code and returns { access_token, refresh_token }
+//   5. Both tokens stored securely in iOS Keychain (maybe change it if not implemented)
 //   6. Every subsequent API call uses access token as Bearer header
 //   7. On app relaunch, silentRefresh() restores session automatically
 //   8. On 401 from any API call → refresh access token → retry once
@@ -140,7 +140,7 @@ class SecureAuthManager: ObservableObject {
     //
     // Swap this string when the backend URL is confirmed.
     // Nothing else needs to change — all endpoints build from this.
-    var baseURL = "https://placeholder.journeyapi.com"
+    var baseURL = "http://18.116.67.186"
 
     var session: URLSession = .shared
 
