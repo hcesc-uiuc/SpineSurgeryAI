@@ -48,17 +48,15 @@ class AcclerometerRecorder {
         }
         
         
-        //saving data to a csv folder
-        //let writer = PreallocatedCSVBuffer(filename: "accelerometer_\(currentTimestampString()).csv", capacity: 100000)
         
+        /*
+        //SQLLite save. This crashing and needs more test.
         SQLiteSaver.shared.open()
         if let dataList = recorder.accelerometerData(from: past, to: now) {
             for case let data as CMRecordedAccelerometerData in dataList {
                 let accel = data.acceleration
                 let unixTime = data.startDate.timeIntervalSince1970 * 1000
-                //print("\(unixTime),\(accel.x),\(accel.y),\(accel.z)")
-                // writer.addRowStr(rowOfData: "\(unixTime),\(accel.x),\(accel.y),\(accel.z)")
-                
+
                 //database writes
                 SQLiteSaver.shared.addRow(
                     timestamp: unixTime,
@@ -68,8 +66,20 @@ class AcclerometerRecorder {
             }
         }
         SQLiteSaver.shared.close()
-        // writer.flush()
-        // writer.closeFile()
+        */
+        
+        //saving data to a csv folder
+        let writer = PreallocatedCSVBuffer(filename: "accelerometer_\(currentTimestampString()).csv", capacity: 100000)
+        if let dataList = recorder.accelerometerData(from: past, to: now) {
+            for case let data as CMRecordedAccelerometerData in dataList {
+                let accel = data.acceleration
+                let unixTime = data.startDate.timeIntervalSince1970 * 1000
+                //print("\(unixTime),\(accel.x),\(accel.y),\(accel.z)")
+                writer.addRowStr(rowOfData: "\(unixTime),\(accel.x),\(accel.y),\(accel.z)")
+            }
+        }
+        writer.flush()
+        writer.closeFile()
         
         //save last save date
         UserDefaults.standard.set(now, forKey: key)
