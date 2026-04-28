@@ -182,12 +182,14 @@ struct MainAppView: View {
                         let filename = "log_2026-02-19.txt"
                         let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
                         let fileURL = dir.appendingPathComponent(filename)
-                        Uploader.shared.uploadFile(fileURL: fileURL)
+                        await Uploader.shared.uploadFile(fileURL: fileURL)
                     }
                 }
 
                 Button("Upload All Files") {
-                    Task { Uploader.shared.uploadFolder() }
+                    Task {
+                        await Uploader.shared.uploadFolder()
+                    }
                 }
 
                 Button("Print log data") {

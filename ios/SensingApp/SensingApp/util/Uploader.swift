@@ -14,29 +14,55 @@ struct Uploader {
     static let UploadURL = "http://18.116.67.186/api/uploadfile"
     
     func uploadFolder() async {
-        let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+        
+        let fileManager = FileManager.default
+        let documentsURL = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first!
+        let toBeProcessedURL = documentsURL.appendingPathComponent("to-be-processed")
+        let processedURL = documentsURL.appendingPathComponent("processed")
+        
+        // Create the "processed" directory if it doesn't already exist
+        if !fileManager.fileExists(atPath: processedURL.path) {
+            try? fileManager.createDirectory(at: processedURL, withIntermediateDirectories: true)
+        }
         
         //let file_prefixes = ["accelerometer_"] //, "log_"] //add more extension in future
-        let file_prefixes = ["log_"] //add more extension in future
+        //let file_prefixes = ["log_"] //add more extension in future
+        let todaysDateString = getTodaysDateString()
+        let file_prefixes = ["locations_", "accelerometer_", "healthkit_"]
         for file_prefix in file_prefixes {
-            let matchingFiles = filesWithPrefix(in: documentsURL, prefix: file_prefix)
+            let matchingFiles = filesWithPrefix(in: toBeProcessedURL, prefix: file_prefix)
             let numberOfFiles = matchingFiles.count
             for (index, file) in matchingFiles.enumerated() {
+                
+                // Skip today's file — it may still be open for writing
+                let nameWithoutExtension = file.deletingPathExtension().lastPathComponent
+                if nameWithoutExtension.hasSuffix(todaysDateString) {
+                    print("\(file.lastPathComponent) is today's file, skipping")
+                    continue
+                }
+                
                 if let size = fileSize(from: file) {
                     let fileSizeInKB = Int(Double(size) / 1024)
                     print("\(index+1)/\(numberOfFiles) Uploading file: \(file.lastPathComponent); \(fileSizeInKB)KB")
-                    // Await the upload so we know it completed before continuing
-                    await uploadFile(fileURL: file)
+                    let success = await uploadFile(fileURL: file)
+                    if success {
+                        // Move the file to "processed/" so it isn't re-uploaded on the next run
+                        let destination = processedURL.appendingPathComponent(file.lastPathComponent)
+                        do {
+                            try fileManager.moveItem(at: file, to: destination)
+                            print("     Moved \(file.lastPathComponent) -> processed/")
+                        } catch {
+                            print("     Failed to move \(file.lastPathComponent): \(error)")
+                        }
+                    }
                 }
-                // TODO: remove break to upload all matching files, not just the first
-                break
             }
         }
-        
     }
     
     
-    func uploadFile(fileURL: URL) async {
+    // Returns true if the upload succeeded, false otherwise.
+    func uploadFile(fileURL: URL) async -> Bool {
         
         if FileManager.default.fileExists(atPath: fileURL.path) {
             print("File \(fileURL.lastPathComponent) exists")
@@ -48,7 +74,7 @@ struct Uploader {
         let boundary = "Boundary-\(UUID().uuidString)"
         guard let url = URL(string: Uploader.UploadURL) else {
             print("\(Uploader.UploadURL) does not exist")
-            return
+            return false
         }
 
         var request = URLRequest(url: url)
@@ -73,8 +99,10 @@ struct Uploader {
         do {
             let (_, _) = try await upload(data: body, request: request)
             print("     Upload success!")
+            return true
         } catch {
             print("Upload failed: \(error)")
+            return false
         }
         
     }
@@ -141,6 +169,13 @@ struct Uploader {
             print("Error: \(error)")
             return nil
         }
+    }
+    
+    
+    func getTodaysDateString() -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.string(from: Date())
     }
     
     
