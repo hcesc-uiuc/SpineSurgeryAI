@@ -195,7 +195,10 @@ struct MainAppView: View {
                 }
 
                 Button("Get HealthKit data") {
-                    Task { self.getHealthKitData() }
+                    Task {
+                        // self.getHealthKitData()
+                        HealthkitRecorder.shared.getHealthKitData()
+                    }
                 }
 
                 if CLLocationManager().authorizationStatus != .authorizedAlways {
@@ -233,23 +236,37 @@ struct MainAppView: View {
     
     private func getHealthKitData() {
         let daysRequested = 1
-        let metricsRequested: Set<SupportedMetric> = [.steps] // Empty = All
+        //let metricsRequested: Set<SupportedMetric> = [.steps] // Empty = All
+        let metricsRequested: Set<SupportedMetric> = [] // Empty = All
         
         print("Requesting: HKManager.refreshWithNewRange")
         
-        HKManager.refreshWithNewRange(days: 1,types:metricsRequested) { data in
+        HKManager.refreshWithNewRange(days: 1, types:metricsRequested) { data in
             
             print("Success! Data received. Len: \(data.count), Days:\(daysRequested), Types:\(metricsRequested)")
                 
-                for (index, point) in data.enumerated() {
-                    let hkDataPointString = formatRawString(
-                        point,
-                        unixStartStr: String(Int(point.startDate.timeIntervalSince1970)),
-                        unixEndStr: String(Int(point.endDate.timeIntervalSince1970))
-                    )
-                    print("\(index) - \(hkDataPointString)")
-                    print("")
+                //here I need to open a file
+                //This will create a file for the current day
+                
+                let hkDataLogger = HKDataLogger()
+                let isFileOpenSuccesful = hkDataLogger.open()
+                if isFileOpenSuccesful == true {
+                    for (index, point) in data.enumerated() {
+                        let hkDataPointString = formatRawString(
+                            point,
+                            unixStartStr: String(Int(point.startDate.timeIntervalSince1970)),
+                            unixEndStr: String(Int(point.endDate.timeIntervalSince1970))
+                        )
+                        print("\(index) - \(hkDataPointString)")
+                        print("")
+                        
+                        hkDataLogger.writeLine(hkDataPointString)
+                    }
+                    hkDataLogger.close()
                 }
+                
+                
+                //close a file here
         }
     }
     
@@ -273,6 +290,8 @@ struct MainAppView: View {
         
         return "[\(dateStr)] |ID:\(p.id.uuidString)| TYPE:\(p.type) | VAL:\(displayValue) \(p.unit) | UNIX_START:\(unixStartStr) | UNIX_END:\(unixEndStr) | DUR:\(durationMs)ms | SRC:\(p.sourceName) | BID:\(p.bundleID) | DEV:\(p.deviceName ?? "NA") | MOD:\(p.deviceModel ?? "NA") | SW:\(p.softwareVer ?? "NA") | ID:\(p.id.uuidString) | META:{\(metaStr)}"
     }
+    
+    
 
     private var accelerometerView: some View {
         SensorCard(

@@ -26,6 +26,9 @@ class BackgroundScheduler {
             someSensorIsActive = true
         }
         
+        //check healthkit authorization
+        HealthkitRecorder.shared.getHealthKitData()
+        
         let now = Date()
         UserDefaults.standard.set(now, forKey: "lastSensorDateSaveTime")
         
@@ -111,7 +114,7 @@ class BackgroundScheduler {
             //(or we have not recorded anything for the last 1 hour).
             // let lastSensorDateSaveTime = (UserDefaults.standard.object(forKey: "lastSensorDateSaveTime") as? Date) ?? Date()
             if let lastSensorDateSaveTime = UserDefaults.standard.object(forKey: "lastSensorDateSaveTime") as? Date {
-                let now = Date()
+                let now  = Date()
                 let differenceInMinutes = now.timeIntervalSince(lastSensorDateSaveTime) / 60  // seconds → minutes
 
                 if differenceInMinutes >= 65 {
@@ -206,8 +209,8 @@ class BackgroundScheduler {
             }
         }
     }
-    // e -l objc -- (void)[[BGTaskScheduler sharedScheduler] _simulateLaunchForTaskWithIdentifier:@"edu.uiuc.cs.hcesc.SensingApp.bgProcessing"]
     
+    // e -l objc -- (void)[[BGTaskScheduler sharedScheduler] _simulateLaunchForTaskWithIdentifier:@"edu.uiuc.cs.hcesc.SensingApp.bgProcessing"]
     ///
     /// I do not need to keep this scheduler here. Ideally we want to do the rescheduling business where we do the recording.
     ///

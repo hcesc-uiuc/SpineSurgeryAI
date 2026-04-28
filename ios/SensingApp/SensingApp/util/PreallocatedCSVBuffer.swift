@@ -7,6 +7,7 @@
 
 import Foundation
 
+//This file is specific to accelerometer data.
 final class PreallocatedCSVBuffer {
     private var buffer: [String]
     private var index = 0

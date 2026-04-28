@@ -88,7 +88,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         }
         
         //forcing sqlite files to initialize
-        _ = SQLiteSaver.shared
+//        _ = SQLiteSaver.shared
         
         // Use the Firebase library to configure APIs.
         FirebaseApp.configure()
@@ -136,7 +136,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
     
     
     func application(_ application: UIApplication,
-                         didReceiveRemoteNotification userInfo: [AnyHashable: Any],
+                     didReceiveRemoteNotification userInfo: [AnyHashable: Any],
                      fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void) {
         print("Received notification: \(userInfo)")
         
@@ -148,7 +148,9 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         }
         
         BackgroundScheduler.shared.printScheduledBackgroundTasks()
-        BackgroundScheduler.shared.scheduleAppRefresh() //ToDo: Why scheduling only AppRefreshTask
+        //ToDo: Why scheduling only AppRefreshTask
+        BackgroundScheduler.shared.scheduleAppRefresh()
+        
     }
     
     

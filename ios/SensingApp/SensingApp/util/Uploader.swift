@@ -13,7 +13,7 @@ struct Uploader {
     static let shared = Uploader()
     static let UploadURL = "http://18.116.67.186/api/uploadfile"
     
-    func uploadFolder() {
+    func uploadFolder() async {
         let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
         
         //let file_prefixes = ["accelerometer_"] //, "log_"] //add more extension in future
@@ -25,8 +25,10 @@ struct Uploader {
                 if let size = fileSize(from: file) {
                     let fileSizeInKB = Int(Double(size) / 1024)
                     print("\(index+1)/\(numberOfFiles) Uploading file: \(file.lastPathComponent); \(fileSizeInKB)KB")
-                    uploadFile(fileURL: file)
+                    // Await the upload so we know it completed before continuing
+                    await uploadFile(fileURL: file)
                 }
+                // TODO: remove break to upload all matching files, not just the first
                 break
             }
         }
@@ -34,7 +36,7 @@ struct Uploader {
     }
     
     
-    func uploadFile(fileURL: URL) {
+    func uploadFile(fileURL: URL) async {
         
         if FileManager.default.fileExists(atPath: fileURL.path) {
             print("File \(fileURL.lastPathComponent) exists")
@@ -67,37 +69,12 @@ struct Uploader {
         }
         body.append("\r\n--\(boundary)--\r\n".data(using: .utf8)!)
 
-        // ✅ Use uploadTask(from:) instead of setting httpBody
-        
-        //        let task = URLSession.shared.uploadTask(with: request, from: body) { data, response, error in
-        //            if let error = error {
-        //                print("     Upload error: \(error.localizedDescription)")
-        //                return
-        //            }
-        //
-        //            if let httpResponse = response as? HTTPURLResponse {
-        //                print("     Status code: \(httpResponse.statusCode)")
-        //            }
-        //
-        //            if let data = data,
-        //               let responseString = String(data: data, encoding: .utf8) {
-        //                print("     Response: \(responseString)")
-        //            }
-        //        }
-        //
-        //        task.resume()
-        Task {
-            do {
-                let (data, response) = try await upload(data: body, request: request)
-                print("     Upload success!")
-                //print("\(data)")
-                //                if let data = data,
-                //                   let responseString = String(data: data, encoding: .utf8) {
-                //                    print("     Response: \(responseString)")
-                //                }
-            } catch {
-                print("Upload failed: \(error)")
-            }
+        // Await the upload directly — no fire-and-forget Task needed since the caller is async
+        do {
+            let (_, _) = try await upload(data: body, request: request)
+            print("     Upload success!")
+        } catch {
+            print("Upload failed: \(error)")
         }
         
     }
