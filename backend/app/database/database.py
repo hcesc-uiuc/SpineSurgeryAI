@@ -681,6 +681,57 @@ class DB:
                 database_cursor.execute(update_sql, (file_size_megabytes, row_id))
 
     # ---------------------------
+    # Pending uploads helpers
+    # ---------------------------
+    def create_pending_upload(
+        self,
+        upload_id: str,
+        external_participant_identifier: str,
+        kind: str,
+        object_key: str,
+    ) -> None:
+        """Insert a pending upload record (status='pending')."""
+        participant_id_integer = self.create_participant_if_missing(external_participant_identifier)
+        sql_text = (
+            "INSERT INTO pending_uploads (upload_id, participant_id, kind, object_key) "
+            "VALUES (%s, %s, %s, %s)"
+        )
+        with self.temporary_database_connection() as conn, conn.cursor() as cur:
+            cur.execute(sql_text, (upload_id, participant_id_integer, kind, object_key))
+
+    def get_pending_upload(self, upload_id: str) -> Optional[Dict[str, Any]]:
+        """Return pending_upload row as dict (includes external_id), or None if not found."""
+        sql_text = (
+            "SELECT pu.upload_id, pu.participant_id, p.external_id, pu.kind, pu.object_key, "
+            "pu.status, pu.error_message, pu.created_at, pu.completed_at "
+            "FROM pending_uploads pu "
+            "JOIN participants p ON p.id = pu.participant_id "
+            "WHERE pu.upload_id = %s"
+        )
+        with self.temporary_database_connection() as conn, conn.cursor(cursor_factory=DictCursor) as cur:
+            cur.execute(sql_text, (upload_id,))
+            row = cur.fetchone()
+            return dict(row) if row else None
+
+    def mark_upload_completed(self, upload_id: str) -> None:
+        """Mark a pending upload as completed. Only updates if status is currently 'pending'."""
+        sql_text = (
+            "UPDATE pending_uploads SET status = 'completed', completed_at = now() "
+            "WHERE upload_id = %s AND status = 'pending'"
+        )
+        with self.temporary_database_connection() as conn, conn.cursor() as cur:
+            cur.execute(sql_text, (upload_id,))
+
+    def mark_upload_failed(self, upload_id: str, error_message: str = "") -> None:
+        """Mark a pending upload as failed. Only updates if status is currently 'pending'."""
+        sql_text = (
+            "UPDATE pending_uploads SET status = 'failed', error_message = %s, completed_at = now() "
+            "WHERE upload_id = %s AND status = 'pending'"
+        )
+        with self.temporary_database_connection() as conn, conn.cursor() as cur:
+            cur.execute(sql_text, (error_message, upload_id))
+
+    # ---------------------------
     # Auth helpers
     # ---------------------------
     def create_users_table(self) -> None:

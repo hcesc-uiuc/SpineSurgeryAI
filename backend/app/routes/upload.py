@@ -3,6 +3,7 @@ from flask import Blueprint, request, jsonify, g
 from flask import current_app
 from datetime import datetime
 from auth.middleware import require_auth
+import uuid
 
 #S3 imports
 from flask import Blueprint, request, jsonify
@@ -89,137 +90,25 @@ def upload():
 @upload_bp.route("/uploadfile", methods=["POST"])
 @require_auth
 def uploadfile():
-    db = current_app.config["DB"]
-
-    if (Config.DEBUG_MODE):
-        # Be careful printing body — can be huge or binary
-
-        print("---- REQUEST START ----")
-        print("Method:", request.method)
-        print("URL:", request.url)
-        print("Headers:\n", request.headers)
-        print("Body:\n", request.get_data(as_text=True))
-        print("---- REQUEST END ----")    
-    file = request.files.get("file")
-    if not file:
-        return jsonify(error="No file uploaded"), 400
-
-    key = f"uploads/{datetime.utcnow():%Y%m%dT%H%M%S}_{secure_filename(file.filename)}"
-
-    s3.put_object(
-        Bucket=S3_BUCKET,
-        Key=key,
-        Body=file.stream,
-        ContentType=file.mimetype or "application/octet-stream",
-        StorageClass="GLACIER_IR",
-        ServerSideEncryption="AES256"
-    )
-
-    db.insert_accel(g.user_id, [{"ts": 0, "url": key}])
-
-    return jsonify(message="Upload successful", key=key)
+    return jsonify(error="Endpoint deprecated. Use /api/uploads/presign + /api/uploads/complete"), 410
 
 
 @upload_bp.route("/uploadfile/accel", methods=["POST"])
 @require_auth
 def uploadfileaccel():
-    db = current_app.config["DB"]
-
-    if (Config.DEBUG_MODE):
-        # Be careful printing body — can be huge or binary
-        print("---- REQUEST START ----")
-        print("Method:", request.method)
-        print("URL:", request.url)
-        print("Headers:\n", request.headers)
-        print("Body:\n", request.get_data(as_text=True))
-        print("---- REQUEST END ----")    
-
-    file = request.files.get("file")
-    if not file:
-        return jsonify(error="No file uploaded"), 400
-
-    key = f"uploads/{datetime.utcnow():%Y%m%dT%H%M%S}_{secure_filename(file.filename)}"
-
-    s3.put_object(
-        Bucket=S3_BUCKET,
-        Key=key,
-        Body=file.stream,
-        ContentType=file.mimetype or "application/octet-stream",
-        StorageClass="GLACIER_IR",
-        ServerSideEncryption="AES256"
-    )
-
-    db.insert_accel(g.user_id, [{"ts": 0, "url": key}])
-
-    return jsonify(message="Upload successful", key=key)
+    return jsonify(error="Endpoint deprecated. Use /api/uploads/presign + /api/uploads/complete"), 410
 
 
 @upload_bp.route("/uploadfile/gyro", methods=["POST"])
 @require_auth
 def uploadfilegyro():
-    db = current_app.config["DB"]
-
-    if (Config.DEBUG_MODE):
-        # Be careful printing body — can be huge or binary
-        print("---- REQUEST START ----")
-        print("Method:", request.method)
-        print("URL:", request.url)
-        print("Headers:\n", request.headers)
-        print("Body:\n", request.get_data(as_text=True))
-        print("---- REQUEST END ----")    
-
-    file = request.files.get("file")
-    if not file:
-        return jsonify(error="No file uploaded"), 400
-
-    key = f"uploads/{datetime.utcnow():%Y%m%dT%H%M%S}_{secure_filename(file.filename)}"
-
-    s3.put_object(
-        Bucket=S3_BUCKET,
-        Key=key,
-        Body=file.stream,
-        ContentType=file.mimetype or "application/octet-stream",
-        StorageClass="GLACIER_IR",
-        ServerSideEncryption="AES256"
-    )
-
-    db.insert_gyro(g.user_id, [{"ts": 0, "url": key}])
-
-    return jsonify(message="Upload successful", key=key)
+    return jsonify(error="Endpoint deprecated. Use /api/uploads/presign + /api/uploads/complete"), 410
 
 
 @upload_bp.route("/uploadfile/heartrate", methods=["POST"])
 @require_auth
 def uploadfileheartrate():
-    db = current_app.config["DB"]
-
-    if (Config.DEBUG_MODE):
-        # Be careful printing body — can be huge or binary
-        print("---- REQUEST START ----")
-        print("Method:", request.method)
-        print("URL:", request.url)
-        print("Headers:\n", request.headers)
-        print("Body:\n", request.get_data(as_text=True))
-        print("---- REQUEST END ----")    
-
-    file = request.files.get("file")
-    if not file:
-        return jsonify(error="No file uploaded"), 400
-
-    key = f"uploads/{datetime.utcnow():%Y%m%dT%H%M%S}_{secure_filename(file.filename)}"
-
-    s3.put_object(
-        Bucket=S3_BUCKET,
-        Key=key,
-        Body=file.stream,
-        ContentType=file.mimetype or "application/octet-stream",
-        StorageClass="GLACIER_IR",
-        ServerSideEncryption="AES256"
-    )
-
-    db.insert_hr(g.user_id, [{"ts": 0, "url": key}])
-
-    return jsonify(message="Upload successful", key=key)
+    return jsonify(error="Endpoint deprecated. Use /api/uploads/presign + /api/uploads/complete"), 410
 
 
 @upload_bp.route("/uploadjson/survey", methods=["POST"])
@@ -308,6 +197,102 @@ def upload_survey():
         user_id=user_id,
         survey_date=survey_date,
     ), 201
+
+
+@upload_bp.route("/uploads/presign", methods=["POST"])
+@require_auth
+def uploads_presign():
+    db = current_app.config["DB"]
+    body = request.get_json(silent=True) or {}
+
+    filename = body.get("filename")
+    content_type = body.get("content_type", "application/octet-stream")
+    kind = body.get("kind")
+
+    if not filename:
+        return jsonify(error="missing filename"), 400
+    if kind not in ("accel", "gyro", "hr"):
+        return jsonify(error="kind must be accel, gyro, or hr"), 400
+
+    upload_id = str(uuid.uuid4())
+    key = f"uploads/{kind}/{datetime.utcnow():%Y%m%dT%H%M%S}_{secure_filename(filename)}"
+
+    presigned_url = s3.generate_presigned_url(
+        "put_object",
+        Params={
+            "Bucket": S3_BUCKET,
+            "Key": key,
+            "ContentType": content_type,
+            "ServerSideEncryption": "AES256",
+            "StorageClass": "GLACIER_IR",
+        },
+        ExpiresIn=900,
+    )
+
+    db.create_pending_upload(upload_id, g.user_id, kind, key)
+
+    return jsonify(
+        upload_id=upload_id,
+        key=key,
+        url=presigned_url,
+        headers={
+            "Content-Type": content_type,
+            "x-amz-server-side-encryption": "AES256",
+            "x-amz-storage-class": "GLACIER_IR",
+        },
+        expires_in=900,
+    ), 201
+
+
+@upload_bp.route("/uploads/complete", methods=["POST"])
+@require_auth
+def uploads_complete():
+    db = current_app.config["DB"]
+    body = request.get_json(silent=True) or {}
+
+    upload_id = body.get("upload_id")
+    success = body.get("success")
+    error_msg = body.get("error", "")
+
+    if not upload_id:
+        return jsonify(error="missing upload_id"), 400
+
+    pending = db.get_pending_upload(upload_id)
+    if not pending:
+        return jsonify(error="upload not found"), 404
+
+    # Idempotent replay: if already resolved, return cached result
+    if pending["status"] != "pending":
+        return jsonify(status=pending["status"], key=pending["object_key"]), 200
+
+    if success:
+        # Verify object actually exists in S3 before recording in DB
+        try:
+            s3.head_object(Bucket=S3_BUCKET, Key=pending["object_key"])
+        except Exception:
+            db.mark_upload_failed(upload_id, "object not found in S3 after reported success")
+            return jsonify(status="failed", error="object not found in S3"), 200
+
+        kind = pending["kind"]
+        key = pending["object_key"]
+
+        if kind == "accel":
+            db.insert_accel(g.user_id, [{"url": key}])
+        elif kind == "gyro":
+            db.insert_gyro(g.user_id, [{"url": key}])
+        elif kind == "hr":
+            db.insert_hr(g.user_id, [{"url": key}])
+
+        db.mark_upload_completed(upload_id)
+        return jsonify(status="completed", key=key), 200
+    else:
+        # Best-effort cleanup of partial S3 object
+        try:
+            s3.delete_object(Bucket=S3_BUCKET, Key=pending["object_key"])
+        except Exception:
+            pass
+        db.mark_upload_failed(upload_id, error_msg)
+        return jsonify(status="failed"), 200
 
 
 

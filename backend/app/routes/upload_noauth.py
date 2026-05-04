@@ -6,7 +6,7 @@ from werkzeug.utils import secure_filename
 from dotenv import load_dotenv
 from datetime import datetime
 from config import Config
-import boto3, os, json
+import boto3, os, json, uuid
 
 load_dotenv()
 
@@ -128,6 +128,103 @@ def uploadfile_heartrate_noauth():
     )
     current_app.config["DB"].insert_hr(participant_id, [{"ts": 0, "url": key}])
     return jsonify({"message": "Upload successful", "key": key}), 200
+
+
+@upload_noauth_bp.route("/noauth/uploads/presign", methods=["POST"])
+def uploads_presign_noauth():
+    db = current_app.config["DB"]
+    body = request.get_json(silent=True) or {}
+
+    participant_id = body.get("participantId") or body.get("participant_id")
+    if not participant_id:
+        return jsonify(error="participantId is required"), 400
+
+    filename = body.get("filename")
+    content_type = body.get("content_type", "application/octet-stream")
+    kind = body.get("kind")
+
+    if not filename:
+        return jsonify(error="missing filename"), 400
+    if kind not in ("accel", "gyro", "hr"):
+        return jsonify(error="kind must be accel, gyro, or hr"), 400
+
+    upload_id = str(uuid.uuid4())
+    key = f"uploads/{kind}/{datetime.utcnow():%Y%m%dT%H%M%S}_{secure_filename(filename)}"
+
+    presigned_url = s3.generate_presigned_url(
+        "put_object",
+        Params={
+            "Bucket": S3_BUCKET,
+            "Key": key,
+            "ContentType": content_type,
+            "ServerSideEncryption": "AES256",
+            "StorageClass": "GLACIER_IR",
+        },
+        ExpiresIn=900,
+    )
+
+    db.create_pending_upload(upload_id, participant_id, kind, key)
+
+    return jsonify(
+        upload_id=upload_id,
+        key=key,
+        url=presigned_url,
+        headers={
+            "Content-Type": content_type,
+            "x-amz-server-side-encryption": "AES256",
+            "x-amz-storage-class": "GLACIER_IR",
+        },
+        expires_in=900,
+    ), 201
+
+
+@upload_noauth_bp.route("/noauth/uploads/complete", methods=["POST"])
+def uploads_complete_noauth():
+    db = current_app.config["DB"]
+    body = request.get_json(silent=True) or {}
+
+    upload_id = body.get("upload_id")
+    success = body.get("success")
+    error_msg = body.get("error", "")
+
+    if not upload_id:
+        return jsonify(error="missing upload_id"), 400
+
+    pending = db.get_pending_upload(upload_id)
+    if not pending:
+        return jsonify(error="upload not found"), 404
+
+    if pending["status"] != "pending":
+        return jsonify(status=pending["status"], key=pending["object_key"]), 200
+
+    participant_id = pending["external_id"]
+
+    if success:
+        try:
+            s3.head_object(Bucket=S3_BUCKET, Key=pending["object_key"])
+        except Exception:
+            db.mark_upload_failed(upload_id, "object not found in S3 after reported success")
+            return jsonify(status="failed", error="object not found in S3"), 200
+
+        kind = pending["kind"]
+        key = pending["object_key"]
+
+        if kind == "accel":
+            db.insert_accel(participant_id, [{"url": key}])
+        elif kind == "gyro":
+            db.insert_gyro(participant_id, [{"url": key}])
+        elif kind == "hr":
+            db.insert_hr(participant_id, [{"url": key}])
+
+        db.mark_upload_completed(upload_id)
+        return jsonify(status="completed", key=key), 200
+    else:
+        try:
+            s3.delete_object(Bucket=S3_BUCKET, Key=pending["object_key"])
+        except Exception:
+            pass
+        db.mark_upload_failed(upload_id, error_msg)
+        return jsonify(status="failed"), 200
 
 
 @upload_noauth_bp.route("/noauth/uploadjson/survey", methods=["POST"])

@@ -71,6 +71,20 @@ CREATE TABLE IF NOT EXISTS heart_rate (
   uploaded_at     TIMESTAMPTZ DEFAULT now()
 );
 
+CREATE TABLE IF NOT EXISTS pending_uploads (
+  upload_id      UUID PRIMARY KEY,
+  participant_id INT NOT NULL REFERENCES participants(id) ON DELETE CASCADE,
+  kind           TEXT NOT NULL CHECK (kind IN ('accel','gyro','hr')),
+  object_key     TEXT NOT NULL,
+  status         TEXT NOT NULL DEFAULT 'pending'
+                 CHECK (status IN ('pending','completed','failed')),
+  error_message  TEXT,
+  created_at     TIMESTAMPTZ DEFAULT now(),
+  completed_at   TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS pending_uploads_status_created_idx
+  ON pending_uploads (status, created_at);
+
 ALTER TABLE accelerometer ADD COLUMN IF NOT EXISTS file_size_bytes NUMERIC;
 ALTER TABLE gyroscope ADD COLUMN IF NOT EXISTS file_size_bytes NUMERIC;
 ALTER TABLE heart_rate ADD COLUMN IF NOT EXISTS file_size_bytes NUMERIC;
@@ -356,6 +370,7 @@ DROP MATERIALIZED VIEW IF EXISTS mv_hr_daily_presence CASCADE;
 DROP MATERIALIZED VIEW IF EXISTS mv_survey_daily_presence CASCADE;
 
 -- Drop tables (children first because of FK constraints)
+DROP TABLE IF EXISTS pending_uploads CASCADE;
 DROP TABLE IF EXISTS accelerometer CASCADE;
 DROP TABLE IF EXISTS gyroscope CASCADE;
 DROP TABLE IF EXISTS heart_rate CASCADE;

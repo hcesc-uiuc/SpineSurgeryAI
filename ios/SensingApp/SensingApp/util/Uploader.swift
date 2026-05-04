@@ -7,17 +7,26 @@
 
 import Foundation
 
-
 struct Uploader {
-    
+
     static let shared = Uploader()
-    static let UploadURL = "http://18.116.67.186/api/uploadfile"
-    
-    func uploadFolder() {
+    static let BaseURL = "http://18.116.67.186"
+    static let PresignURL = "\(BaseURL)/api/uploads/presign"
+    static let CompleteURL = "\(BaseURL)/api/uploads/complete"
+    static let SurveyURL = "\(BaseURL)/api/uploadjson/survey"
+
+    private struct PresignResponse: Codable {
+        let upload_id: String
+        let key: String
+        let url: String
+        let headers: [String: String]
+        let expires_in: Int
+    }
+
+    func uploadFolder() async {
         let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
-        
-        //let file_prefixes = ["accelerometer_"] //, "log_"] //add more extension in future
-        let file_prefixes = ["log_"] //add more extension in future
+
+        let file_prefixes = ["log_"]
         for file_prefix in file_prefixes {
             let matchingFiles = filesWithPrefix(in: documentsURL, prefix: file_prefix)
             let numberOfFiles = matchingFiles.count
@@ -25,90 +34,96 @@ struct Uploader {
                 if let size = fileSize(from: file) {
                     let fileSizeInKB = Int(Double(size) / 1024)
                     print("\(index+1)/\(numberOfFiles) Uploading file: \(file.lastPathComponent); \(fileSizeInKB)KB")
-                    uploadFile(fileURL: file)
+                    await uploadFile(fileURL: file, kind: "accel")
                 }
                 break
             }
         }
-        
     }
-    
-    
-    func uploadFile(fileURL: URL) {
-        
-        if FileManager.default.fileExists(atPath: fileURL.path) {
-            print("File \(fileURL.lastPathComponent) exists")
-        }else{
+
+    func uploadFile(fileURL: URL, kind: String = "accel") async {
+        guard FileManager.default.fileExists(atPath: fileURL.path) else {
             print("File \(fileURL.lastPathComponent) does not exist")
+            return
         }
-        
-        
-        let boundary = "Boundary-\(UUID().uuidString)"
-        guard let url = URL(string: Uploader.UploadURL) else {
-            print("\(Uploader.UploadURL) does not exist")
+        print("File \(fileURL.lastPathComponent) exists")
+
+        // Step 1: Request presigned URL from server
+        guard let presignURL = URL(string: Uploader.PresignURL) else {
+            print("Upload failed: invalid presign URL")
             return
         }
 
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        var presignReq = URLRequest(url: presignURL)
+        presignReq.httpMethod = "POST"
+        presignReq.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
-        // Build the multipart form body
-        var body = Data()
-        let filename = fileURL.lastPathComponent
-        let mimetype = "application/octet-stream"
-
-        // --- file data part ---
-        body.append("--\(boundary)\r\n".data(using: .utf8)!)
-        body.append("Content-Disposition: form-data; name=\"file\"; filename=\"\(filename)\"\r\n".data(using: .utf8)!)
-        body.append("Content-Type: \(mimetype)\r\n\r\n".data(using: .utf8)!)
-        if let fileData = try? Data(contentsOf: fileURL) {
-            body.append(fileData)
+        let fileSizeBytes = fileSize(from: fileURL) ?? 0
+        let presignBody: [String: Any] = [
+            "filename": fileURL.lastPathComponent,
+            "content_type": "application/octet-stream",
+            "size": fileSizeBytes,
+            "kind": kind
+        ]
+        guard let bodyData = try? JSONSerialization.data(withJSONObject: presignBody) else {
+            print("Upload failed: could not encode presign request")
+            return
         }
-        body.append("\r\n--\(boundary)--\r\n".data(using: .utf8)!)
+        presignReq.httpBody = bodyData
 
-        // ✅ Use uploadTask(from:) instead of setting httpBody
-        
-        //        let task = URLSession.shared.uploadTask(with: request, from: body) { data, response, error in
-        //            if let error = error {
-        //                print("     Upload error: \(error.localizedDescription)")
-        //                return
-        //            }
-        //
-        //            if let httpResponse = response as? HTTPURLResponse {
-        //                print("     Status code: \(httpResponse.statusCode)")
-        //            }
-        //
-        //            if let data = data,
-        //               let responseString = String(data: data, encoding: .utf8) {
-        //                print("     Response: \(responseString)")
-        //            }
-        //        }
-        //
-        //        task.resume()
-        Task {
-            do {
-                let (data, response) = try await upload(data: body, request: request)
-                print("     Upload success!")
-                //print("\(data)")
-                //                if let data = data,
-                //                   let responseString = String(data: data, encoding: .utf8) {
-                //                    print("     Response: \(responseString)")
-                //                }
-            } catch {
-                print("Upload failed: \(error)")
+        do {
+            let (presignData, presignResp) = try await URLSession.shared.data(for: presignReq)
+            guard let httpPresign = presignResp as? HTTPURLResponse, httpPresign.statusCode == 201 else {
+                print("Upload failed: presign request returned non-201")
+                return
             }
+            guard let presign = try? JSONDecoder().decode(PresignResponse.self, from: presignData) else {
+                print("Upload failed: could not decode presign response")
+                return
+            }
+
+            // Step 2: PUT file bytes directly to S3 (no multipart, raw body streamed from disk)
+            guard let s3URL = URL(string: presign.url) else {
+                print("Upload failed: invalid S3 presigned URL")
+                return
+            }
+            var s3Req = URLRequest(url: s3URL)
+            s3Req.httpMethod = "PUT"
+            for (headerKey, headerValue) in presign.headers {
+                s3Req.setValue(headerValue, forHTTPHeaderField: headerKey)
+            }
+
+            let (_, s3Response) = try await URLSession.shared.upload(for: s3Req, fromFile: fileURL)
+            let uploadSuccess = (s3Response as? HTTPURLResponse)?.statusCode == 200
+
+            // Step 3: Notify server of upload result
+            guard let completeURL = URL(string: Uploader.CompleteURL) else { return }
+            var completeReq = URLRequest(url: completeURL)
+            completeReq.httpMethod = "POST"
+            completeReq.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+            let completeBody: [String: Any] = [
+                "upload_id": presign.upload_id,
+                "success": uploadSuccess
+            ]
+            completeReq.httpBody = try? JSONSerialization.data(withJSONObject: completeBody)
+
+            let (_, _) = try await URLSession.shared.data(for: completeReq)
+
+            if uploadSuccess {
+                print("     Upload success! Key: \(presign.key)")
+            } else {
+                print("Upload failed: S3 PUT returned non-200")
+            }
+
+        } catch {
+            print("Upload failed: \(error)")
         }
-        
     }
-    
-    
-    ///
-    /// Coded taken from Sami'r code.
-    ///
+
     func uploadSurveyResults(payload: [String: Any]) async {
 
-        guard let url = URL(string: Uploader.UploadURL) else { return }
+        guard let url = URL(string: Uploader.SurveyURL) else { return }
         guard let jsonData = try? JSONSerialization.data(withJSONObject: payload) else { return }
 
         var request = URLRequest(url: url)
@@ -122,40 +137,26 @@ struct Uploader {
             print("Upload error: \(error.localizedDescription)")
         }
     }
-    
-    
-    //==========================
-    //  Internal
-    //==========================
-     
-    func upload(data: Data, request: URLRequest) async throws -> (Data, URLResponse) {
-        // `upload(for:from:)` works with Data
-        let (responseData, response) = try await URLSession.shared.upload(
-            for: request,
-            from: data
-        )
-        return (responseData, response)
-    }
-    
+
     func filesWithPrefix(in directory: URL, prefix: String) -> [URL] {
         let fileManager = FileManager.default
-        
+
         do {
             let fileURLs = try fileManager.contentsOfDirectory(
                 at: directory,
                 includingPropertiesForKeys: nil,
                 options: [.skipsHiddenFiles]
             )
-            
+
             // Filter by prefix
             return fileURLs.filter { $0.lastPathComponent.hasPrefix(prefix) }
-            
+
         } catch {
             print("Error reading directory: \(error)")
             return []
         }
     }
-    
+
     func fileSize(from url: URL) -> Int? {
         do {
             let values = try url.resourceValues(forKeys: [.fileSizeKey])
@@ -165,6 +166,4 @@ struct Uploader {
             return nil
         }
     }
-    
-    
 }
