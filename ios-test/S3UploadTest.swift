@@ -6,7 +6,7 @@ import SwiftUI
 import Combine
 
 // MARK: - Config
-private let baseURL = "https://rvsh5s5hg66ezcom2itcz7a27y0smcig.lambda-url.us-east-2.on.aws"
+private let baseURL = "http://18.116.67.186"
 private let presignURL = "\(baseURL)/api/noauth/uploads/presign"
 private let completeURL = "\(baseURL)/api/noauth/uploads/complete"
 private let participantID = "P0001"   // change to a real test participant
