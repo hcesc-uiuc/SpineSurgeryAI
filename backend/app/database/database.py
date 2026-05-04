@@ -680,6 +680,25 @@ class DB:
             with database_connection.cursor() as database_cursor:
                 database_cursor.execute(update_sql, (file_size_megabytes, row_id))
 
+    def create_pending_uploads_table(self) -> None:
+        sql_text = """
+        CREATE TABLE IF NOT EXISTS pending_uploads (
+            upload_id      UUID PRIMARY KEY,
+            participant_id INT NOT NULL REFERENCES participants(id) ON DELETE CASCADE,
+            kind           TEXT NOT NULL CHECK (kind IN ('accel','gyro','hr')),
+            object_key     TEXT NOT NULL,
+            status         TEXT NOT NULL DEFAULT 'pending'
+                           CHECK (status IN ('pending','completed','failed')),
+            error_message  TEXT,
+            created_at     TIMESTAMPTZ DEFAULT now(),
+            completed_at   TIMESTAMPTZ
+        );
+        CREATE INDEX IF NOT EXISTS pending_uploads_status_created_idx
+            ON pending_uploads (status, created_at);
+        """
+        with self.temporary_database_connection() as conn, conn.cursor() as cur:
+            cur.execute(sql_text)
+
     # ---------------------------
     # Pending uploads helpers
     # ---------------------------

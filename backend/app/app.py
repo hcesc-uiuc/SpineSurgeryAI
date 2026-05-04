@@ -27,6 +27,7 @@ def create_app():
         app.config["DB"].create_users_table()
         app.config["DB"].create_refresh_tokens_table()
         app.config["DB"].create_device_tokens_table()
+        app.config["DB"].create_pending_uploads_table()
 
     except Exception as e:
         app.logger.error("\033[91m" + "Cannot connect to database" + "\033[0m" + str(e))
