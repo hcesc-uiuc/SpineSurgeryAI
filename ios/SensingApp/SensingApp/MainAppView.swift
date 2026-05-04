@@ -99,6 +99,7 @@ struct MainAppView: View {
                 print("App moved to background")
                 BackgroundScheduler.shared.scheduleAppRefresh()
                 BackgroundScheduler.shared.scheduleBGProcessingTask()
+                BackgroundScheduler.shared.scheduleUploadBGTask()
                 Logger.shared.append("App moved to background")
             } else if newPhase == .active {
                 print("App moved to foreground")
@@ -175,7 +176,7 @@ struct MainAppView: View {
                 Button("Print schedule bg task") {
                     Task { BackgroundScheduler.shared.printScheduledBackgroundTasks() }
                 }
-
+                
                 Button("Upload File") {
                     Task {
                         print("Upload function called")
@@ -629,19 +630,19 @@ struct HomeView: View {
     private var greetingText: String {
         let hour = Calendar.current.component(.hour, from: Date())
         switch hour {
-        case 0..<12: return "Good morning"
-        case 12..<17: return "Good afternoon"
-        default: return "Good evening"
+            case 0..<12: return "Good morning"
+            case 12..<17: return "Good afternoon"
+            default: return "Good evening"
         }
     }
 
     private var currentMilestone: String? {
         switch daysSinceSurgery {
-        case 7:  return "🎉 1 week milestone!"
-        case 14: return "🎉 2 week milestone!"
-        case 30: return "🎉 1 month milestone!"
-        case 90: return "🎉 3 month milestone!"
-        default: return nil
+            case 7:  return "🎉 1 week milestone!"
+            case 14: return "🎉 2 week milestone!"
+            case 30: return "🎉 1 month milestone!"
+            case 90: return "🎉 3 month milestone!"
+            default: return nil
         }
     }
 }

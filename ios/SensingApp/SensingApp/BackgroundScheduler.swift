@@ -6,13 +6,14 @@
 //
 
 import BackgroundTasks
-
+import Network
 
 class BackgroundScheduler {
     
     static let shared = BackgroundScheduler() //creates a singleton
     let APP_REFRESH_IDENTIFIER = "edu.uiuc.cs.hcesc.SensingApp.apprefresh"
     let BG_PROCESSING_IDENTIFIER = "edu.uiuc.cs.hcesc.SensingApp.bgProcessing"
+    let UPLOAD_PROCESSING_IDENTIFIER = "edu.uiuc.cs.hcesc.SensingApp.fileUpload"
     
     private init() {}
     
@@ -39,6 +40,10 @@ class BackgroundScheduler {
     }
     
     func printScheduledBackgroundTasks(){
+        /*
+         We are printing every background task that is
+         scheduled now.
+         */
         BGTaskScheduler.shared.getPendingTaskRequests{ requests in
             print("\(requests.count) BGTasks pending.")
             Logger.shared.append("\(requests.count) BGTasks pending.")
@@ -56,6 +61,7 @@ class BackgroundScheduler {
     //
     //=============================================================
     func registerBackgroundAppRefreshTask() {
+        print("SensingTrialAppApp:registerAppRefreshTask init called")
         BGTaskScheduler.shared.register(
             forTaskWithIdentifier: APP_REFRESH_IDENTIFIER,
             using: nil
@@ -69,14 +75,26 @@ class BackgroundScheduler {
         BGTaskScheduler.shared.getPendingTaskRequests{ requests in
             print("Trying to schedule AppRefresh")
             Logger.shared.append("Trying to schedule AppRefresh")
+            var alreadyScheduledButInThePast: Bool = false
             for request in requests {
                 let earliestBeginDateStr = AcclerometerRecorder.shared.dateToString(request.earliestBeginDate)
                 
                 if request.identifier == self.APP_REFRESH_IDENTIFIER {
-                    print("\(request.identifier) already scheduled at \(earliestBeginDateStr)")
-                    Logger.shared.append("\(request.identifier) already scheduled at  \(earliestBeginDateStr)")
-                    return
+                    if (request.earliestBeginDate ?? Date()) < Date() {
+                        //the scheduled time is earlier than now, so
+                        //we will schedule a new one, and invalidate the earlier one.
+                        alreadyScheduledButInThePast = true
+                    }else{
+                        print("\(request.identifier) already scheduled at \(earliestBeginDateStr)")
+                        Logger.shared.append("\(request.identifier) already scheduled at  \(earliestBeginDateStr)")
+                        return
+                    }
                 }
+            }
+            
+            //we are canceling an scheduled background task from the past
+            if alreadyScheduledButInThePast {
+                BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: self.APP_REFRESH_IDENTIFIER)
             }
             
             let request = BGAppRefreshTaskRequest(identifier: self.APP_REFRESH_IDENTIFIER)
@@ -92,10 +110,17 @@ class BackgroundScheduler {
     }
     
     private func handleAppRefresh(task: BGAppRefreshTask) {
+        /*
+         We try to schedule App Refresh every 15 minutes.
+         Handle app grabs data if 60 minutes has passed since last recording.
+         
+         */
         print("🔄 ==BGAppRefreshTask== started")
         Logger.shared.append("==BGAppRefreshTask== started")
         
         // Reschedule next task
+        // There should not be any more AppRefreshTask pending
+        // as we are already in one.
         scheduleAppRefresh()
         
         // Expiration handler
@@ -186,14 +211,26 @@ class BackgroundScheduler {
         BGTaskScheduler.shared.getPendingTaskRequests{ requests in
             print("Trying to schedule BGProcessing")
             Logger.shared.append("Trying to schedule BGProcessing")
+            var alreadyScheduledButInThePast: Bool = false
             for request in requests {
                 let earliestBeginDateStr = AcclerometerRecorder.shared.dateToString(request.earliestBeginDate)
                 
                 if request.identifier == self.BG_PROCESSING_IDENTIFIER {
-                    print("\(request.identifier) already scheduled at \(earliestBeginDateStr)")
-                    Logger.shared.append("\(request.identifier) already scheduled at  \(earliestBeginDateStr)")
-                    return
+                    if (request.earliestBeginDate ?? Date()) < Date() {
+                        //the scheduled time is earlier than now, so
+                        //we will schedule a new one, and invalidate the earlier one.
+                        alreadyScheduledButInThePast = true
+                    }else{
+                        print("\(request.identifier) already scheduled at \(earliestBeginDateStr)")
+                        Logger.shared.append("\(request.identifier) already scheduled at  \(earliestBeginDateStr)")
+                        return
+                    }
                 }
+            }
+            
+            //we are canceling an scheduled background task from the past
+            if alreadyScheduledButInThePast {
+                BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: self.BG_PROCESSING_IDENTIFIER)
             }
             
             let request = BGProcessingTaskRequest(identifier: self.BG_PROCESSING_IDENTIFIER)
@@ -219,6 +256,7 @@ class BackgroundScheduler {
         BGTaskScheduler.shared.getPendingTaskRequests{ requests in
             print("Trying to schedule BGProcessing")
             Logger.shared.append("Trying to schedule BGProcessing")
+            var alreadyScheduledButInThePast: Bool = false
             for request in requests {
                 let earliestBeginDateStr = AcclerometerRecorder.shared.dateToString(request.earliestBeginDate)
                 
@@ -232,8 +270,16 @@ class BackgroundScheduler {
                     let differenceInMinutes = now.timeIntervalSince(request.earliestBeginDate ?? now) / 60
                     if differenceInMinutes < 60 {
                         return
+                    }else{
+                        alreadyScheduledButInThePast = true
                     }
                 }
+            }
+            
+            //we are canceling an scheduled background task from the past
+            //and scheduling a new one.
+            if alreadyScheduledButInThePast {
+                BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: self.BG_PROCESSING_IDENTIFIER)
             }
             
             //this will add the background scheduling part with handleMotionTask.
@@ -251,6 +297,111 @@ class BackgroundScheduler {
         }
     }
     
+    
+    //=============================================================
+    //
+    // Background processing task for upload
+    // only run when network connectivity is available and phone is charging
+    //
+    //=============================================================
+    // Call this once at app launch (AppDelegate or @main App init)
+    func registerUploadBGTask() {
+        
+        print("SensingTrialAppApp:registerUploadBGTask init called")
+        BGTaskScheduler.shared.register(forTaskWithIdentifier: UPLOAD_PROCESSING_IDENTIFIER,
+                                        using: nil) { task in
+            self.handleUploadBGStartTask(task: task as! BGProcessingTask)
+        }
+    }
+    
+    // Call this to schedule the next run
+    func scheduleUploadBGTask() {
+        BGTaskScheduler.shared.getPendingTaskRequests{ requests in
+            print("Trying to schedule Upload BGProcessing")
+            Logger.shared.append("Trying to schedule BGProcessing")
+            var alreadyScheduledButInThePast: Bool = false
+            for request in requests {
+                let earliestBeginDateStr = AcclerometerRecorder.shared.dateToString(request.earliestBeginDate)
+                
+                if request.identifier == self.UPLOAD_PROCESSING_IDENTIFIER {
+                    
+                    if (request.earliestBeginDate ?? Date()) < Date() {
+                        //the scheduled time is earlier than now, so
+                        //we will schedule a new one, and invalidate the earlier one.
+                        alreadyScheduledButInThePast = true
+                    }else{
+                        print("\(request.identifier) already scheduled at \(earliestBeginDateStr)")
+                        Logger.shared.append("\(request.identifier) already scheduled at  \(earliestBeginDateStr)")
+                        return
+                    }
+                }
+            }
+            
+            //we are canceling an scheduled background task from the past
+            if alreadyScheduledButInThePast {
+                BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: self.UPLOAD_PROCESSING_IDENTIFIER)
+            }
+            
+            let request = BGProcessingTaskRequest(identifier: self.UPLOAD_PROCESSING_IDENTIFIER)
+            request.requiresNetworkConnectivity = true   // WiFi (or any network)
+            request.requiresExternalPower = true         // Must be charging
+            request.earliestBeginDate = Date(timeIntervalSinceNow: 15 * 60) // not before 15 min from now
+            do {
+                try BGTaskScheduler.shared.submit(request)
+                print("Upload BGProcessingTask scheduled.")
+                Logger.shared.append("Background uploading scheduled (scheduleUploadBGTask).")
+            } catch {
+                print("Failed to schedule UploadBGTask: \(error)")
+            }
+        }
+    }
+    
+    func handleUploadBGStartTask(task: BGProcessingTask) {
+        // Reschedule immediately so the cycle continues
+        print("SensingTrialAppApp:handleUploadBGStartTask is called")
+        
+        self.scheduleUploadBGTask()
+
+        // Set expiration handler — iOS will call this if time runs out
+        task.expirationHandler = {
+            // Cancel any ongoing work here
+            print("Task expired — clean up")
+        }
+
+        // Do your actual work
+        performUpload { success in
+            task.setTaskCompleted(success: success)
+        }
+    }
+    
+    func isOnWiFi() -> Bool {
+        // Synchronous check — fine inside a background task
+        let monitor = NWPathMonitor(requiredInterfaceType: .wifi)
+        var onWiFi = false
+        let sema = DispatchSemaphore(value: 0)
+        monitor.pathUpdateHandler = { path in
+            onWiFi = path.status == .satisfied
+            sema.signal()
+        }
+        monitor.start(queue: DispatchQueue.global())
+        sema.wait()
+        monitor.cancel()
+        return onWiFi
+    }
+    
+    private func performUpload(completion: @escaping (Bool) -> Void) {
+        // Your function goes here
+        print("Running background work — Network connected, charging")
+        Logger.shared.append("BGUploadProcessingTask: Running background work — WiFi connected, charging")
+        // e.g. upload SQLite DB, sync data, etc.
+        if self.isOnWiFi() {
+            Logger.shared.append("BGUploadProcessingTask: On Wifi. Starting upload")
+            Task {
+                await Uploader.shared.uploadFolder()
+            }
+        }
+        completion(true)
+    }
     
     
 }

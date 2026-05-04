@@ -96,7 +96,9 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         registerForPushNotifications()
         // Start background location updates immediately
         // LocationManager.shared.start()
+        //registering does not start the background process right away.
         BackgroundScheduler.shared.registerBackgroundTasks()
+        BackgroundScheduler.shared.registerUploadBGTask()
         BackgroundScheduler.shared.registerBackgroundAppRefreshTask()
         return true
     }
@@ -149,8 +151,12 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         
         BackgroundScheduler.shared.printScheduledBackgroundTasks()
         //ToDo: Why scheduling only AppRefreshTask
+        //Note all schedule background and app refresh does not
+        //reschedule if there is an older one scheduled at a later time
+        //so calling it multiple times does not affect anything
         BackgroundScheduler.shared.scheduleAppRefresh()
-        
+        BackgroundScheduler.shared.scheduleUploadBGTask()
+        BackgroundScheduler.shared.scheduleBGProcessingTask()
     }
     
     
@@ -183,7 +189,6 @@ class AppDelegate: NSObject, UIApplicationDelegate {
                 return nil
             }
         }
-        
         return folderURL
     }
 }

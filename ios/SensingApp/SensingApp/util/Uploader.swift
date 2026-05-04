@@ -11,7 +11,9 @@ import Foundation
 struct Uploader {
     
     static let shared = Uploader()
-    static let UploadURL = "http://18.116.67.186/api/uploadfile"
+    // static let UploadURL = "http://18.116.67.186/api/uploadfile"
+    static let UploadURL = "http://18.116.67.186/api/noauth/uploadfile"
+    
     
     func uploadFolder() async {
         
