@@ -15,7 +15,7 @@ struct MainAppView: View {
     @State private var isSurveyPresented = false
     @State private var showDeniedAlert = false
     @State private var showSettingsAlert = false
-    @StateObject var HKManager = HealthKitManager()
+    @StateObject var hkManager = HealthKitManager()
     
     @Environment(\.scenePhase) var scenePhase
     let motionActivityManager = CMMotionActivityManager()
@@ -177,48 +177,53 @@ struct MainAppView: View {
     }
     
     private func getHealthKitData() {
-        let daysRequested = 1
-        let metricsRequested: Set<SupportedMetric> = [.steps] // Empty = All
+        let daysRequested = 30
+        let metricsRequested: Set<SupportedMetric> = [.steps, .heartRate, .sleep]
         
-        print("Requesting: HKManager.refreshWithNewRange")
+        print("🚀 Requesting \(daysRequested)-day historical refresh...")
         
-        HKManager.refreshWithNewRange(days: 1,types:metricsRequested) { data in
+        hkManager.refreshWithNewRange(days: daysRequested, types: metricsRequested) { data in
+            let calendar = Calendar.current
             
-            print("Success! Data received. Len: \(data.count), Days:\(daysRequested), Types:\(metricsRequested)")
-                
-                for (index, point) in data.enumerated() {
-                    let hkDataPointString = formatRawString(
-                        point,
-                        unixStartStr: String(Int(point.startDate.timeIntervalSince1970)),
-                        unixEndStr: String(Int(point.endDate.timeIntervalSince1970))
-                    )
-                    print("\(index) - \(hkDataPointString)")
-                    print("")
+            let filteredQuantities = data.filter { point in
+                let hour = calendar.component(.hour, from: point.startDate)
+                return hour >= 14 && hour < 15
+            }
+
+            let filteredSleep = hkManager.sleepData.filter { point in
+                let hour = calendar.component(.hour, from: point.startDate)
+                return hour >= 14 && hour < 15
+            }
+
+            print("\n Total points in 30-day range: \(data.count + hkManager.sleepData.count)")
+            print("🎯 Points found : \(filteredQuantities.count + filteredSleep.count)")
+
+            // --- QUANTITY DATA OUTPUT ---
+            print("\n--- 📊 ALL QUANTITY DATA  ---")
+            if filteredQuantities.isEmpty {
+                print("No Steps or Heart Rate data found in this time window.")
+            } else {
+                for p in filteredQuantities {
+                    let timeStr = p.startDate.formatted(.dateTime.hour().minute())
+                    let val = String(format: "%.1f", p.value ?? 0.0)
+                    print("Time: \(timeStr) | Type: \(p.type.padding(toLength: 10, withPad: " ", startingAt: 0)) | Val: \(val) \(p.unit)")
                 }
+            }
+
+            // --- SLEEP DATA OUTPUT (NO LIMIT) ---
+            print("\n--- 🛌 ALL SLEEP STAGES ---")
+            if filteredSleep.isEmpty {
+                print("No Sleep data found in this time window (Nap data usually appears here).")
+            } else {
+                for s in filteredSleep {
+                    let timeStr = s.startDate.formatted(.dateTime.hour().minute())
+                    print("Time: \(timeStr) | Stage: \(s.sleepStage)")
+                }
+            }
+            
+            print("\n✅ Console Output Complete. Scroll up to see all \(filteredQuantities.count + filteredSleep.count) points.")
         }
     }
-    
-    func formatRawString(_ p: HealthKitManager.RawDataPoint, unixStartStr: String, unixEndStr: String) -> String {
-        let dateStr = p.startDate.formatted(.dateTime.month().day().hour().minute().second())
-        
-        let displayValue = p.value ?? 0.0
-        
-        let metaStr: String = {
-            guard let md = p.metadata as? [AnyHashable: Any] else { return "" }
-            return md.map { key, value in
-                let k = String(describing: key)
-                let v = String(describing: value)
-                return "\(k):\(v)"
-            }
-            .sorted() // stable order for logs
-            .joined(separator: "|")
-        }()
-        
-        let durationMs = Int(p.duration * 1000)
-        
-        return "[\(dateStr)] |ID:\(p.id.uuidString)| TYPE:\(p.type) | VAL:\(displayValue) \(p.unit) | UNIX_START:\(unixStartStr) | UNIX_END:\(unixEndStr) | DUR:\(durationMs)ms | SRC:\(p.sourceName) | BID:\(p.bundleID) | DEV:\(p.deviceName ?? "NA") | MOD:\(p.deviceModel ?? "NA") | SW:\(p.softwareVer ?? "NA") | ID:\(p.id.uuidString) | META:{\(metaStr)}"
-    }
-
     private var accelerometerView: some View {
         SensorCard(
             title: "Accelerometer",
