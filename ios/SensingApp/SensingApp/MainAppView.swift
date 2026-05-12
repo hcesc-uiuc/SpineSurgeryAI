@@ -22,12 +22,26 @@ struct MainAppView: View {
     let motionActivityManager = CMMotionActivityManager()
 
     var body: some View {
+
         TabView {
             // Tab 1
             MainView
                 .tabItem {
                     Label("Home", systemImage: "house.fill")
                 }
+
+            //         TabView(selection: $selectedTab) {
+            //             ForEach(JourneyTab.allCases, id: \.self) { tab in
+            //                 tabContent(for: tab)
+            //                     .tabItem {
+            //                         Label(tab.label, systemImage: tab.icon)
+            //                     }
+            //                     .tag(tab)
+            //             }
+            //         }
+
+            //     }
+
 
             // Tab 2
             SensorView
@@ -46,6 +60,24 @@ struct MainAppView: View {
                 .tabItem {
                     Label("Debug", systemImage: "ant.fill")
                 }
+        }
+        // Accent color updates as selected tab changes
+        .tint(selectedTab.accentColor)
+        // ── GitHub: scene phase handling (background tasks, logging) ──
+        .onChange(of: scenePhase) { oldPhase, newPhase in
+            if newPhase == .background {
+                print("App moved to background")
+                BackgroundScheduler.shared.scheduleAppRefresh()
+                BackgroundScheduler.shared.scheduleBGProcessingTask()
+                BackgroundScheduler.shared.scheduleUploadBGTask()
+                Logger.shared.append("App moved to background")
+            } else if newPhase == .active {
+                print("App moved to foreground")
+                Logger.shared.append("App moved to foreground")
+            } else if newPhase == .inactive {
+                print("App is inactive")
+                Logger.shared.append("App moved to inactive")
+            }
         }
     }
     
@@ -91,13 +123,14 @@ struct MainAppView: View {
                 Task { BackgroundScheduler.shared.printScheduledBackgroundTasks() }
             }.padding(.top, 30)
 
+                
             Button("Upload File") {
                 Task {
                     print("Upload function called")
                     let filename = "log_2026-02-19.txt"
                     let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
                     let fileURL = dir.appendingPathComponent(filename)
-                    Uploader.shared.uploadFile(fileURL: fileURL)
+                    await Uploader.shared.uploadFile(fileURL: fileURL)
                 }
             }.padding(.top, 30)
 
@@ -112,7 +145,9 @@ struct MainAppView: View {
             }.padding(.top, 30)
 
             Button("Get HealthKit data") {
-                Task { self.getHealthKitData() }
+                Task { 
+                  HealthkitRecorder.shared.getHealthKitData() 
+                }
             }.padding(.top, 30)
 
             if CLLocationManager().authorizationStatus != .authorizedAlways {
@@ -168,16 +203,38 @@ struct MainAppView: View {
     // MARK: - HealthKit
 
     private func getHealthKitData() {
+        let daysRequested = 1
+        //let metricsRequested: Set<SupportedMetric> = [.steps] // Empty = All
+        let metricsRequested: Set<SupportedMetric> = [] // Empty = All
+        
         print("Requesting: HKManager.refreshWithNewRange")
-        HKManager.refreshWithNewRange(days: 7)
-        print("Requesting: HKManager.trialData. Len:\(HKManager.trialData.count)")
-        for (index, point) in HKManager.trialData.enumerated() {
-            let hkDataPointString = formatRawString(
-                point,
-                unixStartStr: String(Int(point.startDate.timeIntervalSince1970)),
-                unixEndStr:   String(Int(point.endDate.timeIntervalSince1970))
-            )
-            print("\(index) - \(hkDataPointString)")
+        
+        HKManager.refreshWithNewRange(days: 1, types:metricsRequested) { data in
+            
+            print("Success! Data received. Len: \(data.count), Days:\(daysRequested), Types:\(metricsRequested)")
+                
+                //here I need to open a file
+                //This will create a file for the current day
+                
+                let hkDataLogger = HKDataLogger()
+                let isFileOpenSuccesful = hkDataLogger.open()
+                if isFileOpenSuccesful == true {
+                    for (index, point) in data.enumerated() {
+                        let hkDataPointString = formatRawString(
+                            point,
+                            unixStartStr: String(Int(point.startDate.timeIntervalSince1970)),
+                            unixEndStr: String(Int(point.endDate.timeIntervalSince1970))
+                        )
+                        print("\(index) - \(hkDataPointString)")
+                        print("")
+                        
+                        hkDataLogger.writeLine(hkDataPointString)
+                    }
+                    hkDataLogger.close()
+                }
+                
+                
+                //close a file here
         }
     }
 
@@ -186,6 +243,8 @@ struct MainAppView: View {
         let metaStr = p.metadata.map { "\($0.key):\($0.value)" }.joined(separator: "|")
         return "[\(dateStr)] TYPE:\(p.type) | VAL:\(p.value)\(p.unit) | UNIX_START:\(unixStartStr) | UNIX_END:\(unixEndStr) | DUR:\(Float(unixEndStr)!-Float(unixStartStr)!)ms | SRC:\(p.sourceName) | BID:\(p.bundleID) | DEV:\(p.deviceName ?? "NA") | MOD:\(p.deviceModel ?? "NA") | SW:\(p.softwareVer ?? "NA") | ID:\(p.id.uuidString) | META:{\(metaStr)}"
     }
+    
+    
 
     // MARK: - Sensor Views
 

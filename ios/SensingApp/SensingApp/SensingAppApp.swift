@@ -57,13 +57,19 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         if let folderURL = createFolder(named: "processed") {
             print("Ready to use: \(folderURL)")
         }
-
-        _ = SQLiteSaver.shared
-
-        //FirebaseApp.configure()
-
+        
+        //forcing sqlite files to initialize
+        //        _ = SQLiteSaver.shared
+        
+        // Use the Firebase library to configure APIs.
+        FirebaseApp.configure()
+        
         registerForPushNotifications()
+        // Start background location updates immediately
+        // LocationManager.shared.start()
+        //registering does not start the background process right away.
         BackgroundScheduler.shared.registerBackgroundTasks()
+        BackgroundScheduler.shared.registerUploadBGTask()
         BackgroundScheduler.shared.registerBackgroundAppRefreshTask()
 
         return true
@@ -104,12 +110,11 @@ class AppDelegate: NSObject, UIApplicationDelegate {
     ) {
         print("❌ Failed to register: \(error.localizedDescription)")
     }
-
-    func application(
-        _ application: UIApplication,
-        didReceiveRemoteNotification userInfo: [AnyHashable: Any],
-        fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void
-    ) {
+    
+    
+    func application(_ application: UIApplication,
+                     didReceiveRemoteNotification userInfo: [AnyHashable: Any],
+                     fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void) {
         print("Received notification: \(userInfo)")
 
         if let data = userInfo["data"] as? [String: Any] {
@@ -119,8 +124,13 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         }
 
         BackgroundScheduler.shared.printScheduledBackgroundTasks()
+        //ToDo: Why scheduling only AppRefreshTask
+        //Note all schedule background and app refresh does not
+        //reschedule if there is an older one scheduled at a later time
+        //so calling it multiple times does not affect anything
         BackgroundScheduler.shared.scheduleAppRefresh()
-        completionHandler(.newData)
+        BackgroundScheduler.shared.scheduleUploadBGTask()
+        BackgroundScheduler.shared.scheduleBGProcessingTask()
     }
 
     func applicationDidEnterBackground(_ application: UIApplication) {
@@ -159,7 +169,6 @@ class AppDelegate: NSObject, UIApplicationDelegate {
                 return nil
             }
         }
-
         return folderURL
     }
 }
