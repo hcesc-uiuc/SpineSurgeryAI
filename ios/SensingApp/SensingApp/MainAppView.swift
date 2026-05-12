@@ -62,7 +62,7 @@ struct MainAppView: View {
                 }
         }
         // Accent color updates as selected tab changes
-        .tint(selectedTab.accentColor)
+        // .tint(selectedTab.accentColor)
         // ── GitHub: scene phase handling (background tasks, logging) ──
         .onChange(of: scenePhase) { oldPhase, newPhase in
             if newPhase == .background {
@@ -136,7 +136,7 @@ struct MainAppView: View {
 
             Button("Upload All Files") {
                 Task {
-                    Uploader.shared.uploadFolder()
+                    await Uploader.shared.uploadFolder()
                 }
             }.padding(.top, 30)
 
@@ -239,9 +239,24 @@ struct MainAppView: View {
     }
 
     func formatRawString(_ p: HealthKitManager.RawDataPoint, unixStartStr: String, unixEndStr: String) -> String {
-        let dateStr = p.startDate.formatted(.dateTime.month().day().hour().minute().second())
-        let metaStr = p.metadata.map { "\($0.key):\($0.value)" }.joined(separator: "|")
-        return "[\(dateStr)] TYPE:\(p.type) | VAL:\(p.value)\(p.unit) | UNIX_START:\(unixStartStr) | UNIX_END:\(unixEndStr) | DUR:\(Float(unixEndStr)!-Float(unixStartStr)!)ms | SRC:\(p.sourceName) | BID:\(p.bundleID) | DEV:\(p.deviceName ?? "NA") | MOD:\(p.deviceModel ?? "NA") | SW:\(p.softwareVer ?? "NA") | ID:\(p.id.uuidString) | META:{\(metaStr)}"
+            let dateStr = p.startDate.formatted(.dateTime.month().day().hour().minute().second())
+            
+            let displayValue = p.value ?? 0.0
+            
+            let metaStr: String = {
+                guard let md = p.metadata as? [AnyHashable: Any] else { return "" }
+                return md.map { key, value in
+                    let k = String(describing: key)
+                    let v = String(describing: value)
+                    return "\(k):\(v)"
+                }
+                .sorted() // stable order for logs
+                .joined(separator: "|")
+            }()
+            
+            let durationMs = Int(p.duration * 1000)
+            
+            return "[\(dateStr)] |ID:\(p.id.uuidString)| TYPE:\(p.type) | VAL:\(displayValue) \(p.unit) | UNIX_START:\(unixStartStr) | UNIX_END:\(unixEndStr) | DUR:\(durationMs)ms | SRC:\(p.sourceName) | BID:\(p.bundleID) | DEV:\(p.deviceName ?? "NA") | MOD:\(p.deviceModel ?? "NA") | SW:\(p.softwareVer ?? "NA") | ID:\(p.id.uuidString) | META:{\(metaStr)}"
     }
     
     
