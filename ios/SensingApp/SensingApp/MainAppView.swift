@@ -99,6 +99,7 @@ struct MainAppView: View {
                 print("App moved to background")
                 BackgroundScheduler.shared.scheduleAppRefresh()
                 BackgroundScheduler.shared.scheduleBGProcessingTask()
+                BackgroundScheduler.shared.scheduleUploadBGTask()
                 Logger.shared.append("App moved to background")
             } else if newPhase == .active {
                 print("App moved to foreground")
@@ -175,19 +176,21 @@ struct MainAppView: View {
                 Button("Print schedule bg task") {
                     Task { BackgroundScheduler.shared.printScheduledBackgroundTasks() }
                 }
-
+                
                 Button("Upload File") {
                     Task {
                         print("Upload function called")
                         let filename = "log_2026-02-19.txt"
                         let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
                         let fileURL = dir.appendingPathComponent(filename)
-                        Uploader.shared.uploadFile(fileURL: fileURL)
+                        await Uploader.shared.uploadFile(fileURL: fileURL)
                     }
                 }
 
                 Button("Upload All Files") {
-                    Task { Uploader.shared.uploadFolder() }
+                    Task {
+                        await Uploader.shared.uploadFolder()
+                    }
                 }
 
                 Button("Print log data") {
@@ -195,7 +198,10 @@ struct MainAppView: View {
                 }
 
                 Button("Get HealthKit data") {
-                    Task { self.getHealthKitData() }
+                    Task {
+                        // self.getHealthKitData()
+                        HealthkitRecorder.shared.getHealthKitData()
+                    }
                 }
 
                 if CLLocationManager().authorizationStatus != .authorizedAlways {
@@ -233,23 +239,37 @@ struct MainAppView: View {
     
     private func getHealthKitData() {
         let daysRequested = 1
-        let metricsRequested: Set<SupportedMetric> = [.steps] // Empty = All
+        //let metricsRequested: Set<SupportedMetric> = [.steps] // Empty = All
+        let metricsRequested: Set<SupportedMetric> = [] // Empty = All
         
         print("Requesting: HKManager.refreshWithNewRange")
         
-        HKManager.refreshWithNewRange(days: 1,types:metricsRequested) { data in
+        HKManager.refreshWithNewRange(days: 1, types:metricsRequested) { data in
             
             print("Success! Data received. Len: \(data.count), Days:\(daysRequested), Types:\(metricsRequested)")
                 
-                for (index, point) in data.enumerated() {
-                    let hkDataPointString = formatRawString(
-                        point,
-                        unixStartStr: String(Int(point.startDate.timeIntervalSince1970)),
-                        unixEndStr: String(Int(point.endDate.timeIntervalSince1970))
-                    )
-                    print("\(index) - \(hkDataPointString)")
-                    print("")
+                //here I need to open a file
+                //This will create a file for the current day
+                
+                let hkDataLogger = HKDataLogger()
+                let isFileOpenSuccesful = hkDataLogger.open()
+                if isFileOpenSuccesful == true {
+                    for (index, point) in data.enumerated() {
+                        let hkDataPointString = formatRawString(
+                            point,
+                            unixStartStr: String(Int(point.startDate.timeIntervalSince1970)),
+                            unixEndStr: String(Int(point.endDate.timeIntervalSince1970))
+                        )
+                        print("\(index) - \(hkDataPointString)")
+                        print("")
+                        
+                        hkDataLogger.writeLine(hkDataPointString)
+                    }
+                    hkDataLogger.close()
                 }
+                
+                
+                //close a file here
         }
     }
     
@@ -273,6 +293,8 @@ struct MainAppView: View {
         
         return "[\(dateStr)] |ID:\(p.id.uuidString)| TYPE:\(p.type) | VAL:\(displayValue) \(p.unit) | UNIX_START:\(unixStartStr) | UNIX_END:\(unixEndStr) | DUR:\(durationMs)ms | SRC:\(p.sourceName) | BID:\(p.bundleID) | DEV:\(p.deviceName ?? "NA") | MOD:\(p.deviceModel ?? "NA") | SW:\(p.softwareVer ?? "NA") | ID:\(p.id.uuidString) | META:{\(metaStr)}"
     }
+    
+    
 
     private var accelerometerView: some View {
         SensorCard(
@@ -608,19 +630,19 @@ struct HomeView: View {
     private var greetingText: String {
         let hour = Calendar.current.component(.hour, from: Date())
         switch hour {
-        case 0..<12: return "Good morning"
-        case 12..<17: return "Good afternoon"
-        default: return "Good evening"
+            case 0..<12: return "Good morning"
+            case 12..<17: return "Good afternoon"
+            default: return "Good evening"
         }
     }
 
     private var currentMilestone: String? {
         switch daysSinceSurgery {
-        case 7:  return "🎉 1 week milestone!"
-        case 14: return "🎉 2 week milestone!"
-        case 30: return "🎉 1 month milestone!"
-        case 90: return "🎉 3 month milestone!"
-        default: return nil
+            case 7:  return "🎉 1 week milestone!"
+            case 14: return "🎉 2 week milestone!"
+            case 30: return "🎉 1 month milestone!"
+            case 90: return "🎉 3 month milestone!"
+            default: return nil
         }
     }
 }
