@@ -25,7 +25,7 @@ enum JourneyTab: CaseIterable {
         case .home:     return "house.fill"
         case .sensors:  return "waveform"
         case .surveys:  return "list.clipboard.fill"
-        case .progress: return "chart.line.uptrend.xyaxis"
+        case .progress: return "calendar"
         case .debug:    return "ant.fill"
         case .settings: return "gearshape.fill"
         }
@@ -36,7 +36,7 @@ enum JourneyTab: CaseIterable {
         case .home:     return "Home"
         case .sensors:  return "Sensors"
         case .surveys:  return "Surveys"
-        case .progress: return "Progress"
+        case .progress: return "Calendar"
         case .debug:    return "Debug"
         case .settings: return "Settings"
         }
@@ -44,12 +44,12 @@ enum JourneyTab: CaseIterable {
 
     var accentColor: Color {
         switch self {
-        case .home:     return Color(red: 0.42, green: 0.62, blue: 0.55) // sage green
-        case .sensors:  return Color(red: 0.38, green: 0.55, blue: 0.75) // warm blue
-        case .surveys:  return Color(red: 0.80, green: 0.55, blue: 0.45) // terracotta
-        case .progress: return Color(red: 0.38, green: 0.55, blue: 0.75) // warm blue
-        case .debug:    return Color(red: 0.55, green: 0.47, blue: 0.44) // muted brown
-        case .settings: return Color(red: 0.58, green: 0.48, blue: 0.72) // muted purple
+            case .home:     return Color(red: 0.42, green: 0.62, blue: 0.55) // sage green
+            case .sensors:  return Color(red: 0.38, green: 0.55, blue: 0.75) // warm blue
+            case .surveys:  return Color(red: 0.80, green: 0.55, blue: 0.45) // terracotta
+            case .progress: return Color(red: 0.38, green: 0.55, blue: 0.75) // warm blue
+            case .debug:    return Color(red: 0.55, green: 0.47, blue: 0.44) // muted brown
+            case .settings: return Color(red: 0.58, green: 0.48, blue: 0.72) // muted purple
         }
     }
 }
@@ -82,6 +82,7 @@ struct MainAppView: View {
     @State private var selectedTab: JourneyTab = .home
 
     var body: some View {
+        
         TabView(selection: $selectedTab) {
             ForEach(JourneyTab.allCases, id: \.self) { tab in
                 tabContent(for: tab)
@@ -91,6 +92,25 @@ struct MainAppView: View {
                     .tag(tab)
             }
         }
+        .tabViewStyle(.sidebarAdaptable)
+        .tabViewBottomAccessory {
+            Button("Do Action") {
+                
+            }
+        }
+            
+            
+            //            Button {
+            //                // action
+            //            } label: {
+            //                Image(systemName: "plus")
+            //                    .font(.title2.weight(.semibold))
+            //                    .frame(width: 56, height: 56)
+            //                    .background(.ultraThinMaterial, in: Circle())
+            //                    .overlay(Circle().strokeBorder(.white.opacity(0.2), lineWidth: 0.5))
+            //            }
+            //            .padding(20)
+        
         // Accent color updates as selected tab changes
         .tint(selectedTab.accentColor)
         // ── GitHub: scene phase handling (background tasks, logging) ──
@@ -128,7 +148,8 @@ struct MainAppView: View {
         case .surveys:
             SurveysView(accentColor: tab.accentColor, appState: appState, isSurveyPresented: $isSurveyPresented)
         case .progress:
-            ProgressPlaceholderView(accentColor: tab.accentColor)
+            //ProgressPlaceholderView(accentColor: tab.accentColor)
+            MonthlyProgressView()
         case .debug:
             DebugView
         case .settings:

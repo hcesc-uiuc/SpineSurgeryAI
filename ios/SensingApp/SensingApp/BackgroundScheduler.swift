@@ -14,6 +14,7 @@ class BackgroundScheduler {
     let APP_REFRESH_IDENTIFIER = "edu.uiuc.cs.hcesc.SensingApp.apprefresh"
     let BG_PROCESSING_IDENTIFIER = "edu.uiuc.cs.hcesc.SensingApp.bgProcessing"
     let UPLOAD_PROCESSING_IDENTIFIER = "edu.uiuc.cs.hcesc.SensingApp.fileUpload"
+    let SENSORKIT_FETCH_IDENTIFIER = "edu.uiuc.cs.hcesc.SensingApp.sensorkit.fetch"
     
     private init() {}
     
@@ -400,6 +401,117 @@ class BackgroundScheduler {
                 await Uploader.shared.uploadFolder()
             }
         }
+        completion(true)
+    }
+    
+    
+    
+    //=============================================================
+    //
+    // SensorKit fetch background task (this will run every 26 hours)
+    //
+    //=============================================================
+    func registerBackgroundSensorkitFetchTask() {
+        print("SensingTrialAppApp:registerBackgroundSensorkitFetchTask init called")
+        BGTaskScheduler.shared.register(
+            forTaskWithIdentifier: SENSORKIT_FETCH_IDENTIFIER,
+            using: nil
+        ) { task in
+            self.handleSensorKitFetch(task: task as! BGProcessingTask)
+        }
+    }
+    
+    func scheduleBackgroundSensorkitFetch() {
+        
+        BGTaskScheduler.shared.getPendingTaskRequests{ requests in
+            print("Trying to schedule BGProcessing of SensorKit Fetch")
+            Logger.shared.append("Trying to schedule BGProcessing of SensorKit Fetch")
+            
+            //Start here:
+            var alreadyScheduledButInThePast: Bool = false
+            for request in requests {
+                
+                //we are getting when the next BG is scheduled
+                //AcclerometerRecorder is used for formatting date.
+                let earliestBeginDateStr = AcclerometerRecorder.shared.dateToString(request.earliestBeginDate)
+                
+                if request.identifier == self.SENSORKIT_FETCH_IDENTIFIER {
+                    if (request.earliestBeginDate ?? Date()) < Date() {
+                        //the scheduled time is earlier than now, so
+                        //we will schedule a new one, and invalidate the earlier one.
+                        
+                        //The flag to invalidate the earlier one later.
+                        alreadyScheduledButInThePast = true
+                    }else{
+                        //Do not reschedule if an already
+                        //scheduled indentifier exist.
+                        print("\(request.identifier) already scheduled at \(earliestBeginDateStr)")
+                        Logger.shared.append("\(request.identifier) already scheduled at  \(earliestBeginDateStr)")
+                        return
+                    }
+                }
+            }
+            
+            //we are canceling an scheduled background task from the past
+            if alreadyScheduledButInThePast {
+                BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: self.SENSORKIT_FETCH_IDENTIFIER)
+            }
+            
+            let request = BGProcessingTaskRequest(identifier: self.SENSORKIT_FETCH_IDENTIFIER)
+            request.requiresNetworkConnectivity = false  // Set true if needed
+            request.requiresExternalPower = false        // Set true if the task is power-hungry
+            // Run no earlier than 26hr from now (data needs 24hr to clear embargo)
+            request.earliestBeginDate = Date(timeIntervalSinceNow: 26 * 3600)
+            
+            do {
+                try BGTaskScheduler.shared.submit(request)
+                print("BGSensorKitFetchTask scheduled.")
+                Logger.shared.append("Background SK recording scheduled (scheduleBGSensorKitFetchTask).")
+            } catch {
+                print("Failed to schedule BGSensorKitFetchTask: \(error)")
+            }
+        }
+        
+    }
+    
+    private func handleSensorKitFetch(task: BGProcessingTask) {
+        /*
+         We try to schedule Sensorkit fetch.
+         
+         */
+        print("🔄 ==BGSensorkitFetchTask== started")
+        Logger.shared.append("==BGSensorkitFetchTask== started")
+        
+        // Reschedule next task
+        // There should not be any more SensorkitFetch pending
+        // as we are already in one.
+        scheduleBackgroundSensorkitFetch()
+        
+        // Expiration handler
+        task.expirationHandler = {
+            print("⏰ ==BGSensorkitFetchTask== expired")
+            Logger.shared.append("==BGSensorkitFetchTask== expired before completion.")
+        }
+
+        // Execute work asynchronously
+        // Do your actual work
+        performSensorkitFetch { success in
+            task.setTaskCompleted(success: success)
+        }
+    }
+    
+    private func performSensorkitFetch(completion: @escaping (Bool) -> Void) {
+        // Your function goes here
+        print("Performing sensorkit fetch")
+        Logger.shared.append("BGSensorkitFetchTask: Performing sensorkit fetch")
+        Task {
+            //we need to change the fetch part
+            // await Uploader.shared.uploadFolder()
+            let fetcher = SensorKitAccelerometerFetcher()
+            // Fetcher will call setTaskCompleted in didCompleteFetch
+            fetcher.fetchLatestData()
+        }
+        
         completion(true)
     }
     
