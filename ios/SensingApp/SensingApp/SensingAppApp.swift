@@ -17,6 +17,7 @@ struct SensingAppApp: App {
 
     //Singletons are lazily created so, we are forcing the location to trigger
     @StateObject private var locationManager = AdaptiveLocationManager.shared
+    @StateObject private var sensorKitManager = SensorKitManager()
     
     init(){
         print("SensingApp init called")
@@ -26,6 +27,8 @@ struct SensingAppApp: App {
         Logger.shared.append("SensingApp init called")
         
         SurveyNotificationManager.shared.requestPermission()
+        
+        
         
         //        BackgroundScheduler.shared.registerBackgroundTasks()
         //        BackgroundScheduler.shared.scheduleBGProcessingTask()
@@ -41,6 +44,7 @@ struct SensingAppApp: App {
                 .environmentObject(appState)
                 .environmentObject(locationManager)
                 .onAppear {
+                    sensorKitManager.requestAuthorization()
                     SurveyNotificationManager.shared
                         .scheduleDailyReminder(
                             hour: 20,
@@ -100,6 +104,8 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         BackgroundScheduler.shared.registerBackgroundTasks()
         BackgroundScheduler.shared.registerUploadBGTask()
         BackgroundScheduler.shared.registerBackgroundAppRefreshTask()
+        BackgroundScheduler.shared.registerBackgroundSensorkitFetchTask()
+        BackgroundScheduler.shared.registerHealthBackgroundTask()
         return true
     }
     
@@ -157,6 +163,8 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         BackgroundScheduler.shared.scheduleAppRefresh()
         BackgroundScheduler.shared.scheduleUploadBGTask()
         BackgroundScheduler.shared.scheduleBGProcessingTask()
+        BackgroundScheduler.shared.scheduleBackgroundSensorkitFetch()
+        BackgroundScheduler.shared.scheduleHealthResearchBGProcessingTask()
     }
     
     

@@ -9,6 +9,7 @@
 		<string>edu.uiuc.cs.hcesc.SensingApp.bgProcessing</string>
 		<string>edu.uiuc.cs.hcesc.SensingApp.fileUpload</string>
         <string>edu.uiuc.cs.hcesc.SensingApp.sensorkit.fetch</string>
+        <string>edu.uiuc.cs.hcesc.SensingApp.healthResearchBgProcessing</string>
 	</array>
 	<key>NSAppTransportSecurity</key>
 	<dict>
@@ -32,8 +33,15 @@
     <string>This research study collects motion data from your Apple Watch.</string>
     <key>NSSensorKitUsageDetail</key>
     <dict>
-        <key>NSAccelerometerUsageDescription</key>
-        <string>Wrist accelerometer data is used to assess spine recovery activity levels.</string>
+        <key>SRSensorUsageMotion</key>
+        <dict>
+            <key>Description</key>
+            <string>Wrist accelerometer data is used to assess spine recovery activity levels.</string>
+            <key>Required</key>
+            <true/>
+        </dict>
     </dict>
+    <key>NSSensorKitPrivacyPolicyURL</key>
+    <string>https://my-site.example.com/privacy-policy/</string>
 </dict>
 </plist>

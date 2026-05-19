@@ -171,6 +171,7 @@ class SensorKitAccelerometerFetcher: NSObject {
         // Once reader.fetch(request) is called, SensorKit streams
         // results one sample at a time through the delegate
         // didFetchResult will be called.
+        
         reader.fetch(request)
         
         // The fetchEnd is not the current time. It is (currentTime-25) hours
@@ -182,12 +183,14 @@ class SensorKitAccelerometerFetcher: NSObject {
     // MARK: - CSV File Management
     
     private func csvFileName(index: Int) -> String {
-        return "sensorkit_accel_\(String(format: "%05d", index)).csv"
+        return "sensorkit_accel_watch_\(String(format: "%05d", index)).csv"
     }
     
     private func openCurrentFile() {
-        currentFileURL = documentsDir.appendingPathComponent(
-            csvFileName(index: fileIndex)
+        currentFileURL = documentsDir
+            .appendingPathComponent("to-be-processed")
+            .appendingPathComponent(
+                csvFileName(index: fileIndex)
         )
         
         let needsHeader = !FileManager.default.fileExists(atPath: currentFileURL.path)

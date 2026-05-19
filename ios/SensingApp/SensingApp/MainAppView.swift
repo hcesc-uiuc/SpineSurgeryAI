@@ -80,7 +80,8 @@ struct MainAppView: View {
 
     // ── Local: tab selection state ────────────────────────────
     @State private var selectedTab: JourneyTab = .home
-
+    @StateObject private var sensorKitManager = SensorKitManager()
+    
     var body: some View {
         
         TabView(selection: $selectedTab) {
@@ -120,10 +121,14 @@ struct MainAppView: View {
                 BackgroundScheduler.shared.scheduleAppRefresh()
                 BackgroundScheduler.shared.scheduleBGProcessingTask()
                 BackgroundScheduler.shared.scheduleUploadBGTask()
+                BackgroundScheduler.shared.scheduleBackgroundSensorkitFetch()
+                BackgroundScheduler.shared.scheduleHealthResearchBGProcessingTask()
                 Logger.shared.append("App moved to background")
             } else if newPhase == .active {
                 print("App moved to foreground")
                 Logger.shared.append("App moved to foreground")
+                //we will need to move it to a view
+                
             } else if newPhase == .inactive {
                 print("App is inactive")
                 Logger.shared.append("App moved to inactive")
