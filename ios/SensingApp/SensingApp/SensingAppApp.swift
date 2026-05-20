@@ -7,7 +7,7 @@ import SwiftUI
 import CoreData
 import BackgroundTasks
 import UserNotifications
-//import FirebaseCore
+import FirebaseCore
 
 @main
 struct SensingAppApp: App {
