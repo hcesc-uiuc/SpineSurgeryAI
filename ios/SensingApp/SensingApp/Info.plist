@@ -15,6 +15,10 @@
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>
 		<true/>
+		<key>NSExceptionDomains</key>
+		<dict/>
+		<key></key>
+		<dict/>
 	</dict>
 	<key>NSApplicationCrashOnExceptions</key>
 	<true/>
@@ -26,6 +30,22 @@
 		<string>fetch</string>
 	</array>
 	<key>UIFileSharingEnabled</key>
+	<true/>
+	<key>NSHealthShareUsageDescription</key>
+	<string>This app reads your health data to track steps and heart rate.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>This app writes health data to Apple Health.</string>
+	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<true/>
+	
+
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>App needs location for background tasks.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>This app sends reminders to complete your recovery survey.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<true/>
+	<key>NSApplicationCrashOnExceptions</key>
 	<true/>
     <key>NSMotionUsageDescription</key>
     <string>This study collects accelerometer data to analyze recovery patterns.</string>

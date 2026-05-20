@@ -16,6 +16,9 @@ struct SensingAppApp: App {
     @StateObject private var locationManager = AdaptiveLocationManager.shared
     @StateObject private var sensorKitManager = SensorKitManager()
     
+    // Makes Authorization Pathway consistent for all data files/types
+    @StateObject private var authManager = SecureAuthManager()
+    
     init(){
         print("SensingApp init called")
 
@@ -40,6 +43,7 @@ struct SensingAppApp: App {
             ContentView()
                 .environmentObject(appState)
                 .environmentObject(locationManager)
+                .environmentObject(authManager)
                 .onAppear {
                     sensorKitManager.requestAuthorization()
                     SurveyNotificationManager.shared
@@ -51,7 +55,15 @@ struct SensingAppApp: App {
                 }
         }
     }
+            // Using @StateObject instead of passing LocationManager.shared directly
+            // into .environmentObject() ensures SwiftUI owns the lifecycle and
+            // the singleton is initialised immediately when the app starts.
+            
 }
+
+
+
+
 
 class AppDelegate: NSObject, UIApplicationDelegate {
     func application(

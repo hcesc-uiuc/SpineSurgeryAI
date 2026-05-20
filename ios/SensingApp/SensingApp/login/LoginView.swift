@@ -1,107 +1,26 @@
 //
-//import SwiftUI
+//  AuthLoginView.swift
+//  SensingApp
 //
-//struct AuthLoginView: View {
+
+import SwiftUI
+import AuthenticationServices
+import CoreMotion
+import CoreLocation
+import UserNotifications
+import HealthKit
+
+// ============================================================
+// MARK: - AuthLoginView Documentation
+// ============================================================
 //
-//    // MARK: - State & Auth Manager
-//    @StateObject private var authManager = SecureAuthManager()
-//    @State private var userid: String = ""        // Keep for future multi-user support
-//    @State private var password: String = ""
-//    @State private var isWorking = false
-//    @State private var errorMessage: String?
-//
-//    // MARK: - Logos
-//    private let logos = ["uiuclogo", "uiclogo", "upennlogo", "osflogo"]
-//    private let columns = [
-//        GridItem(.flexible()),
-//        GridItem(.flexible())
-//    ]
-//
-//    // MARK: - Body
-//    var body: some View {
-//        // Show main app if authenticated, otherwise show login screen
-//        if authManager.isAuthenticated {
-//            MainAppView(onLogout: {
-//                authManager.logout() // clears memory + persisted login
-//            })
-//        } else {
-//            loginScreen
-//        }
-//    }
-//
-//    // MARK: - Login Screen UI
-//    private var loginScreen: some View {
-//        NavigationStack {
-//            VStack(spacing: 24) {
-//
-//                // Title
-//                Text("Journey")
-//                    .font(.largeTitle)
-//                    .bold()
-//
-//                Text("Login")
-//                    .font(.title)
-//
-//                // Input Fields
-//                VStack(spacing: 12) {
-//                    TextField("User ID", text: $userid)
-//                        .textContentType(.username)
-//                        .disableAutocorrection(true)
-//                        .padding()
-//                        .background(.thinMaterial)
-//                        .clipShape(RoundedRectangle(cornerRadius: 12))
-//
-//                    SecureField("Password", text: $password)
-//                        .textContentType(.password)
-//                        .padding()
-//                        .background(.thinMaterial)
-//                        .clipShape(RoundedRectangle(cornerRadius: 12))
-//                }
-//
-//                // Error Message
-//                if let errorMessage {
-//                    Text(errorMessage)
-//                        .foregroundColor(.red)
-//                        .font(.footnote)
-//                }
-//
-//                // Login Button
-//                Button(action: { Task { await attemptLogin() } }) {
-//                    if isWorking {
-//                        ProgressView()
-//                            .tint(.white)
-//                            .frame(maxWidth: .infinity)
-//                            .padding()
-//                            .background(.blue)
-//                            .clipShape(RoundedRectangle(cornerRadius: 12))
-//                    } else {
-//                        Text("Log In")
-//                            .foregroundColor(.white)
-//                            .frame(maxWidth: .infinity)
-//                            .padding()
-//                            .background(.blue)
-//                            .clipShape(RoundedRectangle(cornerRadius: 12))
-//                    }
-//                }
-//                .disabled(isWorking || password.isEmpty)
-//
-//                Spacer()
-//
-//
-//                LazyVGrid(columns: columns, spacing: 20) {
-//                    ForEach(logos, id: \.self) { logo in
-//                        Image(logo)
-//                            .resizable()
-//                            .scaledToFit()
-//                            .frame(height: 60)
-//                    }
-//                }
-//                .padding(.horizontal)
-//            }
-//            .padding()
-//            .navigationTitle("Welcome")
-//        }
-//    }
+// PURPOSE:
+// The root authentication view for the Journey app. Handles:
+//   1. Detecting fresh installs and resetting permissions state
+//   2. Auditing required permissions on every launch
+//   3. Showing the login screen when not authenticated
+//   4. Routing to PermissionsFlowView if any permission is missing
+//   5. Routing to MainAppView once authenticated and all permissions granted
 //
 //    // MARK: - Login Logic
 //    private func attemptLogin() async {
@@ -109,49 +28,68 @@
 //        isWorking = true
 //        defer { isWorking = false }
 //
-//        // Simulate a slight delay for UX
-//        try? await Task.sleep(nanoseconds: 400_000_000)
+//   App Launch
+//       └── AuthLoginView.onAppear
+//             ├── detectReinstall()       — clears stale UserDefaults on fresh install
+//             └── auditPermissions()      — re-checks all permissions every launch
+//                   └── if any missing → permissionsComplete = false
 //
-//        if password.isEmpty {
-//            errorMessage = "Please enter a password."
-//        } else {
-//            authManager.login(password: password)
+//       └── AuthLoginView body
+//             ├── isAuthenticated = false → loginScreen
+//             └── isAuthenticated = true
+//                   ├── permissionsComplete = false → PermissionsFlowView
+//                   └── permissionsComplete = true  → MainAppView
 //
-//            if !authManager.isAuthenticated {
-//                errorMessage = "Invalid password. Please try again."
-//            }
-//        }
-//    }
-//}
+// REINSTALL DETECTION:
+//   UserDefaults (AppStorage) can survive app deletion on some devices.
+//   This means permissionsComplete could be true on a fresh install,
+//   skipping the permissions flow entirely — users would never be prompted.
 //
-//#Preview {
-//    AuthLoginView()
-//}
-
-// MashTodo: Akarsh, remove unused code if you are not using. If you need this code, move it in the end of the file.
-
-
-
-import SwiftUI
+//   Fix: on first launch after install, we check for a Keychain sentinel key.
+//   Keychain IS reliably cleared on uninstall (unlike UserDefaults).
+//   If the sentinel is missing → fresh install → clear permissionsComplete.
+//   Then we write the sentinel so subsequent launches don't reset.
+//
+// PERMISSION AUDIT:
+//   Even after onboarding, users can revoke permissions in iOS Settings.
+//   On every launch, we silently check all required permissions.
+//   If any is missing → permissionsComplete = false → PermissionsFlowView shown.
+//   This ensures data collection is never silently broken.
+//
+// ============================================================
 
 struct AuthLoginView: View {
+
+    // MARK: - Auth Manager
+    @EnvironmentObject private var authManager: SecureAuthManager
     
-    @StateObject private var authManager = SecureAuthManager()
-    @State private var patientID: String = ""
-    @State private var password: String = ""
+    // MARK: - UI State
     @State private var isWorking = false
+    @State private var appeared  = false
+
+    // MARK: - Error State
     @State private var errorMessage: String?
-    @State private var appeared = false
+
+    // MARK: - Permissions State
+    //
+    // permissionsComplete — AppStorage (UserDefaults).
+    // Reset to false by detectReinstall() or auditPermissions() when needed.
+    // Only set to true by PermissionsFlowView after all permissions granted.
     @AppStorage("permissionsComplete") private var permissionsComplete = false
-    
-    
-    private let logos = ["uiuclogo", "uiclogo", "upennlogo", "osflogo"]
+
+    // MARK: - Logo Assets
+    private let logos   = ["uiuclogo", "uiclogo", "upennlogo", "osflogo"]
     private let columns = [GridItem(.flexible()), GridItem(.flexible())]
-    
+
+    // Sentinel key stored in Keychain to detect reinstalls.
+    // Keychain is reliably cleared on uninstall; UserDefaults is not.
+    private let installSentinelKey = "journey_install_sentinel"
+
+    // MARK: - Body
     var body: some View {
         if authManager.isAuthenticated {
             if permissionsComplete {
-                MainAppView(onLogout: { authManager.logout() })
+                MainAppView()
             } else {
                 PermissionsFlowView(onComplete: {})
             }
@@ -199,11 +137,11 @@ struct AuthLoginView: View {
                                 .foregroundStyle(.white)
                         }
                         .padding(.bottom, 4)
-                        
+
                         Text("Journey")
                             .font(.system(size: 38, weight: .bold, design: .rounded))
                             .foregroundStyle(Color(red: 0.28, green: 0.22, blue: 0.20))
-                        
+
                         Text("Your recovery, one day at a time.")
                             .font(.system(size: 15, weight: .regular, design: .rounded))
                             .foregroundStyle(Color(red: 0.50, green: 0.42, blue: 0.39))
@@ -214,54 +152,36 @@ struct AuthLoginView: View {
                     .opacity(appeared ? 1 : 0)
                     .offset(y: appeared ? 0 : -16)
                     .animation(.easeOut(duration: 0.55).delay(0.1), value: appeared)
-                    
-                    // ── Form Card ───────────────────────────────────
+
+                    // ── Sign In Card ─────────────────────────────────
                     VStack(spacing: 16) {
-                        
-                        // Patient ID field
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text("Patient ID")
-                                .font(.system(size: 13, weight: .semibold, design: .rounded))
-                                .foregroundStyle(Color(red: 0.40, green: 0.32, blue: 0.29))
-                                .padding(.leading, 4)
-                            
-                            TextField("Enter your patient ID", text: $patientID)
-                                .textContentType(.username)
-                                .autocorrectionDisabled()
-                                .textInputAutocapitalization(.never)
-                                .font(.system(size: 16, design: .rounded))
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 14)
-                                .background(Color.white.opacity(0.85))
-                                .clipShape(RoundedRectangle(cornerRadius: 14))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 14)
-                                        .stroke(Color(red: 0.80, green: 0.65, blue: 0.58).opacity(0.4), lineWidth: 1.5)
-                                )
+
+                        Text("Sign in securely with your Apple ID to access your recovery data.")
+                            .font(.system(size: 14, weight: .regular, design: .rounded))
+                            .foregroundStyle(Color(red: 0.45, green: 0.37, blue: 0.34))
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 4)
+                            .padding(.bottom, 4)
+
+                        // MARK: - Sign in with Apple Button
+                        SignInWithAppleButton(.signIn) { request in
+                            request.requestedScopes = [.fullName, .email]
+                        } onCompletion: { result in
+                            Task { await handleAppleSignIn(result: result) }
                         }
-                        
-                        // Password field
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text("Password")
-                                .font(.system(size: 13, weight: .semibold, design: .rounded))
-                                .foregroundStyle(Color(red: 0.40, green: 0.32, blue: 0.29))
-                                .padding(.leading, 4)
-                            
-                            SecureField("Enter your password", text: $password)
-                                .textContentType(.password)
-                                .font(.system(size: 16, design: .rounded))
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 14)
-                                .background(Color.white.opacity(0.85))
-                                .clipShape(RoundedRectangle(cornerRadius: 14))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 14)
-                                        .stroke(Color(red: 0.80, green: 0.65, blue: 0.58).opacity(0.4), lineWidth: 1.5)
-                                )
+                        .signInWithAppleButtonStyle(.black)
+                        .frame(height: 54)
+                        .clipShape(RoundedRectangle(cornerRadius: 16))
+                        .disabled(isWorking)
+                        .opacity(isWorking ? 0.6 : 1.0)
+                        .overlay {
+                            if isWorking {
+                                RoundedRectangle(cornerRadius: 16)
+                                    .fill(Color.black.opacity(0.45))
+                                ProgressView().tint(.white)
+                            }
                         }
-                        
-                        // Error message
-                        // MashToDo: A line is needed for what the error message is
+
                         if let errorMessage {
                             HStack(spacing: 6) {
                                 Image(systemName: "exclamationmark.circle.fill")
@@ -273,58 +193,44 @@ struct AuthLoginView: View {
                             .padding(.horizontal, 4)
                             .transition(.opacity.combined(with: .move(edge: .top)))
                         }
-                        
-                        // Login button
-                        Button(action: { Task { await attemptLogin() } }) {
-                            ZStack {
-                                RoundedRectangle(cornerRadius: 16)
-                                    .fill(
-                                        LinearGradient(
-                                            colors: [
-                                                Color(red: 0.42, green: 0.62, blue: 0.55),
-                                                Color(red: 0.34, green: 0.54, blue: 0.48)
-                                            ],
-                                            startPoint: .topLeading,
-                                            endPoint: .bottomTrailing
-                                        )
-                                    )
-                                    .frame(height: 54)
-                                    .shadow(color: Color(red: 0.34, green: 0.54, blue: 0.48).opacity(0.35), radius: 10, y: 5)
-                                
-                                if isWorking {
-                                    ProgressView()
-                                        .tint(.white)
-                                } else {
-                                    Text("Sign In")
-                                        .font(.system(size: 17, weight: .semibold, design: .rounded))
-                                        .foregroundStyle(.white)
-                                }
-                            }
-                        }
-                        .disabled(isWorking || password.isEmpty || patientID.isEmpty)
-                        .opacity((isWorking || password.isEmpty || patientID.isEmpty) ? 0.6 : 1.0)
-                        .animation(.easeInOut(duration: 0.2), value: password.isEmpty || patientID.isEmpty)
-                        .padding(.top, 4)
+                        // ↓ PASTE THIS BLOCK RIGHT HERE ↓
+                                               #if DEBUG
+                                               Button("Skip Sign In (Debug)") {
+                                                   Task {
+                                                       try? await authManager.login(
+                                                           identityToken: "debug_token",
+                                                           fullName:      "Test User",
+                                                           appleUserID:   "debug_apple_user"
+                                                       )
+                                                   }
+                                               }
+                                               .font(.system(size: 13, design: .rounded))
+                                               .foregroundStyle(Color(red: 0.55, green: 0.47, blue: 0.44).opacity(0.7))
+                                               .padding(.top, 4)
+                                               #endif
                     }
                     .padding(24)
                     .background(
                         RoundedRectangle(cornerRadius: 24)
                             .fill(Color(red: 0.99, green: 0.97, blue: 0.95).opacity(0.9))
-                            .shadow(color: Color(red: 0.60, green: 0.45, blue: 0.40).opacity(0.12), radius: 20, y: 8)
+                            .shadow(
+                                color: Color(red: 0.60, green: 0.45, blue: 0.40).opacity(0.12),
+                                radius: 20, y: 8
+                            )
                     )
                     .padding(.horizontal, 24)
                     .opacity(appeared ? 1 : 0)
                     .offset(y: appeared ? 0 : 20)
                     .animation(.easeOut(duration: 0.55).delay(0.25), value: appeared)
-                    
+
                     Spacer().frame(height: 40)
-                    
-                    // ── Institution Logos ───────────────────────────
+
+                    // ── Institution Logos ────────────────────────────
                     VStack(spacing: 12) {
                         Text("A multi-institution research study")
                             .font(.system(size: 12, weight: .medium, design: .rounded))
                             .foregroundStyle(Color(red: 0.55, green: 0.47, blue: 0.44))
-                        
+
                         LazyVGrid(columns: columns, spacing: 16) {
                             ForEach(logos, id: \.self) { logo in
                                 Image(logo)
@@ -338,37 +244,136 @@ struct AuthLoginView: View {
                     }
                     .opacity(appeared ? 1 : 0)
                     .animation(.easeOut(duration: 0.55).delay(0.4), value: appeared)
-                    
+
                     Spacer().frame(height: 40)
                 }
             }
         }
-        .onAppear { appeared = true }
+        .onAppear {
+            appeared = true
+            detectReinstall()       // must run before auditPermissions
+            auditPermissions()
+        }
         .animation(.default, value: errorMessage)
     }
-    
-    private func attemptLogin() async {
-        errorMessage = nil
-        isWorking = true
-        defer { isWorking = false }
 
-        try? await Task.sleep(nanoseconds: 400_000_000)
+    // MARK: - Reinstall Detection
+    //
+    // Checks for the Keychain sentinel written on the previous install.
+    // If missing → this is a fresh install → clear permissionsComplete
+    // so the user is walked through the permissions flow again.
+    //
+    // Keychain is cleared on app uninstall; UserDefaults is not.
+    // This is the only reliable way to detect a reinstall on iOS.
+    private func detectReinstall() {
+        let sentinel = KeychainManager.shared.read(key: installSentinelKey)
+        if sentinel == nil {
+            // Fresh install — reset any stale UserDefaults permissions flag
+            permissionsComplete = false
+            // Write sentinel so we don't reset again on next launch
+            KeychainManager.shared.save(
+                key: installSentinelKey,
+                data: Data("installed".utf8)
+            )
+        }
+    }
 
-        if password.isEmpty || patientID.isEmpty {
-            errorMessage = "Please enter your Patient ID and password."
+    // MARK: - Permission Audit
+    //
+    // Called on every app launch after detectReinstall().
+    // Checks each required permission synchronously (except notifications,
+    // which requires an async call — handled separately).
+    //
+    // If ANY permission is not in the required state → permissionsComplete = false
+    // → body re-evaluates → PermissionsFlowView is shown, focused on the
+    //   missing permission card.
+    //
+    // This catches:
+    //   • Users who revoked a permission in iOS Settings after onboarding
+    //   • Users who granted "While Using" for location instead of "Always"
+    //   • Any edge case where permissionsComplete was set prematurely
+    private func auditPermissions() {
+        // Motion
+        let motionOK = CMMotionActivityManager.authorizationStatus() == .authorized
+
+        // Location — must be Always, not just WhenInUse
+        let locationStatus = CLLocationManager().authorizationStatus
+        let locationOK = locationStatus == .authorizedAlways
+
+        // Health — HealthKit always reports authorized from app side;
+        // we check availability as a proxy (same logic as PermissionsFlowView)
+        let healthOK = HKHealthStore.isHealthDataAvailable()
+
+        // All sync checks — if any fail, kick back to permissions flow
+        if !motionOK || !locationOK || !healthOK {
+            permissionsComplete = false
             return
         }
 
-        do {
-            // In demo mode, identityToken/fullName/appleUserID are ignored —
-            // SecureAuthManager flips isAuthenticated = true immediately.
-            try await authManager.login(
-                identityToken: patientID,
-                fullName: nil,
-                appleUserID: patientID
-            )
-        } catch {
-            errorMessage = "Sign in failed. Please try again."
+        // Notifications — async, run in background, update if needed
+        Task {
+            let settings = await UNUserNotificationCenter.current().notificationSettings()
+            let notificationsOK = settings.authorizationStatus == .authorized
+            if !notificationsOK {
+                await MainActor.run { permissionsComplete = false }
+            }
+        }
+    }
+
+    // MARK: - Apple Sign In Handler
+    //
+    // Handles the result from SignInWithAppleButton.
+    // Extracts identity token, full name (nil after first login), and
+    // Apple's stable user ID, then calls authManager.login().
+    private func handleAppleSignIn(result: Result<ASAuthorization, Error>) async {
+        errorMessage = nil
+        isWorking    = true
+        defer { isWorking = false }
+
+        switch result {
+        case .failure(let error):
+            // ASAuthorizationError.canceled (1001) = user dismissed sheet — no error shown
+            let asError = error as? ASAuthorizationError
+            if asError?.code != .canceled {
+                errorMessage = "Sign in failed. Please try again."
+            }
+            return
+
+        case .success(let authorization):
+            guard let credential = authorization.credential as? ASAuthorizationAppleIDCredential else {
+                errorMessage = "Sign in failed. Please try again."
+                return
+            }
+
+            guard
+                let tokenData     = credential.identityToken,
+                let identityToken = String(data: tokenData, encoding: .utf8)
+            else {
+                errorMessage = "Sign in failed. Could not read Apple token."
+                return
+            }
+
+            // Full name — only present on very first Apple login ever.
+            // Pass nil when empty — backend only needs it once.
+            let fullNameString = [
+                credential.fullName?.givenName,
+                credential.fullName?.familyName
+            ].compactMap { $0 }.joined(separator: " ")
+            let fullName: String? = fullNameString.isEmpty ? nil : fullNameString
+
+            let appleUserID = credential.user
+
+            do {
+                try await authManager.login(
+                    identityToken: identityToken,
+                    fullName:      fullName,
+                    appleUserID:   appleUserID
+                )
+            } catch let error as AuthError {
+                errorMessage = error.errorDescription
+            } catch {
+                errorMessage = "Something went wrong. Please try again."
+            }
         }
     }
 }

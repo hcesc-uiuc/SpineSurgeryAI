@@ -1,3 +1,4 @@
+//
 //  SecureAuthManager.swift
 //  SensingApp
 //
@@ -31,8 +32,8 @@ internal import Combine
 //   1. Patient taps "Sign in with Apple"
 //   2. Apple returns a one-time identity token (JWT) + optional full name
 //   3. App sends { identity_token, full_name? } to POST /auth/login
-//   4. Backend verifies Apple's JWT and returns { access_token, refresh_token }
-//   5. Both tokens stored securely in iOS Keychain
+//   4. Backend verifies our access code and returns { access_token, refresh_token }
+//   5. Both tokens stored securely in iOS Keychain (maybe change it if not implemented)
 //   6. Every subsequent API call uses access token as Bearer header
 //   7. On app relaunch, silentRefresh() restores session automatically
 //   8. On 401 from any API call → refresh access token → retry once
@@ -329,14 +330,23 @@ class SecureAuthManager: ObservableObject {
             return data
 
         case 401:
+            // Decode the error code from the backend response body
             let errorCode = (try? JSONDecoder().decode(BackendErrorResponse.self, from: data))?.error
+
+            // invalid_grant means the refresh token is also dead —
+            // no point attempting refresh, send user straight to login
             if errorCode == "invalid_grant" {
                 clearTokens()
                 isAuthenticated = false
                 throw AuthError.tokenExpired
             }
+
+            // token_expired or invalid_token → attempt silent refresh then retry once
             await silentRefresh()
             guard isAuthenticated else { throw AuthError.tokenExpired }
+
+            // Retry with fresh token — will not recurse again because
+            // silentRefresh sets isAuthenticated = false on any failure
             return try await authenticatedRequest(endpoint: endpoint, method: method, body: body)
 
         default:
