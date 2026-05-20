@@ -91,6 +91,7 @@ class KeychainManager {
         ]
         var dataTypeRef: AnyObject?
         let status = SecItemCopyMatching(query as CFDictionary, &dataTypeRef)
+
         if status == errSecSuccess {
             return dataTypeRef as? Data
         }

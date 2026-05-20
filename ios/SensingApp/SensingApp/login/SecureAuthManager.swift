@@ -286,6 +286,23 @@ class SecureAuthManager: ObservableObject {
         body: [String: Any]? = nil
     ) async throws -> Data {
 
+        // ── ⚠️ DEMO MODE: skip auth, send request without Bearer token ──
+        if demoMode {
+            guard let url = URL(string: "\(baseURL)\(endpoint)") else {
+                throw AuthError.networkError("Invalid URL.")
+            }
+            var request = URLRequest(url: url)
+            request.httpMethod = method
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.timeoutInterval = 15
+            if let body {
+                request.httpBody = try JSONSerialization.data(withJSONObject: body)
+            }
+            let (data, _) = try await session.data(for: request)
+            return data
+        }
+        // ── END DEMO MODE ────────────────────────────────────────────────
+
         guard let accessToken = readToken(key: accessTokenKey) else {
             throw AuthError.tokenExpired
         }

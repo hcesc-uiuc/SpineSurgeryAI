@@ -2,13 +2,14 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>CFBundleIdentifier</key>
-	<string></string>
 	<key>BGTaskSchedulerPermittedIdentifiers</key>
 	<array>
 		<string>edu.uiuc.cs.hcesc.SensingApp.locationupload</string>
 		<string>edu.uiuc.cs.hcesc.SensingApp.apprefresh</string>
 		<string>edu.uiuc.cs.hcesc.SensingApp.bgProcessing</string>
+		<string>edu.uiuc.cs.hcesc.SensingApp.fileUpload</string>
+        <string>edu.uiuc.cs.hcesc.SensingApp.sensorkit.fetch</string>
+        <string>edu.uiuc.cs.hcesc.SensingApp.healthResearchBgProcessing</string>
 	</array>
 	<key>NSAppTransportSecurity</key>
 	<dict>
@@ -19,6 +20,8 @@
 		<key></key>
 		<dict/>
 	</dict>
+	<key>NSApplicationCrashOnExceptions</key>
+	<true/>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>location</string>
@@ -34,8 +37,8 @@
 	<string>This app writes health data to Apple Health.</string>
 	<key>LSSupportsOpeningDocumentsInPlace</key>
 	<true/>
-	<key>NSMotionUsageDescription</key>
-	<string>This app needs to be able to access your motion use</string>
+	
+
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>App needs location for background tasks.</string>
 	<key>NSLocalNetworkUsageDescription</key>
@@ -44,5 +47,21 @@
 	<true/>
 	<key>NSApplicationCrashOnExceptions</key>
 	<true/>
+    <key>NSMotionUsageDescription</key>
+    <string>This study collects accelerometer data to analyze recovery patterns.</string>
+    <key>NSSensorKitUsageDescription</key>
+    <string>This research study collects motion data from your Apple Watch.</string>
+    <key>NSSensorKitUsageDetail</key>
+    <dict>
+        <key>SRSensorUsageMotion</key>
+        <dict>
+            <key>Description</key>
+            <string>Wrist accelerometer data is used to assess spine recovery activity levels.</string>
+            <key>Required</key>
+            <true/>
+        </dict>
+    </dict>
+    <key>NSSensorKitPrivacyPolicyURL</key>
+    <string>https://my-site.example.com/privacy-policy/</string>
 </dict>
 </plist>

@@ -18,6 +18,7 @@ extension SQLiteSaver {
 
     func createTables() {
         createDataTables()
+        createSurveysTable()   // ← add this
     }
 
     // MARK: - create data table

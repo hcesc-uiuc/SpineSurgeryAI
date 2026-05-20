@@ -8,9 +8,28 @@
 	<array>
 		<string>Default</string>
 	</array>
+	<key>com.apple.developer.backgroundtasks.healthresearch</key>
+	<true/>
 	<key>com.apple.developer.healthkit</key>
 	<true/>
 	<key>com.apple.developer.healthkit.background-delivery</key>
 	<true/>
+	<key>com.apple.developer.sensorkit.reader.allow</key>
+	<array>
+		<string>phone-usage</string>
+		<string>keyboard-metrics</string>
+		<string>device-usage</string>
+		<string>ambient-pressure</string>
+		<string>heart-rate</string>
+		<string>motion-rotation-rate</string>
+		<string>on-wrist</string>
+		<string>ambient-light-sensor</string>
+		<string>messages-usage</string>
+		<string>Sleep-session</string>
+		<string>PPG</string>
+		<string>motion-accelerometer</string>
+		<string>ECG</string>
+		<string>wrist-temperature</string>
+	</array>
 </dict>
 </plist>

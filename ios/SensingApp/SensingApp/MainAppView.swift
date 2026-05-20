@@ -1,9 +1,5 @@
 //
-//  MainAppView.swift
-//
-//  Merged: polished Journey UI (local) + full sensor/data logic (GitHub)
-//  All original functionality preserved. UI upgraded with tab structure,
-//  HomeView, SettingsView, and placeholder tabs from the local build.
+//  ContentView.swift
 //
 
 import SwiftUI
@@ -25,7 +21,7 @@ enum JourneyTab: CaseIterable {
         case .home:     return "house.fill"
         case .sensors:  return "waveform"
         case .surveys:  return "list.clipboard.fill"
-        case .progress: return "chart.line.uptrend.xyaxis"
+        case .progress: return "calendar"
         case .debug:    return "ant.fill"
         case .settings: return "gearshape.fill"
         }
@@ -36,7 +32,7 @@ enum JourneyTab: CaseIterable {
         case .home:     return "Home"
         case .sensors:  return "Sensors"
         case .surveys:  return "Surveys"
-        case .progress: return "Progress"
+        case .progress: return "Calendar"
         case .debug:    return "Debug"
         case .settings: return "Settings"
         }
@@ -44,12 +40,12 @@ enum JourneyTab: CaseIterable {
 
     var accentColor: Color {
         switch self {
-        case .home:     return Color(red: 0.42, green: 0.62, blue: 0.55) // sage green
-        case .sensors:  return Color(red: 0.38, green: 0.55, blue: 0.75) // warm blue
-        case .surveys:  return Color(red: 0.80, green: 0.55, blue: 0.45) // terracotta
-        case .progress: return Color(red: 0.38, green: 0.55, blue: 0.75) // warm blue
-        case .debug:    return Color(red: 0.55, green: 0.47, blue: 0.44) // muted brown
-        case .settings: return Color(red: 0.58, green: 0.48, blue: 0.72) // muted purple
+            case .home:     return Color(red: 0.42, green: 0.62, blue: 0.55) // sage green
+            case .sensors:  return Color(red: 0.38, green: 0.55, blue: 0.75) // warm blue
+            case .surveys:  return Color(red: 0.80, green: 0.55, blue: 0.45) // terracotta
+            case .progress: return Color(red: 0.38, green: 0.55, blue: 0.75) // warm blue
+            case .debug:    return Color(red: 0.55, green: 0.47, blue: 0.44) // muted brown
+            case .settings: return Color(red: 0.58, green: 0.48, blue: 0.72) // muted purple
         }
     }
 }
@@ -71,17 +67,21 @@ struct MainAppView: View {
     // ── GitHub: all original state preserved ──────────────────
     @StateObject private var motionManager = MotionManager()
     @StateObject private var appState = AppState()
+    @StateObject private var authManager = SecureAuthManager()
     @State private var isSurveyPresented = false
     @State private var showDeniedAlert = false
     @State private var showSettingsAlert = false
     @StateObject var HKManager = HealthKitManager()
+    
     @Environment(\.scenePhase) var scenePhase
     let motionActivityManager = CMMotionActivityManager()
 
     // ── Local: tab selection state ────────────────────────────
     @State private var selectedTab: JourneyTab = .home
-
+    @StateObject private var sensorKitManager = SensorKitManager()
+    
     var body: some View {
+        
         TabView(selection: $selectedTab) {
             ForEach(JourneyTab.allCases, id: \.self) { tab in
                 tabContent(for: tab)
@@ -91,6 +91,25 @@ struct MainAppView: View {
                     .tag(tab)
             }
         }
+        .tabViewStyle(.sidebarAdaptable)
+        .tabViewBottomAccessory {
+            Button("Do Action") {
+                
+            }
+        }
+            
+            
+            //            Button {
+            //                // action
+            //            } label: {
+            //                Image(systemName: "plus")
+            //                    .font(.title2.weight(.semibold))
+            //                    .frame(width: 56, height: 56)
+            //                    .background(.ultraThinMaterial, in: Circle())
+            //                    .overlay(Circle().strokeBorder(.white.opacity(0.2), lineWidth: 0.5))
+            //            }
+            //            .padding(20)
+        
         // Accent color updates as selected tab changes
         .tint(selectedTab.accentColor)
         // ── GitHub: scene phase handling (background tasks, logging) ──
@@ -99,10 +118,15 @@ struct MainAppView: View {
                 print("App moved to background")
                 BackgroundScheduler.shared.scheduleAppRefresh()
                 BackgroundScheduler.shared.scheduleBGProcessingTask()
+                BackgroundScheduler.shared.scheduleUploadBGTask()
+                BackgroundScheduler.shared.scheduleBackgroundSensorkitFetch()
+                BackgroundScheduler.shared.scheduleHealthResearchBGProcessingTask()
                 Logger.shared.append("App moved to background")
             } else if newPhase == .active {
                 print("App moved to foreground")
                 Logger.shared.append("App moved to foreground")
+                //we will need to move it to a view
+                
             } else if newPhase == .inactive {
                 print("App is inactive")
                 Logger.shared.append("App moved to inactive")
@@ -135,124 +159,152 @@ struct MainAppView: View {
         }
     }
 
-    // ============================================================
-    // MARK: - Sensor Tab (GitHub — fully preserved)
-    // ============================================================
-
-    private var SensorView: some View {
-        NavigationStack {
-            VStack {
-                Text("Sensor view")
-                    .font(.title2)
-                    .padding()
-
-                accelerometerView
-                gyroscopeView
-            }
-            .navigationTitle("Sensors")
-        }
-    }
-
-    // ============================================================
-    // MARK: - Debug Tab (GitHub — fully preserved)
-    // ============================================================
-
     private var DebugView: some View {
-        NavigationStack {
-            VStack(spacing: 20) {
-                Text("Debug Screen")
-                    .font(.title2)
-                    .padding()
+        Text("Debug Screen")
+    }
 
-                Button("Fetch Recorded Data") {
-                    Task { await fetchRecordedData() }
-                }
+    private var MainView: some View {
+        VStack {
+            Text("Journey app")
+                .font(.title2)
+                .padding()
 
-                Button("Fetch data") {
-                    Task { await self.fetchRecordedData() }
-                }
-
-                Button("Print schedule bg task") {
-                    Task { BackgroundScheduler.shared.printScheduledBackgroundTasks() }
-                }
-
-                Button("Upload File") {
-                    Task {
-                        print("Upload function called")
-                        let filename = "log_2026-02-19.txt"
-                        let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
-                        let fileURL = dir.appendingPathComponent(filename)
-                        Uploader.shared.uploadFile(fileURL: fileURL)
-                    }
-                }
-
-                Button("Upload All Files") {
-                    Task { Uploader.shared.uploadFolder() }
-                }
-
-                Button("Print log data") {
-                    Task { self.printCurrentLogFile() }
-                }
-
-                Button("Get HealthKit data") {
-                    Task { self.getHealthKitData() }
-                }
-
-                if CLLocationManager().authorizationStatus != .authorizedAlways {
-                    Button("Always allow location") {
-                        Task { showSettingsAlert = true }
-                    }
-                }
-
-                if CLLocationManager().authorizationStatus == .authorizedAlways {
-                    Text("Always allow location granted")
-                }
+            Button("Fetch Recorded Data") {
+                Task { await fetchRecordedData() }
             }
-            .padding()
-            .navigationTitle("Debug")
-            .alert("Motion Access Denied",
-                   isPresented: $showDeniedAlert,
-                   actions: {},
-                   message: { Text("Enable Motion & Fitness in Settings.") }
-            )
-            .alert("Location Access Required", isPresented: $showSettingsAlert) {
-                Button("Open Settings") {
-                    guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
-                    UIApplication.shared.open(url)
-                }
-                Button("Not Now", role: .cancel) { }
-            } message: {
-                Text("Please open Settings and set location access to Always Allow so we can track your location in the background.")
+            .padding(.top, 20)
+
+            Button("Start Survey") {
+                isSurveyPresented = true
             }
-            .onLoad {
-                checkMotionAndFitnessAuthorization()
-                checkLocationAuthorization()
+            .disabled(appState.isCompletedToday)
+            .sheet(isPresented: $isSurveyPresented) {
+                SurgerySurveyView(appState: appState, authManager: authManager)
+            }
+
+            Button("Fetch data") {
+                Task { await self.fetchRecordedData() }
+            }.padding(.top, 30)
+
+            Button("Print schedule bg task") {
+                Task { BackgroundScheduler.shared.printScheduledBackgroundTasks() }
+            }.padding(.top, 30)
+
+                
+            Button("Upload File") {
+                Task {
+                    print("Upload function called")
+                    let filename = "log_2026-02-19.txt"
+                    let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+                    let fileURL = dir.appendingPathComponent(filename)
+                    await Uploader.shared.uploadFile(fileURL: fileURL)
+                }
+            }.padding(.top, 30)
+
+            Button("Upload All Files") {
+                Task {
+                    await Uploader.shared.uploadFolder()
+                }
+            }.padding(.top, 30)
+
+            Button("Print log data") {
+                Task { self.printCurrentLogFile() }
+            }.padding(.top, 30)
+
+            Button("Get HealthKit data") {
+                Task { 
+                  HealthkitRecorder.shared.getHealthKitData() 
+                }
+            }.padding(.top, 30)
+
+            if CLLocationManager().authorizationStatus != .authorizedAlways {
+                Button("Always allow location") {
+                    Task { showSettingsAlert = true }
+                }.padding(.top, 30)
+            }
+
+            if CLLocationManager().authorizationStatus == .authorizedAlways {
+                Text("Always allow location granted")
+                    .padding(.top, 30)
+            }
+
+            Button("Log Out") {
+                onLogout()
+            }.padding(.top, 10)
+        }
+        .padding()
+        .alert("Motion Access Denied",
+               isPresented: $showDeniedAlert,
+               actions: {},
+               message: { Text("Enable Motion & Fitness in Settings.") }
+        )
+        .alert("Location Access Required", isPresented: $showSettingsAlert) {
+            Button("Open Settings") {
+                guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+                UIApplication.shared.open(url)
+            }
+            Button("Not Now", role: .cancel) { }
+        } message: {
+            Text("Please open Settings and set location access to Always Allow so we can track your location in the background.")
+        }
+        .onLoad {
+            checkMotionAndFitnessAuthorization()
+            checkLocationAuthorization()
+        }
+        .onChange(of: scenePhase) { oldPhase, newPhase in
+            if newPhase == .background {
+                print("App moved to background")
+                BackgroundScheduler.shared.scheduleAppRefresh()
+                BackgroundScheduler.shared.scheduleBGProcessingTask()
+                Logger.shared.append("App moved to background")
+            } else if newPhase == .active {
+                print("App moved to foreground")
+                Logger.shared.append("App moved to foreground")
+            } else if newPhase == .inactive {
+                print("App is inactive")
+                Logger.shared.append("App moved to inactive")
             }
         }
     }
-    
+
+    // MARK: - HealthKit
+
     private func getHealthKitData() {
         let daysRequested = 1
-        let metricsRequested: Set<SupportedMetric> = [.steps] // Empty = All
+        //let metricsRequested: Set<SupportedMetric> = [.steps] // Empty = All
+        let metricsRequested: Set<SupportedMetric> = [] // Empty = All
         
         print("Requesting: HKManager.refreshWithNewRange")
         
-        HKManager.refreshWithNewRange(days: 1,types:metricsRequested) { data in
+        HKManager.refreshWithNewRange(days: 1, types:metricsRequested) { data in
             
             print("Success! Data received. Len: \(data.count), Days:\(daysRequested), Types:\(metricsRequested)")
                 
-                for (index, point) in data.enumerated() {
-                    let hkDataPointString = formatRawString(
-                        point,
-                        unixStartStr: String(Int(point.startDate.timeIntervalSince1970)),
-                        unixEndStr: String(Int(point.endDate.timeIntervalSince1970))
-                    )
-                    print("\(index) - \(hkDataPointString)")
-                    print("")
+                //here I need to open a file
+                //This will create a file for the current day
+                
+                let hkDataLogger = HKDataLogger()
+                let isFileOpenSuccesful = hkDataLogger.open()
+                if isFileOpenSuccesful == true {
+                    for (index, point) in data.enumerated() {
+                        let hkDataPointString = formatRawString(
+                            point,
+                            unixStartStr: String(Int(point.startDate.timeIntervalSince1970)),
+                            unixEndStr: String(Int(point.endDate.timeIntervalSince1970))
+                        )
+                        print("\(index) - \(hkDataPointString)")
+                        print("")
+                        
+                        hkDataLogger.writeLine(hkDataPointString)
+                    }
+                    hkDataLogger.close()
                 }
+                
+                
+                //close a file here
         }
     }
-    
+
     func formatRawString(_ p: HealthKitManager.RawDataPoint, unixStartStr: String, unixEndStr: String) -> String {
         let dateStr = p.startDate.formatted(.dateTime.month().day().hour().minute().second())
         
@@ -273,6 +325,10 @@ struct MainAppView: View {
         
         return "[\(dateStr)] |ID:\(p.id.uuidString)| TYPE:\(p.type) | VAL:\(displayValue) \(p.unit) | UNIX_START:\(unixStartStr) | UNIX_END:\(unixEndStr) | DUR:\(durationMs)ms | SRC:\(p.sourceName) | BID:\(p.bundleID) | DEV:\(p.deviceName ?? "NA") | MOD:\(p.deviceModel ?? "NA") | SW:\(p.softwareVer ?? "NA") | ID:\(p.id.uuidString) | META:{\(metaStr)}"
     }
+    
+    
+
+    // MARK: - Sensor Views
 
     private var accelerometerView: some View {
         SensorCard(
@@ -322,29 +378,7 @@ struct MainAppView: View {
             .foregroundColor(color)
     }
 
-    // ============================================================
-    // MARK: - GitHub Data + Permission Functions (fully preserved)
-    // ============================================================
-
-    //    private func getHealthKitData() {
-    //        print("Requesting: HKManager.refreshWithNewRange")
-    //        HKManager.refreshWithNewRange(days: 7)
-    //        print("Requesting: HKManager.trialData. Len:\(HKManager.trialData.count)")
-    //        for (index, point) in HKManager.trialData.enumerated() {
-    //            let hkDataPointString = formatRawString(
-    //                point,
-    //                unixStartStr: String(Int(point.startDate.timeIntervalSince1970)),
-    //                unixEndStr: String(Int(point.endDate.timeIntervalSince1970))
-    //            )
-    //            print("\(index) - \(hkDataPointString)")
-    //        }
-    //    }
-    //
-    //    func formatRawString(_ p: HealthKitManager.RawDataPoint, unixStartStr: String, unixEndStr: String) -> String {
-    //        let dateStr = p.startDate.formatted(.dateTime.month().day().hour().minute().second())
-    //        let metaStr = p.metadata.map { "\($0.key):\($0.value)" }.joined(separator: "|")
-    //        return "[\(dateStr)] TYPE:\(p.type) | VAL:\(p.value)\(p.unit) | UNIX_START:\(unixStartStr) | UNIX_END:\(unixEndStr) | DUR:\(Float(unixEndStr)!-Float(unixStartStr)!)ms | SRC:\(p.sourceName) | BID:\(p.bundleID) | DEV:\(p.deviceName ?? "NA") | MOD:\(p.deviceModel ?? "NA") | SW:\(p.softwareVer ?? "NA") | ID:\(p.id.uuidString) | META:{\(metaStr)}"
-    //    }
+    // MARK: - Helpers
 
     private func fetchRecordedData() async {
         AcclerometerRecorder.shared.fetchRecordedData1Min()

@@ -22,7 +22,11 @@ import HealthKit
 //   4. Routing to PermissionsFlowView if any permission is missing
 //   5. Routing to MainAppView once authenticated and all permissions granted
 //
-// NAVIGATION FLOW:
+//    // MARK: - Login Logic
+//    private func attemptLogin() async {
+//        errorMessage = nil
+//        isWorking = true
+//        defer { isWorking = false }
 //
 //   App Launch
 //       └── AuthLoginView.onAppear
@@ -93,9 +97,10 @@ struct AuthLoginView: View {
             loginScreen
         }
     }
-    // MARK: - Login Screen UI
+    
     private var loginScreen: some View {
         ZStack {
+            // Warm gradient background
             LinearGradient(
                 colors: [
                     Color(red: 0.98, green: 0.95, blue: 0.91),
@@ -105,12 +110,13 @@ struct AuthLoginView: View {
                 endPoint: .bottomTrailing
             )
             .ignoresSafeArea()
-
+            
             ScrollView {
                 VStack(spacing: 0) {
-
+                    
                     // ── Header ──────────────────────────────────────
                     VStack(spacing: 8) {
+                        // Soft icon mark
                         ZStack {
                             Circle()
                                 .fill(
@@ -124,10 +130,8 @@ struct AuthLoginView: View {
                                     )
                                 )
                                 .frame(width: 72, height: 72)
-                                .shadow(
-                                    color: Color(red: 0.72, green: 0.55, blue: 0.50).opacity(0.35),
-                                    radius: 12, y: 6
-                                )
+                                .shadow(color: Color(red: 0.72, green: 0.55, blue: 0.50).opacity(0.35), radius: 12, y: 6)
+                            
                             Image(systemName: "figure.walk.motion")
                                 .font(.system(size: 32, weight: .medium))
                                 .foregroundStyle(.white)
