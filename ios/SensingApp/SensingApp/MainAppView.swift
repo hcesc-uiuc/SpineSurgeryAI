@@ -6,6 +6,59 @@ import SwiftUI
 import CoreMotion
 import CoreLocation
 
+// ============================================================
+// MARK: - Tab Definition
+// ============================================================
+//
+// Centralizes all tab metadata — icon, label, accent color.
+// Add new tabs here and route them in MainAppView.tabContent().
+//
+enum JourneyTab: CaseIterable {
+    case home, sensors, surveys, progress, debug, settings
+
+    var icon: String {
+        switch self {
+        case .home:     return "house.fill"
+        case .sensors:  return "waveform"
+        case .surveys:  return "list.clipboard.fill"
+        case .progress: return "calendar"
+        case .debug:    return "ant.fill"
+        case .settings: return "gearshape.fill"
+        }
+    }
+
+    var label: String {
+        switch self {
+        case .home:     return "Home"
+        case .sensors:  return "Sensors"
+        case .surveys:  return "Surveys"
+        case .progress: return "Calendar"
+        case .debug:    return "Debug"
+        case .settings: return "Settings"
+        }
+    }
+
+    var accentColor: Color {
+        switch self {
+            case .home:     return Color(red: 0.42, green: 0.62, blue: 0.55) // sage green
+            case .sensors:  return Color(red: 0.38, green: 0.55, blue: 0.75) // warm blue
+            case .surveys:  return Color(red: 0.80, green: 0.55, blue: 0.45) // terracotta
+            case .progress: return Color(red: 0.38, green: 0.55, blue: 0.75) // warm blue
+            case .debug:    return Color(red: 0.55, green: 0.47, blue: 0.44) // muted brown
+            case .settings: return Color(red: 0.58, green: 0.48, blue: 0.72) // muted purple
+        }
+    }
+}
+
+// ============================================================
+// MARK: - MainAppView
+// ============================================================
+//
+// Root view shown after successful login + permissions grant.
+// Hosts a TabView — each tab has its own accent color.
+// All sensor, HealthKit, location, and background task logic
+// from the original GitHub version is fully preserved here.
+//
 struct MainAppView: View {
     
     var onLogout: () -> Void
@@ -21,46 +74,40 @@ struct MainAppView: View {
     @Environment(\.scenePhase) var scenePhase
     let motionActivityManager = CMMotionActivityManager()
 
+    // ── Local: tab selection state ────────────────────────────
+    @State private var selectedTab: JourneyTab = .home
+    @StateObject private var sensorKitManager = SensorKitManager()
+    
     var body: some View {
-
-        TabView {
-            // Tab 1
-            MainView
-                .tabItem {
-                    Label("Home", systemImage: "house.fill")
-                }
-
-            //         TabView(selection: $selectedTab) {
-            //             ForEach(JourneyTab.allCases, id: \.self) { tab in
-            //                 tabContent(for: tab)
-            //                     .tabItem {
-            //                         Label(tab.label, systemImage: tab.icon)
-            //                     }
-            //                     .tag(tab)
-            //             }
-            //         }
-
-            //     }
-
-
-            // Tab 2
-            SensorView
-                .tabItem {
-                    Label("Sensors", systemImage: "waveform")
-                }
-
-            // Tab 3
-            MonthlyProgressView()
-                .tabItem {
-                    Label("Progress", systemImage: "calendar")
-                }
-
-            // Tab 4
-            DebugView
-                .tabItem {
-                    Label("Debug", systemImage: "ant.fill")
-                }
+        
+        TabView(selection: $selectedTab) {
+            ForEach(JourneyTab.allCases, id: \.self) { tab in
+                tabContent(for: tab)
+                    .tabItem {
+                        Label(tab.label, systemImage: tab.icon)
+                    }
+                    .tag(tab)
+            }
         }
+        .tabViewStyle(.sidebarAdaptable)
+        .tabViewBottomAccessory {
+            Button("Do Action") {
+                
+            }
+        }
+            
+            
+            //            Button {
+            //                // action
+            //            } label: {
+            //                Image(systemName: "plus")
+            //                    .font(.title2.weight(.semibold))
+            //                    .frame(width: 56, height: 56)
+            //                    .background(.ultraThinMaterial, in: Circle())
+            //                    .overlay(Circle().strokeBorder(.white.opacity(0.2), lineWidth: 0.5))
+            //            }
+            //            .padding(20)
+        
         // Accent color updates as selected tab changes
         .tint(selectedTab.accentColor)
         // ── GitHub: scene phase handling (background tasks, logging) ──
@@ -70,25 +117,44 @@ struct MainAppView: View {
                 BackgroundScheduler.shared.scheduleAppRefresh()
                 BackgroundScheduler.shared.scheduleBGProcessingTask()
                 BackgroundScheduler.shared.scheduleUploadBGTask()
+                BackgroundScheduler.shared.scheduleBackgroundSensorkitFetch()
+                BackgroundScheduler.shared.scheduleHealthResearchBGProcessingTask()
                 Logger.shared.append("App moved to background")
             } else if newPhase == .active {
                 print("App moved to foreground")
                 Logger.shared.append("App moved to foreground")
+                //we will need to move it to a view
+                
             } else if newPhase == .inactive {
                 print("App is inactive")
                 Logger.shared.append("App moved to inactive")
             }
         }
     }
-    
-    private var SensorView: some View {
-        VStack {
-            Text("Sensor view")
-                .font(.title2)
-                .padding()
-            
-            accelerometerView
-            gyroscopeView
+
+    // ============================================================
+    // MARK: - Tab Content Router
+    // ============================================================
+    //
+    // Routes each tab to its view.
+    // Replace placeholder views here as screens get built out.
+    //
+    @ViewBuilder
+    private func tabContent(for tab: JourneyTab) -> some View {
+        switch tab {
+        case .home:
+            HomeView(accentColor: tab.accentColor)
+        case .sensors:
+            SensorView
+        case .surveys:
+            SurveysView(accentColor: tab.accentColor, appState: appState, isSurveyPresented: $isSurveyPresented)
+        case .progress:
+            //ProgressPlaceholderView(accentColor: tab.accentColor)
+            MonthlyProgressView()
+        case .debug:
+            DebugView
+        case .settings:
+            SettingsView(accentColor: tab.accentColor, onLogout: onLogout)
         }
     }
 

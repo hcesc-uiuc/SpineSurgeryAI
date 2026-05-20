@@ -14,8 +14,9 @@ struct SensingAppApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @StateObject private var appState = AppState()
     @StateObject private var locationManager = AdaptiveLocationManager.shared
-
-    init() {
+    @StateObject private var sensorKitManager = SensorKitManager()
+    
+    init(){
         print("SensingApp init called")
 
         Logger.shared.append("")
@@ -23,6 +24,15 @@ struct SensingAppApp: App {
         Logger.shared.append("SensingApp init called")
 
         SurveyNotificationManager.shared.requestPermission()
+        
+        
+        
+        //        BackgroundScheduler.shared.registerBackgroundTasks()
+        //        BackgroundScheduler.shared.scheduleBGProcessingTask()
+        //
+        //        BackgroundScheduler.shared.registerBackgroundAppRefreshTask()
+        //        BackgroundScheduler.shared.scheduleAppRefresh()
+        
     }
 
     var body: some Scene {
@@ -31,11 +41,13 @@ struct SensingAppApp: App {
                 .environmentObject(appState)
                 .environmentObject(locationManager)
                 .onAppear {
-                    SurveyNotificationManager.shared.scheduleDailyReminder(
-                        hour: 20,
-                        minute: 0,
-                        appState: appState
-                    )
+                    sensorKitManager.requestAuthorization()
+                    SurveyNotificationManager.shared
+                        .scheduleDailyReminder(
+                            hour: 20,
+                            minute: 0,
+                            appState: appState
+                        )
                 }
         }
     }
@@ -71,7 +83,8 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         BackgroundScheduler.shared.registerBackgroundTasks()
         BackgroundScheduler.shared.registerUploadBGTask()
         BackgroundScheduler.shared.registerBackgroundAppRefreshTask()
-
+        BackgroundScheduler.shared.registerBackgroundSensorkitFetchTask()
+        BackgroundScheduler.shared.registerHealthBackgroundTask()
         return true
     }
 
@@ -131,6 +144,8 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         BackgroundScheduler.shared.scheduleAppRefresh()
         BackgroundScheduler.shared.scheduleUploadBGTask()
         BackgroundScheduler.shared.scheduleBGProcessingTask()
+        BackgroundScheduler.shared.scheduleBackgroundSensorkitFetch()
+        BackgroundScheduler.shared.scheduleHealthResearchBGProcessingTask()
     }
 
     func applicationDidEnterBackground(_ application: UIApplication) {
