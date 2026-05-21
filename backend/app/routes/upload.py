@@ -211,8 +211,8 @@ def uploads_presign():
 
     if not filename:
         return jsonify(error="missing filename"), 400
-    if kind not in ("accel", "gyro", "hr"):
-        return jsonify(error="kind must be accel, gyro, or hr"), 400
+    if kind not in ("accel", "gyro", "hr", "other"):
+        return jsonify(error="kind must be accel, gyro, hr, or other"), 400
 
     upload_id = str(uuid.uuid4())
     key = f"uploads/{kind}/{datetime.utcnow():%Y%m%dT%H%M%S}_{secure_filename(filename)}"
@@ -282,6 +282,7 @@ def uploads_complete():
             db.insert_gyro(g.user_id, [{"url": key}])
         elif kind == "hr":
             db.insert_hr(g.user_id, [{"url": key}])
+        # "other" — stored in uploads/other/ in S3, no dedicated DB table
 
         db.mark_upload_completed(upload_id)
         return jsonify(status="completed", key=key), 200
