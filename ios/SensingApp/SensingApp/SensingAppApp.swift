@@ -24,7 +24,7 @@ struct SensingAppApp: App {
         Logger.shared.append("SensingApp init called")
 
         SurveyNotificationManager.shared.requestPermission()
-        
+        SensorKitAccelerometerFetcher.shared.startRecordingWithAuthorizationCheck()
         
         
         //        BackgroundScheduler.shared.registerBackgroundTasks()

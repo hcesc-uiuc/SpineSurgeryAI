@@ -34,6 +34,7 @@ class SensorKitManager: NSObject, ObservableObject {
     func requestAuthorization() {
         guard authorizationStatus != .authorized else {
             print("Sensorkit Already authorized, skipping")
+            SensorKitAccelerometerFetcher.shared.startRecording()
             return
         }
         
@@ -45,6 +46,7 @@ class SensorKitManager: NSObject, ObservableObject {
             }
             self?.saveAuthorizationStatus(.authorized)
             print("SensorKit authorization granted")
+            SensorKitAccelerometerFetcher.shared.startRecording()
         }
     }
     

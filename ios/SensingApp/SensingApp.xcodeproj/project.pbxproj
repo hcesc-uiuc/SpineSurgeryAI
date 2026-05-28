@@ -7,8 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		AE19A8C52FBE125E00AF02A4 /* FirebaseCore in Frameworks */ = {isa = PBXBuildFile; productRef = AE19A8C42FBE125E00AF02A4 /* FirebaseCore */; };
-		AE19A8C72FBE125E00AF02A4 /* FirebaseCrashlytics in Frameworks */ = {isa = PBXBuildFile; productRef = AE19A8C62FBE125E00AF02A4 /* FirebaseCrashlytics */; };
+		AE320A6F2FC8947200FF3732 /* FirebaseCore in Frameworks */ = {isa = PBXBuildFile; productRef = AE320A6E2FC8947200FF3732 /* FirebaseCore */; };
+		AE320A712FC8947200FF3732 /* FirebaseCrashlytics in Frameworks */ = {isa = PBXBuildFile; productRef = AE320A702FC8947200FF3732 /* FirebaseCrashlytics */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -45,8 +45,6 @@
 		AEABF3882EA06D020055052F /* SensingApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SensingApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AEABF39A2EA06D040055052F /* SensingAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SensingAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		AEABF3A42EA06D040055052F /* SensingAppUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SensingAppUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		FABC18512EC29B9A0071EC17 /* ResearchKitSwiftUI.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = ResearchKitSwiftUI.xcodeproj; path = "../../../ResearchKit-dev-SwiftUI/ResearchKitSwiftUI/ResearchKitSwiftUI.xcodeproj"; sourceTree = "<group>"; };
-		FABC185C2EC29BA20071EC17 /* ResearchKit.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = ResearchKit.xcodeproj; path = "../../../ResearchKit-dev-SwiftUI/ResearchKit.xcodeproj"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -85,8 +83,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				AE19A8C52FBE125E00AF02A4 /* FirebaseCore in Frameworks */,
-				AE19A8C72FBE125E00AF02A4 /* FirebaseCrashlytics in Frameworks */,
+				AE320A6F2FC8947200FF3732 /* FirebaseCore in Frameworks */,
+				AE320A712FC8947200FF3732 /* FirebaseCrashlytics in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -131,24 +129,8 @@
 		FABC18502EC29B9A0071EC17 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
-				FABC185C2EC29BA20071EC17 /* ResearchKit.xcodeproj */,
-				FABC18512EC29B9A0071EC17 /* ResearchKitSwiftUI.xcodeproj */,
 			);
 			name = Frameworks;
-			sourceTree = "<group>";
-		};
-		FABC18522EC29B9A0071EC17 /* Products */ = {
-			isa = PBXGroup;
-			children = (
-			);
-			name = Products;
-			sourceTree = "<group>";
-		};
-		FABC185D2EC29BA20071EC17 /* Products */ = {
-			isa = PBXGroup;
-			children = (
-			);
-			name = Products;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -171,8 +153,8 @@
 			);
 			name = SensingApp;
 			packageProductDependencies = (
-				AE19A8C42FBE125E00AF02A4 /* FirebaseCore */,
-				AE19A8C62FBE125E00AF02A4 /* FirebaseCrashlytics */,
+				AE320A6E2FC8947200FF3732 /* FirebaseCore */,
+				AE320A702FC8947200FF3732 /* FirebaseCrashlytics */,
 			);
 			productName = SensingApp;
 			productReference = AEABF3882EA06D020055052F /* SensingApp.app */;
@@ -258,22 +240,11 @@
 			mainGroup = AEABF37F2EA06D020055052F;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				FA050AE52EB40715005A867A /* XCRemoteSwiftPackageReference "ResearchKit" */,
-				FA9BC0412F96C5BB0087759F /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
+				AE320A6D2FC8947200FF3732 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = AEABF3892EA06D020055052F /* Products */;
 			projectDirPath = "";
-			projectReferences = (
-				{
-					ProductGroup = FABC185D2EC29BA20071EC17 /* Products */;
-					ProjectRef = FABC185C2EC29BA20071EC17 /* ResearchKit.xcodeproj */;
-				},
-				{
-					ProductGroup = FABC18522EC29B9A0071EC17 /* Products */;
-					ProjectRef = FABC18512EC29B9A0071EC17 /* ResearchKitSwiftUI.xcodeproj */;
-				},
-			);
 			projectRoot = "";
 			targets = (
 				AEABF3872EA06D020055052F /* SensingApp */,
@@ -737,34 +708,25 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
-		FA050AE52EB40715005A867A /* XCRemoteSwiftPackageReference "ResearchKit" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/ResearchKit/ResearchKit.git";
-			requirement = {
-				kind = versionRange;
-				maximumVersion = 4.0.0;
-				minimumVersion = 3.2.0;
-			};
-		};
-		FA9BC0412F96C5BB0087759F /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {
+		AE320A6D2FC8947200FF3732 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/firebase/firebase-ios-sdk.git";
 			requirement = {
 				kind = upToNextMajorVersion;
-				minimumVersion = 12.12.1;
+				minimumVersion = 12.14.0;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		AE19A8C42FBE125E00AF02A4 /* FirebaseCore */ = {
+		AE320A6E2FC8947200FF3732 /* FirebaseCore */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = FA9BC0412F96C5BB0087759F /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			package = AE320A6D2FC8947200FF3732 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
 			productName = FirebaseCore;
 		};
-		AE19A8C62FBE125E00AF02A4 /* FirebaseCrashlytics */ = {
+		AE320A702FC8947200FF3732 /* FirebaseCrashlytics */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = FA9BC0412F96C5BB0087759F /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			package = AE320A6D2FC8947200FF3732 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
 			productName = FirebaseCrashlytics;
 		};
 /* End XCSwiftPackageProductDependency section */

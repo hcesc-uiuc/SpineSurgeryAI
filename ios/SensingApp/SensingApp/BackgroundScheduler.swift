@@ -508,10 +508,11 @@ class BackgroundScheduler {
         Logger.shared.append("BGSensorkitFetchTask: Performing sensorkit fetch")
         Task {
             //we need to change the fetch part
-            let accelFetcher = SensorKitAccelerometerFetcher()
+            // let accelFetcher = SensorKitAccelerometerFetcher()
             // Fetcher will call setTaskCompleted in didCompleteFetch
             // Todo: Do we need to wrap in another task again?
-            accelFetcher.fetchLatestData()
+            // accelFetcher.fetchLatestData()
+            SensorKitAccelerometerFetcher.shared.fetchLatestData()
         }
         completion(true)
     }

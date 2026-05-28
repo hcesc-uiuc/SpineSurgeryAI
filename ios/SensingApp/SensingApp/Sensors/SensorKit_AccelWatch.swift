@@ -55,6 +55,7 @@ import CoreMotion
 import Foundation
 
 class SensorKitAccelerometerFetcher: NSObject {
+    static let shared = SensorKitAccelerometerFetcher()
     
     private let reader = SRSensorReader(sensor: .accelerometer)
     
@@ -93,10 +94,30 @@ class SensorKitAccelerometerFetcher: NSObject {
         currentFileURL = documentsDir  // placeholder; set in openCurrentFile()
         super.init()
         reader.delegate = self
-        openCurrentFile()
+        
     }
     
     // MARK: - Fetch
+    
+    func startRecordingWithAuthorizationCheck(){
+        
+        let authKey = "sk_authorization_status"
+        let raw = UserDefaults.standard.integer(forKey: authKey)
+        let authorizationStatus = SRAuthorizationStatus(rawValue: raw) ?? .notDetermined
+        
+        if authorizationStatus != .authorized {
+            print("SK: Sensorkit is not authorized, skipping")
+            return
+        }
+        
+        print("SK: Attempting to start sensor recording")
+        reader.startRecording()
+    }
+    
+    func startRecording(){
+        print("SK: Attempting to start sensor recording")
+        reader.startRecording()
+    }
     
     func fetchLatestData() {
         /*
@@ -110,7 +131,21 @@ class SensorKitAccelerometerFetcher: NSObject {
                  ↓
          fetchSamples(from: device)
         */
-        reader.fetchDevices()
+        //check authroization status
+        let authKey = "sk_authorization_status"
+        let raw = UserDefaults.standard.integer(forKey: authKey)
+        let authorizationStatus = SRAuthorizationStatus(rawValue: raw) ?? .notDetermined
+        
+        if authorizationStatus != .authorized {
+            print("SK: Sensorkit is not authorized, skipping")
+            return
+        }else{
+            print("SK: Sensorkit is authorized, fetching devices")
+            openCurrentFile()
+            reader.fetchDevices()
+        }
+        
+        
     }
     
     private func fetchSamples(from device: SRDevice) {
@@ -266,7 +301,24 @@ class SensorKitAccelerometerFetcher: NSObject {
 
 extension SensorKitAccelerometerFetcher: SRSensorReaderDelegate {
     
+    func sensorReaderWillStartRecording(_ reader: SRSensorReader) {
+        print("✅ SK: SensorKit recording successfully started")
+    }
+
+    func sensorReader(_ reader: SRSensorReader, startRecordingFailedWithError error: Error) {
+        print("❌ SensorKit recording failed: \(error)")
+    }
+    
     func sensorReader(_ reader: SRSensorReader, didFetch devices: [SRDevice]) {
+        
+        
+        print("SK: Fetch devices callback is called")
+        
+        // print all available devices
+        for device in devices {
+            print("SK: Device: \(device.name) — model: \(device.model)")
+        }
+        
         let watchDevice = devices.first { $0.model.lowercased().contains("watch") }
             ?? devices.first
         
