@@ -365,6 +365,9 @@ extension SensorKitAccelerometerFetcher: SRSensorReaderDelegate {
             return true
         }
         
+        print("SK: Writing \(samples.count) samples of accelerometer data")
+        Logger.shared.append("SK: Writing \(samples.count) samples of accelerometer data")
+        
         for accelSample in samples {
             let unixTime = accelSample.startDate.timeIntervalSince1970
             let accel = accelSample.acceleration
@@ -423,8 +426,9 @@ extension SensorKitAccelerometerFetcher: SRSensorReaderDelegate {
     // MARK: - Debug Helpers
     
     func listCSVFiles() {
+        let toBeProcessedDir = documentsDir.appendingPathComponent("to-be-processed")
         let files = (try? FileManager.default.contentsOfDirectory(
-            at: documentsDir,
+            at: toBeProcessedDir,
             includingPropertiesForKeys: [.fileSizeKey]
         ))?.filter { $0.pathExtension == "csv" } ?? []
         

@@ -25,6 +25,7 @@ final class SQLiteSaver {
     private var index = 0
     private var capacity: Int = 10000
     private let maxFileSizeMB: Double = 5  // 👈 change this threshold
+    private let queue = DispatchQueue(label: "com.sensingapp.sqlitesaver")
     
     enum DataType: Int {
         case accelerometer = 0
@@ -48,18 +49,22 @@ final class SQLiteSaver {
         let fileManager = FileManager.default
         let docsURL = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first!
         self.databaseURL = docsURL.appendingPathComponent("to-be-processed").appendingPathComponent(filename)
-        self.capacity = capacity
         
-        if !fileManager.fileExists(atPath: self.databaseURL.path){
-            createNewDatabaseFile()
-        }
+        //  if !fileManager.fileExists(atPath: self.databaseURL.path){
+        //       createNewDatabaseFile()
+        //  }
         
         //store filename to default
         UserDefaults.standard.set(filename, forKey: "dbFileName")
+        self.capacity = capacity
         
+        //We are opening file at the beginning
+        //creating all the tables if they do not exist
         open()
         //defined in an extension
         createTables()
+        //
+        close()
     }
     
     private func createNewDatabaseFile() {
@@ -67,18 +72,21 @@ final class SQLiteSaver {
         let fileManager = FileManager.default
         let docsURL = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first!
         self.databaseURL =  docsURL.appendingPathComponent("to-be-processed").appendingPathComponent(filename)
-        
+
         //--
         UserDefaults.standard.set(filename, forKey: "dbFileName")
-        
+
         open()
         createTables()
+        close()
     }
     
     
     func open() {
         let path = self.databaseURL.path
-
+        
+        
+        
         guard sqlite3_open(path, &db) == SQLITE_OK else {
             let msg = String(cString: sqlite3_errmsg(db))
             print("❌ Failed to open DB at \(path): \(msg)")
@@ -95,7 +103,7 @@ final class SQLiteSaver {
     }
     
     func close() {
-        guard let db else { return }
+        guard let db else { return } //means database is already closed.
         sqlite3_close(db)
         self.db = nil
         print("🔒 Database closed")
@@ -131,29 +139,43 @@ final class SQLiteSaver {
         return String(cString: sqlite3_errmsg(db))
     }
 
-    /// Add one row — overwrites oldest if full
+    /// Add one row — thread-safe via serial queue
     func addRow(timestamp: Double, dataType: DataType, blob: Data) {
-        insertData(timestamp: timestamp, dataType: dataType, blob: blob)
-        index += 1
+        //sync or async
+        //--- sync is here to wait
+        //--- async will not wait
+        //------- sync is needed if we close the database in one call
+        //------- and trying to write it in another call
+        //------- Note that we will call addrow in a loop.
+        //------- The order insertion can be different from the order of call
+        //------- "queue.sync" will ensure that from different threads, we will be protected
+        //
         
-        // auto flush when full
-        if index == capacity {
-            flush()
-        }
-        
-        // If the filesize is larger than "maxFileSizeMB", we create new file.
-        if fileSizeMB(at: self.databaseURL) > maxFileSizeMB {
-            close()
+        //Problem here is to keep the database open or close
+        //
+        queue.sync {
+            if db == nil {
+                //means database is not open.
+                open()
+            }
             
-            createNewDatabaseFile()
-            
-            
-            open()
-            createTables()
+            insertData(timestamp: timestamp, dataType: dataType, blob: blob)
+            index += 1
+
+            // auto flush when full
+            if index == capacity {
+                flush()
+                
+                // If the filesize is larger than "maxFileSizeMB", we create new file.
+                if fileSizeMB(at: self.databaseURL) > maxFileSizeMB {
+                    close()
+                    createNewDatabaseFile()  // already calls open() + createTables() internally
+                }
+            }
         }
     }
     
-/// Returns file size in MB, or 0 if the file doesn't exist yet.
+    /// Returns file size in MB, or 0 if the file doesn't exist yet.
     private func fileSizeMB(at url: URL) -> Double {
         let bytes = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
         return Double(bytes) / (1024 * 1024)

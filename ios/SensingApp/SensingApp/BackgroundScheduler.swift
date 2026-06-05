@@ -19,7 +19,7 @@ class BackgroundScheduler {
     
     private init() {}
     
-    func startSensorRecordingAndScheduleNextTask() {
+    func startSensorRecording() {
         var someSensorIsActive = false
         if(AcclerometerRecorder.shared.checkAccelerometerAuthorizationStatus() == true){
             // Restart motion recording
@@ -35,10 +35,6 @@ class BackgroundScheduler {
         let now = Date()
         UserDefaults.standard.set(now, forKey: "lastSensorDateSaveTime")
         
-        if someSensorIsActive {
-            Logger.shared.append("SensingApp: Rescheduling background task again")
-            rescheduleBackgroundRecordingAfterXhour(hour: 1)
-        }
     }
     
     func printScheduledBackgroundTasks(){
@@ -123,6 +119,9 @@ class BackgroundScheduler {
         // Reschedule next task
         // There should not be any more AppRefreshTask pending
         // as we are already in one.
+        // By the time your launchHandler is called,
+        // the task has already been dequeued from pending by the system.
+        // Calling getPendingTaskRequests inside the handler will not return that task.
         scheduleAppRefresh()
         
         // Expiration handler
@@ -131,39 +130,42 @@ class BackgroundScheduler {
             Logger.shared.append("==BGAppRefreshTask== expired before completion.")
         }
 
-        // Execute work asynchronously
-        Task {
-            print("📡 Performing background fetch")
-            // Do my tak here
-            
-            //We will do a recording of motion and reschedule a background task
-            //again if bgProcessing has not trigger for the last 1 hour
-            //(or we have not recorded anything for the last 1 hour).
-            // let lastSensorDateSaveTime = (UserDefaults.standard.object(forKey: "lastSensorDateSaveTime") as? Date) ?? Date()
-            if let lastSensorDateSaveTime = UserDefaults.standard.object(forKey: "lastSensorDateSaveTime") as? Date {
-                let now  = Date()
-                let differenceInMinutes = now.timeIntervalSince(lastSensorDateSaveTime) / 60  // seconds → minutes
+        // Do not need execute work asynchronously
+        // Background tasks are started as a thread.
+        // This thread is borrowed from Apple DispatchQueue thread pool
+        // Do not block the operation with wait, unless we release it soon (using a consumer)
+        print("📡 Performing background fetch")
+        // Do my tak here
+        
+        //We will do a recording of motion and reschedule a background task
+        //again if bgProcessing has not trigger for the last 1 hour
+        //(or we have not recorded anything for the last 1 hour).
+        // let lastSensorDateSaveTime = (UserDefaults.standard.object(forKey: "lastSensorDateSaveTime") as? Date) ?? Date()
+        if let lastSensorDateSaveTime = UserDefaults.standard.object(forKey: "lastSensorDateSaveTime") as? Date {
+            let now  = Date()
+            let differenceInMinutes = now.timeIntervalSince(lastSensorDateSaveTime) / 60  // seconds → minutes
 
-                if differenceInMinutes >= 65 {
-                    print("⏰ More than 60 minutes have passed.")
-                    Logger.shared.append("More than 60 minutes have passed since last recording")
-                    BackgroundScheduler.shared.startSensorRecordingAndScheduleNextTask()
-                } else {
-                    print("🕒 Only \(Int(differenceInMinutes)) minutes have passed.")
-                    Logger.shared.append("Only \(Int(differenceInMinutes)) minutes since last recording")
-                }
+            if differenceInMinutes >= 65 {
+                print("⏰ More than 60 minutes have passed.")
+                Logger.shared.append("More than 60 minutes have passed since last recording")
+                //Sensor recording
+                BackgroundScheduler.shared.startSensorRecording()
             } else {
-                print("⚠️ No saved date found in UserDefaults.")
-                Logger.shared.append("No lastSensorDateSaveTime. Recording...")
-                //Note the following function will also create "lastSensorDateSaveTime"
-                BackgroundScheduler.shared.startSensorRecordingAndScheduleNextTask()
+                print("🕒 Only \(Int(differenceInMinutes)) minutes have passed.")
+                Logger.shared.append("Only \(Int(differenceInMinutes)) minutes since last recording")
             }
-            
-            
-            task.setTaskCompleted(success: true)
-            print("✅ BGAppRefreshTask completed")
-            Logger.shared.append("==BGAppRefreshTask== sucessfully completed")
+        } else {
+            print("⚠️ No saved date found in UserDefaults.")
+            Logger.shared.append("No lastSensorDateSaveTime. Recording...")
+            //Note the following function will also create "lastSensorDateSaveTime"
+            BackgroundScheduler.shared.startSensorRecording()
         }
+        
+        
+        task.setTaskCompleted(success: true)
+        print("✅ BGAppRefreshTask completed")
+        Logger.shared.append("==BGAppRefreshTask== sucessfully completed")
+        
     }
     
     
@@ -186,27 +188,6 @@ class BackgroundScheduler {
     }
     // e -l objc -- (void)[[BGTaskScheduler sharedScheduler] _simulateLaunchForTaskWithIdentifier:@"edu.uiuc.cs.hcesc.SensingApp.bgProcessing"]
 
-    
-    private func handleBackgroundStartTask(task: BGProcessingTask) {
-        print("SensingApp:handleRecordingTask init called")
-        Logger.shared.append("SensingApp:handleRecordingTask init called")
-        
-        startSensorRecordingAndScheduleNextTask()
-        
-        // Complete the task
-        //Todo complete the task handler.
-        task.expirationHandler = {
-            Logger.shared.append("SensingApp: Background task expired before completion.")
-            task.setTaskCompleted(success: false)
-        }
-        task.setTaskCompleted(success: true)
-        
-        // Schedule the next one
-        // if some sensor is active
-        
-        
-    }
-    
     //Calling this function starts the
     //background process immediately.
     func scheduleBGProcessingTask() {
@@ -253,6 +234,7 @@ class BackgroundScheduler {
     ///
     /// I do not need to keep this scheduler here. Ideally we want to do the rescheduling business where we do the recording.
     ///
+    /// Background process to start after an hour
     func rescheduleBackgroundRecordingAfterXhour(hour: Int) {
         
         BGTaskScheduler.shared.getPendingTaskRequests{ requests in
@@ -298,6 +280,59 @@ class BackgroundScheduler {
             }
         }
     }
+    
+    
+    
+    private func handleBackgroundStartTask(task: BGProcessingTask) {
+        print("SensingApp:handleRecordingTask init called")
+        Logger.shared.append("SensingApp:handleRecordingTask init called")
+        
+        rescheduleBackgroundRecordingAfterXhour(hour: 1)
+        
+        
+        // Complete the task
+        //Todo complete the task handler.
+        task.expirationHandler = {
+            Logger.shared.append("SensingApp: Background task expired before completion.")
+            task.setTaskCompleted(success: false)
+        }
+        
+        //We will do a recording of motion and reschedule a background task
+        //again if bgProcessing has not trigger for the last 1 hour
+        //(or we have not recorded anything for the last 1 hour).
+        // let lastSensorDateSaveTime = (UserDefaults.standard.object(forKey: "lastSensorDateSaveTime") as? Date) ?? Date()
+        if let lastSensorDateSaveTime = UserDefaults.standard.object(forKey: "lastSensorDateSaveTime") as? Date {
+            let now  = Date()
+            let differenceInMinutes = now.timeIntervalSince(lastSensorDateSaveTime) / 60  // seconds → minutes
+
+            if differenceInMinutes >= 65 {
+                print("⏰ More than 60 minutes have passed.")
+                Logger.shared.append("More than 60 minutes have passed since last recording")
+                //Sensor recording
+                BackgroundScheduler.shared.startSensorRecording()
+            } else {
+                print("🕒 Only \(Int(differenceInMinutes)) minutes have passed.")
+                Logger.shared.append("Only \(Int(differenceInMinutes)) minutes since last recording")
+            }
+        } else {
+            print("⚠️ No saved date found in UserDefaults.")
+            Logger.shared.append("No lastSensorDateSaveTime. Recording...")
+            //Note the following function will also create "lastSensorDateSaveTime"
+            BackgroundScheduler.shared.startSensorRecording()
+        }
+        
+        startSensorRecording()
+        task.setTaskCompleted(success: true)
+        
+        // Schedule the next one
+        // if some sensor is active
+        
+        
+    }
+    
+    
+    
+    
     
     
     //=============================================================
@@ -371,9 +406,8 @@ class BackgroundScheduler {
         }
 
         // Do your actual work
-        performUpload { success in
-            task.setTaskCompleted(success: success)
-        }
+        performUpload()
+        task.setTaskCompleted(success: true)
     }
     
     func isOnWiFi() -> Bool {
@@ -391,18 +425,23 @@ class BackgroundScheduler {
         return onWiFi
     }
     
-    private func performUpload(completion: @escaping (Bool) -> Void) {
+    private func performUpload() {
         // Your function goes here
         print("Running background work — Network connected, charging")
         Logger.shared.append("BGUploadProcessingTask: Running background work — WiFi connected, charging")
         // e.g. upload SQLite DB, sync data, etc.
         if self.isOnWiFi() {
             Logger.shared.append("BGUploadProcessingTask: On Wifi. Starting upload")
+            
+            //we are waiting for upload to finish
+            //wait() will block, until signal() unblocks it.
+            let semaphore = DispatchSemaphore(value: 0)
             Task {
                 await Uploader.shared.uploadFolder()
+                semaphore.signal()       // signal when async work is done
             }
+            semaphore.wait()             // block the GCD thread until Task finishes
         }
-        completion(true)
     }
     
     
@@ -497,24 +536,22 @@ class BackgroundScheduler {
 
         // Execute work asynchronously
         // Do your actual work
-        performSensorkitFetch { success in
-            task.setTaskCompleted(success: success)
-        }
+        performSensorkitFetch()
+        task.setTaskCompleted(success: true)
     }
     
-    private func performSensorkitFetch(completion: @escaping (Bool) -> Void) {
+    private func performSensorkitFetch() {
         // Your function goes here
         print("Performing sensorkit fetch")
         Logger.shared.append("BGSensorkitFetchTask: Performing sensorkit fetch")
-        Task {
-            //we need to change the fetch part
-            // let accelFetcher = SensorKitAccelerometerFetcher()
-            // Fetcher will call setTaskCompleted in didCompleteFetch
-            // Todo: Do we need to wrap in another task again?
-            // accelFetcher.fetchLatestData()
-            SensorKitAccelerometerFetcher.shared.fetchLatestData()
-        }
-        completion(true)
+
+        //we need to change the fetch part
+        // let accelFetcher = SensorKitAccelerometerFetcher()
+        // Fetcher will call setTaskCompleted in didCompleteFetch
+        // accelFetcher.fetchLatestData()
+        SensorKitAccelerometerFetcher.shared.fetchLatestData()
+        
+        
     }
     
     //=============================================================
@@ -594,23 +631,19 @@ class BackgroundScheduler {
         }
 
         // Do your actual work
-        performHealthResearchBackgroundTask { success in
-            task.setTaskCompleted(success: success)
-        }
+        performHealthResearchBackgroundTask()
+        task.setTaskCompleted(success: true)
     }
     
-    private func performHealthResearchBackgroundTask(completion: @escaping (Bool) -> Void) {
+    private func performHealthResearchBackgroundTask() {
         
         // Your function goes here
         print("Starting Health Research task")
         Logger.shared.append("BGHealthResearchTask: Starting Health Research task")
         
-        Task {
-            //we need to change the fetch part
-            print("Performing Health Research task")
-            Logger.shared.append("BGHealthResearchTask: Performing Health Research task")
-        }
-        completion(true)
+        //we need to change the fetch part
+        print("Performing Health Research task")
+        Logger.shared.append("BGHealthResearchTask: Performing Health Research task")
     }
     
 }
