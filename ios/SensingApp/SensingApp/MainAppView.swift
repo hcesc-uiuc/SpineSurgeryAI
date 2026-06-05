@@ -67,8 +67,7 @@ struct MainAppView: View {
     // ── GitHub: all original state preserved ──────────────────
     @StateObject private var motionManager = MotionManager()
     @StateObject private var appState = AppState()
-    @StateObject private var authManager = SecureAuthManager()
-    @State private var isSurveyPresented = false
+@State private var isSurveyPresented = false
     @State private var showDeniedAlert = false
     @State private var showSettingsAlert = false
     @StateObject var HKManager = HealthKitManager()
@@ -163,6 +162,10 @@ struct MainAppView: View {
         Text("Debug Screen")
     }
 
+    private var SensorView: some View {
+        Text("Sensors")
+    }
+
     private var MainView: some View {
         VStack {
             Text("Journey app")
@@ -229,7 +232,7 @@ struct MainAppView: View {
             }
 
             Button("Log Out") {
-                onLogout()
+                authManager.logout()
             }.padding(.top, 10)
         }
         .padding()
@@ -670,6 +673,7 @@ struct SurveysView: View {
     let accentColor: Color
     @ObservedObject var appState: AppState
     @Binding var isSurveyPresented: Bool
+    @EnvironmentObject private var authManager: SecureAuthManager
 
     var body: some View {
         NavigationStack {
@@ -720,7 +724,7 @@ struct SurveysView: View {
                     .disabled(appState.isCompletedToday)
                     .padding(.horizontal, 40)
                     .sheet(isPresented: $isSurveyPresented) {
-                        SurgerySurveyView(appState: appState)
+                        SurgerySurveyView(appState: appState, authManager: authManager)
                     }
 
                     Spacer()

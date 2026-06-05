@@ -779,7 +779,7 @@ struct SurgerySurveyView: View {
             let surveyJSON = buildSurveyJSON()
 
             do {
-                try await SurveyUploader.shared.uploadSurvey(surveyJSON, authManager: authManager)
+                try await SurveyUploader.shared.uploadSurvey(surveyJSON)
 
                 let validMeds: [MedicationEntry] = {
                     guard tookPainMedicationToday == true else { return [] }

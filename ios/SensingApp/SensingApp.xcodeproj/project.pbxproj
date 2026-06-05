@@ -8,7 +8,6 @@
 
 /* Begin PBXBuildFile section */
 		626D3A2B2F967DD400CF9F66 /* HealthKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 626D3A2A2F967DD400CF9F66 /* HealthKit.framework */; };
-		
 		AE19A8C52FBE125E00AF02A4 /* FirebaseCore in Frameworks */ = {isa = PBXBuildFile; productRef = AE19A8C42FBE125E00AF02A4 /* FirebaseCore */; };
 		AE19A8C72FBE125E00AF02A4 /* FirebaseCrashlytics in Frameworks */ = {isa = PBXBuildFile; productRef = AE19A8C62FBE125E00AF02A4 /* FirebaseCrashlytics */; };
 /* End PBXBuildFile section */
@@ -45,12 +44,9 @@
 
 /* Begin PBXFileReference section */
 		626D3A2A2F967DD400CF9F66 /* HealthKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = HealthKit.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.2.sdk/System/Library/Frameworks/HealthKit.framework; sourceTree = DEVELOPER_DIR; };
-		
 		AEABF3882EA06D020055052F /* SensingApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SensingApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AEABF39A2EA06D040055052F /* SensingAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SensingAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		AEABF3A42EA06D040055052F /* SensingAppUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SensingAppUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		FABC18512EC29B9A0071EC17 /* ResearchKitSwiftUI.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = ResearchKitSwiftUI.xcodeproj; path = "../../../ResearchKit-dev-SwiftUI/ResearchKitSwiftUI/ResearchKitSwiftUI.xcodeproj"; sourceTree = "<group>"; };
-		FABC185C2EC29BA20071EC17 /* ResearchKit.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = ResearchKit.xcodeproj; path = "../../../ResearchKit-dev-SwiftUI/ResearchKit.xcodeproj"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -89,7 +85,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				
 				626D3A2B2F967DD400CF9F66 /* HealthKit.framework in Frameworks */,
 				AE19A8C52FBE125E00AF02A4 /* FirebaseCore in Frameworks */,
 				AE19A8C72FBE125E00AF02A4 /* FirebaseCrashlytics in Frameworks */,
@@ -138,25 +133,8 @@
 			isa = PBXGroup;
 			children = (
 				626D3A2A2F967DD400CF9F66 /* HealthKit.framework */,
-				AEA8E2042F5FC730007B39EB /* ResearchKitSwiftUI.xcodeproj */,
-				AEA8E1892F5FC2AE007B39EB /* ResearchKit.xcodeproj */,
-				AEA8E0242F5FC1AA007B39EB /* ResearchKitSwiftUI.xcodeproj */,
 			);
 			name = Frameworks;
-			sourceTree = "<group>";
-		};
-		FABC18522EC29B9A0071EC17 /* Products */ = {
-			isa = PBXGroup;
-			children = (
-			);
-			name = Products;
-			sourceTree = "<group>";
-		};
-		FABC185D2EC29BA20071EC17 /* Products */ = {
-			isa = PBXGroup;
-			children = (
-			);
-			name = Products;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -266,22 +244,11 @@
 			mainGroup = AEABF37F2EA06D020055052F;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				FA050AE52EB40715005A867A /* XCRemoteSwiftPackageReference "ResearchKit" */,
 				FA9BC0412F96C5BB0087759F /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = AEABF3892EA06D020055052F /* Products */;
 			projectDirPath = "";
-			projectReferences = (
-				{
-					ProductGroup = FABC185D2EC29BA20071EC17 /* Products */;
-					ProjectRef = FABC185C2EC29BA20071EC17 /* ResearchKit.xcodeproj */;
-				},
-				{
-					ProductGroup = FABC18522EC29B9A0071EC17 /* Products */;
-					ProjectRef = FABC18512EC29B9A0071EC17 /* ResearchKitSwiftUI.xcodeproj */;
-				},
-			);
 			projectRoot = "";
 			targets = (
 				AEABF3872EA06D020055052F /* SensingApp */,
@@ -745,15 +712,6 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
-		FA050AE52EB40715005A867A /* XCRemoteSwiftPackageReference "ResearchKit" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/ResearchKit/ResearchKit.git";
-			requirement = {
-				kind = versionRange;
-				maximumVersion = 4.0.0;
-				minimumVersion = 3.2.0;
-			};
-		};
 		FA9BC0412F96C5BB0087759F /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/firebase/firebase-ios-sdk.git";
