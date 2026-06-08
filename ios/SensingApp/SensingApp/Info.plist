@@ -45,8 +45,7 @@
         This app sends reminders to complete your recovery survey.
     </string>
     <key>NSLocationWhenInUseUsageDescription</key>
-    <true/>
-    ßß
+    <string>App needs location access while in use.</string>
 
     
     <key>NSMotionUsageDescription</key>

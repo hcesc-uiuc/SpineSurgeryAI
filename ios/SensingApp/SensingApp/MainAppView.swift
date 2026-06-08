@@ -61,11 +61,11 @@ enum JourneyTab: CaseIterable {
 //
 struct MainAppView: View {
     
-    var onLogout: () -> Void
+    // Injected from AuthLoginView — triggers logout + returns to login screen
+    @EnvironmentObject private var authManager: SecureAuthManager
     
     @StateObject private var motionManager = MotionManager()
     @StateObject private var appState = AppState()
-    @StateObject private var authManager = SecureAuthManager()
     @State private var isSurveyPresented = false
     @State private var showDeniedAlert = false
     @State private var showSettingsAlert = false
@@ -154,13 +154,13 @@ struct MainAppView: View {
         case .debug:
             DebugView
         case .settings:
-            SettingsView(accentColor: tab.accentColor, onLogout: onLogout)
+            SettingsView(accentColor: tab.accentColor, onLogout: { authManager.logout() })
         }
     }
 
-//    private var DebugView: some View {
-//        Text("Debug Screen")
-//    }
+    //  private var DebugView: some View {
+    //     Text("Debug Screen")
+    //  }
     
     private var SensorView: some View {
         VStack {
@@ -248,7 +248,7 @@ struct MainAppView: View {
             }
 
             Button("Log Out") {
-                onLogout()
+                authManager.logout()
             }.padding(.top, 10)
         }
         .padding()
@@ -285,6 +285,7 @@ struct MainAppView: View {
             }
         }
     }
+    
     
     // ============================================================
     // MARK: - Home View (Local — polished UI)
@@ -487,7 +488,83 @@ struct MainAppView: View {
             }
         }
     }
-    
+
+    // ============================================================
+    // MARK: - Surveys View (GitHub survey logic + polished shell)
+    // ============================================================
+    //
+    // Wraps the original SurgerySurveyView sheet into a proper tab.
+    // The survey button and appState logic are fully preserved.
+    //
+    struct SurveysView: View {
+        let accentColor: Color
+        @ObservedObject var appState: AppState
+        @Binding var isSurveyPresented: Bool
+        @EnvironmentObject private var authManager: SecureAuthManager
+
+        var body: some View {
+            NavigationStack {
+                ZStack {
+                    LinearGradient(
+                        colors: [
+                            Color(red: 0.98, green: 0.95, blue: 0.91),
+                            Color(red: 0.95, green: 0.91, blue: 0.88)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                    .ignoresSafeArea()
+
+                    VStack(spacing: 24) {
+                        ZStack {
+                            Circle()
+                                .fill(accentColor.opacity(0.12))
+                                .frame(width: 90, height: 90)
+                            Image(systemName: "list.clipboard.fill")
+                                .font(.system(size: 36))
+                                .foregroundStyle(accentColor)
+                        }
+
+                        Text(appState.isCompletedToday ? "Survey complete for today!" : "Daily Survey Ready")
+                            .font(.system(size: 22, weight: .bold, design: .rounded))
+                            .foregroundStyle(Color(red: 0.28, green: 0.22, blue: 0.20))
+
+                        Text(appState.isCompletedToday
+                             ? "Great job! Come back tomorrow for your next check-in."
+                             : "Tap below to complete your daily recovery survey.")
+                            .font(.system(size: 15, design: .rounded))
+                            .foregroundStyle(Color(red: 0.50, green: 0.42, blue: 0.39))
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 40)
+
+                        Button(action: { isSurveyPresented = true }) {
+                            Text("Start Survey")
+                                .font(.system(size: 16, weight: .semibold, design: .rounded))
+                                .foregroundStyle(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 16)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 16)
+                                        .fill(appState.isCompletedToday ? Color.gray : accentColor)
+                                )
+                        }
+                        .disabled(appState.isCompletedToday)
+                        .padding(.horizontal, 40)
+                        .sheet(isPresented: $isSurveyPresented) {
+                            SurgerySurveyView(appState: appState, authManager: authManager)
+                        }
+
+                        Spacer()
+                    }
+                    .padding(.top, 40)
+                }
+                .navigationTitle("Surveys")
+            }
+        }
+    }
+
+
+
     // ============================================================
     // MARK: - Settings View (Local — with logout)
     // ============================================================
@@ -605,79 +682,47 @@ struct MainAppView: View {
         }
     }
 
-    
     // ============================================================
-    // MARK: - Surveys View (GitHub survey logic + polished shell)
+    // MARK: - Shared Placeholder Helper
     // ============================================================
-    //
-    // Wraps the original SurgerySurveyView sheet into a proper tab.
-    // The survey button and appState logic are fully preserved.
-    //
-    struct SurveysView: View {
-        let accentColor: Color
-        @ObservedObject var appState: AppState
-        @Binding var isSurveyPresented: Bool
 
-        var body: some View {
-            NavigationStack {
+    private func placeholderContent(
+        icon: String,
+        title: String,
+        description: String,
+        accentColor: Color
+    ) -> some View {
+        ZStack {
+            LinearGradient(
+                colors: [
+                    Color(red: 0.98, green: 0.95, blue: 0.91),
+                    Color(red: 0.95, green: 0.91, blue: 0.88)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .ignoresSafeArea()
+            VStack(spacing: 20) {
                 ZStack {
-                    LinearGradient(
-                        colors: [
-                            Color(red: 0.98, green: 0.95, blue: 0.91),
-                            Color(red: 0.95, green: 0.91, blue: 0.88)
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                    .ignoresSafeArea()
-
-                    VStack(spacing: 24) {
-                        ZStack {
-                            Circle()
-                                .fill(accentColor.opacity(0.12))
-                                .frame(width: 90, height: 90)
-                            Image(systemName: "list.clipboard.fill")
-                                .font(.system(size: 36))
-                                .foregroundStyle(accentColor)
-                        }
-
-                        Text(appState.isCompletedToday ? "Survey complete for today!" : "Daily Survey Ready")
-                            .font(.system(size: 22, weight: .bold, design: .rounded))
-                            .foregroundStyle(Color(red: 0.28, green: 0.22, blue: 0.20))
-
-                        Text(appState.isCompletedToday
-                             ? "Great job! Come back tomorrow for your next check-in."
-                             : "Tap below to complete your daily recovery survey.")
-                            .font(.system(size: 15, design: .rounded))
-                            .foregroundStyle(Color(red: 0.50, green: 0.42, blue: 0.39))
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal, 40)
-
-                        Button(action: { isSurveyPresented = true }) {
-                            Text("Start Survey")
-                                .font(.system(size: 16, weight: .semibold, design: .rounded))
-                                .foregroundStyle(.white)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 16)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 16)
-                                        .fill(appState.isCompletedToday ? Color.gray : accentColor)
-                                )
-                        }
-                        .disabled(appState.isCompletedToday)
-                        .padding(.horizontal, 40)
-                        .sheet(isPresented: $isSurveyPresented) {
-                            //SurgerySurveyView(appState: appState, authManager: <#SecureAuthManager#>)
-                        }
-
-                        Spacer()
-                    }
-                    .padding(.top, 40)
+                    Circle()
+                        .fill(accentColor.opacity(0.12))
+                        .frame(width: 90, height: 90)
+                    Image(systemName: icon)
+                        .font(.system(size: 36))
+                        .foregroundStyle(accentColor)
                 }
-                .navigationTitle("Surveys")
+                Text(title)
+                    .font(.system(size: 22, weight: .bold, design: .rounded))
+                    .foregroundStyle(Color(red: 0.28, green: 0.22, blue: 0.20))
+                Text(description)
+                    .font(.system(size: 15, design: .rounded))
+                    .foregroundStyle(Color(red: 0.50, green: 0.42, blue: 0.39))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 40)
             }
         }
     }
+
 
     // MARK: - HealthKit
 
@@ -868,3 +913,51 @@ struct MainAppView: View {
         }
     }
 }
+
+// ============================================================
+// MARK: - Shared Placeholder Helper
+// ============================================================
+
+private func placeholderContent(
+    icon: String,
+    title: String,
+    description: String,
+    accentColor: Color
+) -> some View {
+    ZStack {
+        LinearGradient(
+            colors: [
+                Color(red: 0.98, green: 0.95, blue: 0.91),
+                Color(red: 0.95, green: 0.91, blue: 0.88)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+        .ignoresSafeArea()
+        VStack(spacing: 20) {
+            ZStack {
+                Circle()
+                    .fill(accentColor.opacity(0.12))
+                    .frame(width: 90, height: 90)
+                Image(systemName: icon)
+                    .font(.system(size: 36))
+                    .foregroundStyle(accentColor)
+            }
+            Text(title)
+                .font(.system(size: 22, weight: .bold, design: .rounded))
+                .foregroundStyle(Color(red: 0.28, green: 0.22, blue: 0.20))
+            Text(description)
+                .font(.system(size: 15, design: .rounded))
+                .foregroundStyle(Color(red: 0.50, green: 0.42, blue: 0.39))
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 40)
+        }
+    }
+}
+
+// ============================================================
+// MARK: - Preview
+// ============================================================
+
+#Preview {
+    MainAppView()}
