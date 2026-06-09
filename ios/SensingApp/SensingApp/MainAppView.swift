@@ -71,7 +71,7 @@ struct MainAppView: View {
     @State private var isSurveyPresented = false
     @State private var showDeniedAlert = false
     @State private var showSettingsAlert = false
-    @StateObject var HKManager = HealthKitManager()
+    @StateObject var hkManager = HealthKitManager()
     
     @Environment(\.scenePhase) var scenePhase
     let motionActivityManager = CMMotionActivityManager()
@@ -274,7 +274,7 @@ struct MainAppView: View {
         //let metricsRequested: Set<SupportedMetric> = [.steps] // Empty = All
         let metricsRequested: Set<SupportedMetric> = [] // Empty = All
         
-        print("Requesting: HKManager.refreshWithNewRange")
+        print("🚀 Requesting \(daysRequested)-day historical refresh...")
         
         HKManager.refreshWithNewRange(days: 1, types:metricsRequested) { data in
             
@@ -330,6 +330,20 @@ struct MainAppView: View {
 
     // MARK: - Sensor Views
 
+            // --- SLEEP DATA OUTPUT (NO LIMIT) ---
+            print("\n--- 🛌 ALL SLEEP STAGES ---")
+            if filteredSleep.isEmpty {
+                print("No Sleep data found in this time window (Nap data usually appears here).")
+            } else {
+                for s in filteredSleep {
+                    let timeStr = s.startDate.formatted(.dateTime.hour().minute())
+                    print("Time: \(timeStr) | Stage: \(s.sleepStage)")
+                }
+            }
+            
+            print("\n✅ Console Output Complete. Scroll up to see all \(filteredQuantities.count + filteredSleep.count) points.")
+        }
+    }
     private var accelerometerView: some View {
         SensorCard(
             title: "Accelerometer",
