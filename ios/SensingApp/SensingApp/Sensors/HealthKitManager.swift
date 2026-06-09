@@ -4,43 +4,47 @@ internal import Combine
 
 // MARK: - Supported Metrics Gatekeeper
 enum SupportedMetric: String, CaseIterable {
-    case heartRate         = "Heart Rate"
-    case steps             = "Steps"
-    case hrv               = "HRV"
-    case oxygen            = "Oxygen"
-    case calories          = "Calories"
-    case standTime         = "Stand Time"
-    case walkingSpeed      = "Walking Speed"
-    case walkingAsymmetry  = "Walking Asymmetry"
-    case walkingSteadiness = "Walking Steadiness"
-    case sleep             = "Sleep"
+    case heartRate = "Heart Rate"
+    case steps     = "Steps"
+    case hrv       = "HRV"
+    case oxygen    = "Oxygen"
+    case calories  = "Calories"
+    //case standTime     = "Stand Time"
+    case walkingSpeed       = "Walking Speed"
+    case walkingAsymmetry   = "Walking Asymmetry"
+    case walkingSteadiness  = "Walking Steadiness"
 
     /// Maps our clean label to the official HealthKit Sample Type
     var hkType: HKSampleType? {
         switch self {
-        case .sleep:
-            return HKCategoryType.categoryType(forIdentifier: .sleepAnalysis)
-        case .heartRate: return HKQuantityType.quantityType(forIdentifier: .heartRate)
-        case .steps:     return HKQuantityType.quantityType(forIdentifier: .stepCount)
-        case .hrv:       return HKQuantityType.quantityType(forIdentifier: .heartRateVariabilitySDNN)
-        case .oxygen:    return HKQuantityType.quantityType(forIdentifier: .oxygenSaturation)
-        case .calories:  return HKQuantityType.quantityType(forIdentifier: .activeEnergyBurned)
-        case .standTime: return HKQuantityType.quantityType(forIdentifier: .appleStandTime)
-        case .walkingSpeed: return HKQuantityType.quantityType(forIdentifier: .walkingSpeed)
-        case .walkingAsymmetry: return HKQuantityType.quantityType(forIdentifier: .walkingAsymmetryPercentage)
-        case .walkingSteadiness: return HKQuantityType.quantityType(forIdentifier: .appleWalkingSteadiness)
+        case .heartRate: return .heartRate
+        case .steps:     return .stepCount
+        case .hrv:       return .heartRateVariabilitySDNN
+        case .oxygen:    return .oxygenSaturation
+        case .calories:  return .activeEnergyBurned
+        //case .standTime:     return .appleStandTime
+        case .walkingSpeed: return .walkingSpeed
+        case .walkingAsymmetry: return .walkingAsymmetryPercentage
+        case .walkingSteadiness: return .appleWalkingSteadiness
         }
     }
     
     var unit: HKUnit? {
         switch self {
-        case .heartRate: return HKUnit.count().unitDivided(by: .minute())
-        case .hrv:       return .secondUnit(with: .milli)
-        case .steps, .standTime: return .count()
-        case .calories:  return .kilocalorie()
-        case .oxygen, .walkingAsymmetry, .walkingSteadiness: return .percent()
-        case .walkingSpeed: return HKUnit.meter().unitDivided(by: .second())
-        case .sleep:     return nil
+        case .heartRate:
+            return HKUnit.count().unitDivided(by: .minute())
+        case .hrv:
+            return .secondUnit(with: .milli)
+        case .steps:
+            return .count()
+        //case .standTime:
+        //   return .count()
+        case .calories:
+            return .kilocalorie()
+        case .oxygen, .walkingAsymmetry, .walkingSteadiness:
+            return .percent()
+        case .walkingSpeed:
+            return HKUnit.meter().unitDivided(by: .second())
         }
     }
 }
