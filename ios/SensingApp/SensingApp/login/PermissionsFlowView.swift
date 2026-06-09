@@ -8,6 +8,7 @@ import CoreMotion
 import CoreLocation
 import HealthKit
 import UserNotifications
+import SensorKit
 
 // ============================================================
 // MARK: - PermissionsFlowView Documentation
@@ -15,43 +16,58 @@ import UserNotifications
 //
 // PURPOSE:
 // Presents a sequential, full-screen onboarding flow requesting
-// all permissions required by the Journey app.
+// all permissions required by the Journey app. Shown whenever
+// permissionsComplete == false, which happens on:
+//   1. First ever install
+//   2. Reinstall (Keychain sentinel cleared)
+//   3. Permission revoked (auditPermissions() in AuthLoginView detected it)
+//   4. User returns from background with a revoked permission
+//      (scenePhase observer in MainAppView resets permissionsComplete)
 //
-// This view is shown whenever permissionsComplete == false, which
-// can happen in three situations:
-//   1. First ever install — user has never granted permissions
-//   2. Reinstall — detectReinstall() in AuthLoginView cleared the flag
-//   3. Permission revoked — auditPermissions() in AuthLoginView detected
-//      a missing permission and reset the flag
-//
-// In all cases, the flow starts from the FIRST permission that is
-// not yet in the required state (via computeStartIndex()), so users
-// who already granted some permissions don't see redundant prompts.
-//
-// REQUIRED PERMISSIONS (in order):
-//   1. Motion & Activity  — CMMotionActivityManager (CoreMotion)
-//   2. Location           — CLLocationManager — requires ALWAYS (not WhenInUse)
-//   3. Health Data        — HKHealthStore (HealthKit)
+// PERMISSION ORDER (5 steps):
+//   1. Motion & Activity  — CMMotionActivityManager
+//   2. Location           — CLLocationManager (ALWAYS required, not WhenInUse)
+//   3. SensorKit          — SRSensorReader (screen time, keyboard, accelerometer)
 //   4. Notifications      — UNUserNotificationCenter
+//   5. Health Data        — HKHealthStore (moved to last — triggers large system sheet)
 //
-// LOCATION SPECIAL CASE:
-//   iOS forces a two-step process for "Always" location access.
-//   Step 1: requestAlwaysAuthorization() shows "While Using / Don't Allow"
-//   Step 2: AlwaysLocationPromptView guides user to Settings → Always
-//   The flow does not advance until authorizedAlways is confirmed.
+// WHY HEALTH IS LAST:
+//   Apple's HealthKit permission sheet is a large multi-item picker showing
+//   every data type we request. It is more overwhelming than other prompts.
+//   Placing it last means patients have already committed to the flow before
+//   seeing it, improving completion rate.
+//
+// DARK MODE FIX:
+//   All colors in this view are hardcoded warm tones that look correct in
+//   light mode only. .preferredColorScheme(.light) is applied to the root
+//   ZStack to force light mode regardless of device setting. This prevents
+//   white text appearing on a white/warm background in dark mode.
+//
+// NOTIFICATIONS FIX:
+//   AppDelegate.registerForPushNotifications() was calling
+//   UNUserNotificationCenter.requestAuthorization() at launch, which caused
+//   iOS to silently skip our prompt here (iOS only shows it once per install).
+//   That call has been removed from AppDelegate — this view now owns the
+//   notification prompt entirely.
 //
 // PERMISSION PERSISTENCE:
-//   iOS permissions are system-level and survive app reinstall.
-//   permissionsComplete (AppStorage/UserDefaults) does NOT reliably
-//   survive reinstall — see AuthLoginView.detectReinstall() for how
-//   we handle that using a Keychain sentinel instead.
+//   permissionsComplete is AppStorage (UserDefaults). On reinstall it may
+//   survive — see AuthLoginView.detectReinstall() for Keychain sentinel fix.
+//   computeStartIndex() skips already-granted permissions so returning users
+//   only see cards for what they still need to grant.
+//
+// SIMULATOR NOTE:
+//   SensorKit cannot be authorized on the iOS simulator — there is no
+//   Settings entry and no system prompt. All SensorKit checks are guarded
+//   with #if targetEnvironment(simulator) and return true automatically
+//   so the flow is not blocked during development.
 //
 // ============================================================
 
 // MARK: - Permission Model
 
 enum JourneyPermission: CaseIterable, Identifiable {
-    case motion, location, health, notifications
+    case motion, location, sensorKit, notifications, health
 
     var id: Self { self }
 
@@ -59,8 +75,9 @@ enum JourneyPermission: CaseIterable, Identifiable {
         switch self {
         case .motion:        return "figure.walk.motion"
         case .location:      return "location.fill"
-        case .health:        return "heart.fill"
+        case .sensorKit:     return "iphone.radiowaves.left.and.right"
         case .notifications: return "bell.fill"
+        case .health:        return "heart.fill"
         }
     }
 
@@ -68,8 +85,9 @@ enum JourneyPermission: CaseIterable, Identifiable {
         switch self {
         case .motion:        return Color(red: 0.80, green: 0.65, blue: 0.58)
         case .location:      return Color(red: 0.42, green: 0.62, blue: 0.55)
-        case .health:        return Color(red: 0.80, green: 0.35, blue: 0.38)
+        case .sensorKit:     return Color(red: 0.38, green: 0.55, blue: 0.75)
         case .notifications: return Color(red: 0.55, green: 0.48, blue: 0.75)
+        case .health:        return Color(red: 0.80, green: 0.35, blue: 0.38)
         }
     }
 
@@ -77,8 +95,9 @@ enum JourneyPermission: CaseIterable, Identifiable {
         switch self {
         case .motion:        return "Motion & Activity"
         case .location:      return "Location Access"
-        case .health:        return "Health Data"
+        case .sensorKit:     return "Device Sensors"
         case .notifications: return "Reminders"
+        case .health:        return "Health Data"
         }
     }
 
@@ -86,33 +105,33 @@ enum JourneyPermission: CaseIterable, Identifiable {
         switch self {
         case .motion:        return "Track your movement patterns"
         case .location:      return "Understand your daily activity"
-        case .health:        return "Connect with your health metrics"
+        case .sensorKit:     return "Capture device signals"
         case .notifications: return "Stay on top of your recovery"
+        case .health:        return "Connect with your health metrics"
         }
     }
 
     var explanation: String {
         switch self {
         case .motion:
-            return "Your phone's motion sensors help us track walking patterns and physical activity during your recovery — giving your care team valuable insight into your progress."
+            return "Your phone's motion sensors help us track walking patterns and physical activity during your recovery, giving your care team valuable insight into your progress."
         case .location:
             return "Location data helps us understand how much you're moving around day-to-day. This is used only for research purposes and is never shared outside the study."
-        case .health:
-            return "Connecting to Apple Health lets us read step counts, heart rate, and other metrics that paint a fuller picture of your recovery journey."
+        case .sensorKit:
+            return "Device usage patterns, motion and activity sensors, and health and biometric sensors help us detect subtle behavioral changes that may reflect your recovery progress. All data is anonymized and used for research only."
         case .notifications:
-            return "We'll send gentle daily reminders for check-ins and surveys so nothing slips through the cracks. You can adjust notification timing in Settings."
+            return "We'll send gentle daily reminders for check-ins and surveys so you are always aware of what to expect."
+        case .health:
+            return "Connecting to Apple Health lets us read step counts, heart rate, and other metrics that paint a fuller picture of your recovery journey. You'll choose exactly which data types to share."
         }
     }
 
     var buttonLabel: String { "Allow Access" }
 
     var stepLabel: String {
-        switch self {
-        case .motion:        return "Step 1 of 4"
-        case .location:      return "Step 2 of 4"
-        case .health:        return "Step 3 of 4"
-        case .notifications: return "Step 4 of 4"
-        }
+        let all = JourneyPermission.allCases
+        let index = all.firstIndex(of: self)! + 1
+        return "Step \(index) of \(all.count)"
     }
 }
 
@@ -122,19 +141,25 @@ struct PermissionsFlowView: View {
 
     @AppStorage("permissionsComplete") private var permissionsComplete = false
 
-    @State private var currentIndex = 0
-    @State private var showingDeniedAlert = false
+    @State private var currentIndex         = 0
+    @State private var showingDeniedAlert   = false
     @State private var deniedPermissionName = ""
-    @State private var cardAppeared = false
+    @State private var cardAppeared         = false
 
     // Location Always-On state
     @State private var showingAlwaysLocationPrompt = false
-    @State private var locationContinuation: CheckedContinuation<Bool, Never>?
     @State private var locationRequester: LocationPermissionRequester?
 
-    private let permissions = JourneyPermission.allCases
+    private let permissions     = JourneyPermission.allCases
     private let locationManager = CLLocationManager()
-    private let healthStore = HKHealthStore()
+    private let healthStore     = HKHealthStore()
+
+    // True until the user taps through all 5 cards for the first time.
+    // On first run we never skip cards — every card is shown regardless of
+    // prior auth state, so nothing gets silently bypassed on a new device.
+    private var isFirstRun: Bool {
+        !UserDefaults.standard.bool(forKey: "journey_permissions_ever_completed")
+    }
 
     var onComplete: () -> Void
 
@@ -166,14 +191,21 @@ struct PermissionsFlowView: View {
                 Spacer()
             }
         }
+        .preferredColorScheme(.light)
         .onAppear {
-            // Start from the first permission that isn't yet satisfied
-            // so users who already granted some don't repeat them
-            currentIndex = computeStartIndex()
+            let start = computeStartIndex()
+            // All permissions already granted on re-entry — complete without showing any card.
+            if start >= permissions.count {
+                UserDefaults.standard.set(true, forKey: "journey_permissions_ever_completed")
+                permissionsComplete = true
+                onComplete()
+                return
+            }
+            currentIndex = start
             triggerCardAppear()
         }
         .alert("Permission Required", isPresented: $showingDeniedAlert) {
-            Button("Open Settings") { openAppSettings() }
+            Button("Open Settings") { openAppSettings(for: permissions[currentIndex]) }
             Button("Try Again")     { requestCurrentPermission() }
         } message: {
             Text("Journey needs \(deniedPermissionName) access to continue. Please allow it in Settings.")
@@ -181,52 +213,37 @@ struct PermissionsFlowView: View {
         .sheet(isPresented: $showingAlwaysLocationPrompt) {
             AlwaysLocationPromptView(
                 onOpenSettings: {
-                    showingAlwaysLocationPrompt = false
+                    // Don't dismiss — sheet stays open so "I've updated it" is still visible
+                    // when the user returns from the Settings app.
                     openAppSettings()
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-                        let status = CLLocationManager().authorizationStatus
-                        locationContinuation?.resume(returning: status == .authorizedAlways)
-                        locationContinuation = nil
-                    }
                 },
                 onCheckAgain: {
-                    showingAlwaysLocationPrompt = false
-                    let status = CLLocationManager().authorizationStatus
-                    if status == .authorizedAlways {
-                        locationContinuation?.resume(returning: true)
-                        locationContinuation = nil
-                    } else {
-                        locationContinuation?.resume(returning: false)
-                        locationContinuation = nil
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                            showingAlwaysLocationPrompt = true
-                        }
+                    if CLLocationManager().authorizationStatus == .authorizedAlways {
+                        showingAlwaysLocationPrompt = false
+                        advanceToNext()
                     }
+                    // Not Always yet — do nothing; sheet remains for another attempt.
                 }
             )
-            .presentationDetents([.medium])
+            .presentationDetents([.large])
             .presentationCornerRadius(28)
             .interactiveDismissDisabled(true)
+            .preferredColorScheme(.light)
         }
     }
 
     // MARK: - Compute Start Index
-    //
-    // Finds the first permission not yet in the required state.
-    // Called on .onAppear so the flow resumes from where the user left off
-    // rather than always starting from step 1.
-    //
-    // This handles the case where auditPermissions() detected a single
-    // revoked permission (e.g. notifications) — we jump straight to that card.
+    // Returns the index of the first permission that still needs granting.
+    // Returns permissions.count (sentinel) when all are already granted.
+    // On first run, always returns 0 so every card is shown.
     private func computeStartIndex() -> Int {
+        if isFirstRun { return 0 }
         for (index, permission) in permissions.enumerated() {
             if !isAlreadyGranted(permission) {
                 return index
             }
         }
-        // All granted — shouldn't normally reach here since AuthLoginView
-        // would have set permissionsComplete = true, but handle gracefully
-        return permissions.count - 1
+        return permissions.count
     }
 
     // MARK: - Progress Dots
@@ -317,48 +334,37 @@ struct PermissionsFlowView: View {
     }
 
     // MARK: - isAlreadyGranted
-    //
-    // Returns true only when the permission is in the FULLY required state.
-    // Used by both computeStartIndex() and requestCurrentPermission().
-    //
-    // IMPORTANT — Location:
-    //   authorizedWhenInUse is NOT accepted. Must be authorizedAlways.
-    //   This was a bug in the previous version that allowed users to
-    //   slip through with only "While Using" access.
-    //
-    // IMPORTANT — Notifications:
-    //   .provisional counts as not granted — we need explicit .authorized.
-    //   This is checked asynchronously; the sync version here is conservative
-    //   (returns false unless we already know it's authorized).
     private func isAlreadyGranted(_ permission: JourneyPermission) -> Bool {
         switch permission {
         case .motion:
+            // Mirror requestMotion(): if hardware is unavailable (simulator), treat as granted.
+            guard CMMotionActivityManager.isActivityAvailable() else { return true }
             return CMMotionActivityManager.authorizationStatus() == .authorized
 
         case .location:
-            // ← Fixed: WhenInUse is no longer accepted here
             return locationManager.authorizationStatus == .authorizedAlways
 
-        case .health:
-            // HealthKit doesn't expose per-type status to the app.
-            // isHealthDataAvailable() confirms the device supports HealthKit.
-            // We treat this as granted if available — same as requestHealth() logic.
-            return HKHealthStore.isHealthDataAvailable()
+        case .sensorKit:
+            // SensorKit cannot be authorized on the simulator — always skip
+            #if targetEnvironment(simulator)
+            return true
+            #else
+            let reader = SRSensorReader(sensor: .ambientLightSensor)
+            return reader.authorizationStatus == .authorized
+            #endif
 
         case .notifications:
-            // UNUserNotificationCenter.getNotificationSettings() is async —
-            // we can't call it synchronously here. Return false to always
-            // show the card; requestNotifications() handles the already-granted case
-            // gracefully (iOS won't re-prompt, it just calls the completion immediately).
-            return false
+            return UserDefaults.standard.bool(forKey: "journey_notifications_authorized")
+
+        case .health:
+            guard HKHealthStore.isHealthDataAvailable() else { return false }
+            let stepType = HKObjectType.quantityType(forIdentifier: .stepCount)!
+            let status = healthStore.authorizationStatus(for: stepType)
+            return status != .notDetermined
         }
     }
 
     // MARK: - Request Coordinator
-    //
-    // Entry point when patient taps "Allow Access".
-    // If already granted → advance directly without showing a dialog.
-    // Otherwise → call the appropriate async permission handler.
     private func requestCurrentPermission() {
         guard currentIndex < permissions.count else { return }
         let permission = permissions[currentIndex]
@@ -368,17 +374,30 @@ struct PermissionsFlowView: View {
             return
         }
 
+        // If location is WhenInUse (granted but not Always), skip the system dialog
+        // and jump straight to the upgrade-to-Always sheet.
+        if permission == .location && CLLocationManager().authorizationStatus == .authorizedWhenInUse {
+            showingAlwaysLocationPrompt = true
+            return
+        }
+
         Task {
             let granted: Bool
             switch permission {
             case .motion:        granted = await requestMotion()
             case .location:      granted = await requestLocation()
-            case .health:        granted = await requestHealth()
+            case .sensorKit:     granted = await requestSensorKit()
             case .notifications: granted = await requestNotifications()
+            case .health:        granted = await requestHealth()
             }
             await MainActor.run {
                 if granted {
                     advanceToNext()
+                } else if permission == .location &&
+                          CLLocationManager().authorizationStatus == .authorizedWhenInUse {
+                    // User tapped "Allow While Using App" — upgrade prompt needed.
+                    // Setting state here (on the main actor) is reliable.
+                    showingAlwaysLocationPrompt = true
                 } else {
                     deniedPermissionName = permission.title
                     showingDeniedAlert = true
@@ -391,11 +410,21 @@ struct PermissionsFlowView: View {
     private func advanceToNext() {
         cardAppeared = false
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-            if currentIndex + 1 >= permissions.count {
+            var next = currentIndex + 1
+            // On re-entry (permission was revoked), skip cards that are still granted
+            // so we only prompt for the one that needs fixing. On first run, show every
+            // card even if the permission was previously granted on this device.
+            if !isFirstRun {
+                while next < permissions.count && isAlreadyGranted(permissions[next]) {
+                    next += 1
+                }
+            }
+            if next >= permissions.count {
+                UserDefaults.standard.set(true, forKey: "journey_permissions_ever_completed")
                 permissionsComplete = true
                 onComplete()
             } else {
-                currentIndex += 1
+                currentIndex = next
                 triggerCardAppear()
             }
         }
@@ -411,7 +440,7 @@ struct PermissionsFlowView: View {
     // MARK: - Permission Handlers
 
     /// Motion — triggers system dialog via startActivityUpdates.
-    /// Returns true if authorized, true on simulator (no hardware).
+    /// Simulator has no motion hardware — returns true gracefully.
     private func requestMotion() async -> Bool {
         await withCheckedContinuation { continuation in
             guard CMMotionActivityManager.isActivityAvailable() else {
@@ -428,84 +457,163 @@ struct PermissionsFlowView: View {
         }
     }
 
-    /// Location — requires authorizedAlways.
-    /// Two-step: system dialog → AlwaysLocationPromptView → Settings.
-    /// The continuation is held in @State until the sheet resolves it.
+    /// Location — requires authorizedAlways (not WhenInUse).
+    /// Shows the iOS dialog for .notDetermined status and returns true only for Always.
+    /// WhenInUse and denied are handled by requestCurrentPermission() after this returns false.
     private func requestLocation() async -> Bool {
-        await withCheckedContinuation { continuation in
-            let requester = LocationPermissionRequester { granted in
+        let status = CLLocationManager().authorizationStatus
+        if status == .authorizedAlways  { return true  }
+        if status != .notDetermined     { return false } // denied/restricted/WhenInUse
+
+        // .notDetermined — trigger the iOS dialog and wait for the response.
+        return await withCheckedContinuation { cont in
+            let requester = LocationPermissionRequester { _ in
                 self.locationRequester = nil
-                if granted {
-                    let status = CLLocationManager().authorizationStatus
-                    if status == .authorizedAlways {
-                        continuation.resume(returning: true)
-                    } else {
-                        // WhenInUse granted — store continuation, show upgrade sheet
-                        self.locationContinuation = continuation
-                        DispatchQueue.main.async {
-                            self.showingAlwaysLocationPrompt = true
-                        }
-                    }
-                } else {
-                    continuation.resume(returning: false)
-                }
+                // Resume based on the actual status now that the dialog was answered.
+                cont.resume(returning: CLLocationManager().authorizationStatus == .authorizedAlways)
             }
-            self.locationRequester = requester
+            locationRequester = requester
             requester.request()
         }
     }
 
-    /// Health — requestAuthorization always calls completion with success=true
-    /// from the app's side. Returns false only if HealthKit unavailable.
+    /// SensorKit — requests authorization for all relevant sensor types.
+    /// Skipped entirely on simulator (no hardware, no Settings entry).
+    /// NOTE: Requires com.apple.developer.sensorkit.reader entitlement.
+    private func requestSensorKit() async -> Bool {
+        #if targetEnvironment(simulator)
+        // SensorKit cannot be authorized on simulator — skip silently
+        return true
+        #else
+        return await withCheckedContinuation { continuation in
+            let sensors: Set<SRSensor> = [
+                .ambientLightSensor,
+                .accelerometer,
+                .keyboardMetrics,
+                .deviceUsageReport
+            ]
+
+            let readers = sensors.map { SRSensorReader(sensor: $0) }
+
+            guard let primaryReader = readers.first else {
+                continuation.resume(returning: false)
+                return
+            }
+
+            primaryReader.delegate = SensorKitAuthDelegate(
+                onAuthorized: { continuation.resume(returning: true) },
+                onDenied:     { continuation.resume(returning: false) }
+            )
+
+            SRSensorReader.requestAuthorization(sensors: sensors) { error in
+                if let error = error {
+                    print("SensorKit auth error: \(error)")
+                    continuation.resume(returning: false)
+                }
+                // Actual result comes via delegate — don't resume here
+            }
+        }
+        #endif
+    }
+
+    /// Notifications — requests alert, sound, badge.
+    /// If already authorized, advances without re-prompting.
+    /// If denied, shows the denied alert with Settings deeplink.
+    private func requestNotifications() async -> Bool {
+        let center = UNUserNotificationCenter.current()
+        let settings = await center.notificationSettings()
+
+        switch settings.authorizationStatus {
+        case .authorized, .provisional:
+            UserDefaults.standard.set(true, forKey: "journey_notifications_authorized")
+            return true
+        case .denied:
+            return false
+        default:
+            return await withCheckedContinuation { continuation in
+                center.requestAuthorization(options: [.alert, .sound, .badge]) { granted, _ in
+                    if granted {
+                        DispatchQueue.main.async {
+                            UIApplication.shared.registerForRemoteNotifications()
+                            UserDefaults.standard.set(true, forKey: "journey_notifications_authorized")
+                        }
+                    }
+                    continuation.resume(returning: granted)
+                }
+            }
+        }
+    }
+
+    /// Health — triggers Apple's HealthKit permission sheet.
+    /// Placed last — it's the most overwhelming prompt.
+    /// HealthKit always calls completion with success=true from app's perspective.
     private func requestHealth() async -> Bool {
         guard HKHealthStore.isHealthDataAvailable() else { return false }
-        let types: Set<HKObjectType> = [
+
+        let readTypes: Set<HKObjectType> = [
             HKObjectType.quantityType(forIdentifier: .stepCount)!,
-            HKObjectType.quantityType(forIdentifier: .heartRate)!
+            HKObjectType.quantityType(forIdentifier: .heartRate)!,
+            HKObjectType.quantityType(forIdentifier: .distanceWalkingRunning)!,
+            HKObjectType.quantityType(forIdentifier: .activeEnergyBurned)!,
+            HKObjectType.categoryType(forIdentifier: .sleepAnalysis)!
         ]
+
         return await withCheckedContinuation { continuation in
-            healthStore.requestAuthorization(toShare: nil, read: types) { success, _ in
+            healthStore.requestAuthorization(toShare: nil, read: readTypes) { success, error in
+                if let error = error {
+                    print("HealthKit auth error: \(error)")
+                }
                 continuation.resume(returning: success)
             }
         }
     }
 
-    /// Notifications — requests alert, sound, badge.
-    /// If already authorized, iOS calls completion immediately with granted=true
-    /// without showing a dialog — safe to call even on re-prompt.
-    private func requestNotifications() async -> Bool {
-        let center = UNUserNotificationCenter.current()
-
-        // Check current status first — if already authorized, advance without dialog
-        let settings = await center.notificationSettings()
-        if settings.authorizationStatus == .authorized {
-            return true
+    private func openAppSettings(for permission: JourneyPermission? = nil) {
+        let urlString: String
+        if #available(iOS 16.0, *), permission == .notifications {
+            urlString = UIApplication.openNotificationSettingsURLString
+        } else {
+            urlString = UIApplication.openSettingsURLString
         }
+        guard let url = URL(string: urlString) else { return }
+        UIApplication.shared.open(url)
+    }
+}
 
-        // Not yet authorized (or denied) — request or direct to Settings
-        return await withCheckedContinuation { continuation in
-            center.requestAuthorization(options: [.alert, .sound, .badge]) { granted, _ in
-                continuation.resume(returning: granted)
-            }
-        }
+// MARK: - SensorKit Auth Delegate
+//
+// Bridges SensorKit's delegate pattern into async/await.
+// Only used on real devices — simulator path returns true immediately.
+private class SensorKitAuthDelegate: NSObject, SRSensorReaderDelegate {
+    private var onAuthorized: (() -> Void)?
+    private var onDenied:     (() -> Void)?
+    private var resolved = false
+
+    init(onAuthorized: @escaping () -> Void, onDenied: @escaping () -> Void) {
+        self.onAuthorized = onAuthorized
+        self.onDenied     = onDenied
     }
 
-    private func openAppSettings() {
-        if let url = URL(string: UIApplication.openSettingsURLString) {
-            UIApplication.shared.open(url)
+    func sensorReader(_ reader: SRSensorReader, didChange authorizationStatus: SRAuthorizationStatus) {
+        guard !resolved else { return }
+        resolved = true
+        DispatchQueue.main.async {
+            if authorizationStatus == .authorized {
+                self.onAuthorized?()
+            } else {
+                self.onDenied?()
+            }
+            self.onAuthorized = nil
+            self.onDenied     = nil
         }
     }
 }
 
 // MARK: - Always Location Prompt View
-//
-// Non-dismissable sheet guiding the user to Settings → Location → Always.
-// Shown after user grants "While Using App" on the first location prompt.
-// iOS 13+ restriction prevents showing "Always" on the initial dialog.
 
 struct AlwaysLocationPromptView: View {
     var onOpenSettings: () -> Void
-    var onCheckAgain: () -> Void
+    var onCheckAgain:   () -> Void
 
     var body: some View {
         ZStack {
@@ -536,10 +644,7 @@ struct AlwaysLocationPromptView: View {
                             )
                         )
                         .frame(width: 68, height: 68)
-                        .shadow(
-                            color: Color(red: 0.42, green: 0.62, blue: 0.55).opacity(0.4),
-                            radius: 12, y: 5
-                        )
+                        .shadow(color: Color(red: 0.42, green: 0.62, blue: 0.55).opacity(0.4), radius: 12, y: 5)
                     Image(systemName: "location.fill")
                         .font(.system(size: 28, weight: .medium))
                         .foregroundStyle(.white)
@@ -587,10 +692,7 @@ struct AlwaysLocationPromptView: View {
                                 )
                             )
                             .clipShape(RoundedRectangle(cornerRadius: 16))
-                            .shadow(
-                                color: Color(red: 0.42, green: 0.62, blue: 0.55).opacity(0.35),
-                                radius: 10, y: 5
-                            )
+                            .shadow(color: Color(red: 0.42, green: 0.62, blue: 0.55).opacity(0.35), radius: 10, y: 5)
                     }
 
                     Button(action: onCheckAgain) {
@@ -608,6 +710,7 @@ struct AlwaysLocationPromptView: View {
             }
             .padding(28)
         }
+        .preferredColorScheme(.light)
     }
 
     private func instructionStep(number: String, text: String) -> some View {
@@ -629,18 +732,14 @@ struct AlwaysLocationPromptView: View {
 }
 
 // MARK: - Location Permission Requester
-//
-// Wraps CLLocationManager's delegate pattern into a simple callback.
-// Stored in @State to keep it alive during the async authorization wait.
-// Double-resume protection via the resumed flag.
 
 class LocationPermissionRequester: NSObject, CLLocationManagerDelegate {
-    private let manager: CLLocationManager
+    private let manager:    CLLocationManager
     private var completion: ((Bool) -> Void)?
-    private var resumed = false
+    private var resumed   = false
 
     init(completion: @escaping (Bool) -> Void) {
-        self.manager = CLLocationManager()
+        self.manager    = CLLocationManager()
         self.completion = completion
         super.init()
         self.manager.delegate = self
@@ -653,8 +752,6 @@ class LocationPermissionRequester: NSObject, CLLocationManagerDelegate {
             case .authorizedAlways:
                 self.resume(true)
             case .authorizedWhenInUse:
-                // Has WhenInUse — will need the upgrade sheet, treat as "granted" here
-                // so requestLocation() can detect it and show AlwaysLocationPromptView
                 self.resume(true)
             case .denied, .restricted:
                 self.resume(false)

@@ -26,8 +26,8 @@ struct SensingAppApp: App {
         Logger.shared.append("=======================================================")
         Logger.shared.append("SensingApp init called")
 
-        SurveyNotificationManager.shared.requestPermission()
-        SensorKitAccelerometerFetcher.shared.startRecordingWithAuthorizationCheck()
+        // Notification and SensorKit auth are requested by PermissionsFlowView.
+        // Starting them here fires the iOS dialog before the onboarding cards appear.
         
         
         //        BackgroundScheduler.shared.registerBackgroundTasks()
@@ -45,7 +45,7 @@ struct SensingAppApp: App {
                 .environmentObject(locationManager)
                 .environmentObject(authManager)
                 .onAppear {
-                    sensorKitManager.requestAuthorization()
+                    // SensorKit auth is owned by PermissionsFlowView.
                     SurveyNotificationManager.shared
                         .scheduleDailyReminder(
                             hour: 20,
@@ -98,15 +98,10 @@ class AppDelegate: NSObject, UIApplicationDelegate {
     }
 
     func registerForPushNotifications() {
-        UNUserNotificationCenter.current().requestAuthorization(
-            options: [.alert, .sound, .badge]
-        ) { granted, _ in
-            print("Permission granted: \(granted)")
-            guard granted else { return }
-
-            DispatchQueue.main.async {
-                UIApplication.shared.registerForRemoteNotifications()
-            }
+        // requestAuthorization is called by PermissionsFlowView's notification card.
+        // Here we only register for silent/remote push so the device token is issued.
+        DispatchQueue.main.async {
+            UIApplication.shared.registerForRemoteNotifications()
         }
     }
 
@@ -201,3 +196,4 @@ extension Color {
     static let illiniBlue = Color(red: 0.07, green: 0.16, blue: 0.29)
     static let illiniOrange = Color(red: 0.91, green: 0.33, blue: 0.10)
 }
+

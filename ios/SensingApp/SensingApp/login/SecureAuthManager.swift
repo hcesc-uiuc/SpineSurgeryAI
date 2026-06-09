@@ -146,6 +146,11 @@ class SecureAuthManager: ObservableObject {
 
     // MARK: - Init
     init() {
+        if demoMode {
+            // Restore demo session if one was previously established.
+            isAuthenticated = UserDefaults.standard.bool(forKey: "demo_session_active")
+            return
+        }
         if KeychainManager.shared.read(key: refreshTokenKey) != nil {
             Task { await silentRefresh() }
         }
@@ -166,6 +171,7 @@ class SecureAuthManager: ObservableObject {
 
         // ── ⚠️ DEMO MODE BLOCK — DELETE BEFORE SHIPPING ─────────────
         if demoMode {
+            UserDefaults.standard.set(true, forKey: "demo_session_active")
             isAuthenticated = true
             return
         }
@@ -378,6 +384,7 @@ class SecureAuthManager: ObservableObject {
         }
         // ── END DEMO MODE GUARD ─────────────────────────────────────
 
+        UserDefaults.standard.removeObject(forKey: "demo_session_active")
         clearTokens()
         isAuthenticated = false
     }
