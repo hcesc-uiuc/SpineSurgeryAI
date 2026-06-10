@@ -11,6 +11,20 @@
 import Foundation
 import SQLite3
 
+enum DataType: Int {
+    case dummy = -1
+    case accelerometer = 0
+    case gyroscope     = 1
+    case heartRate     = 2
+    // extend as needed
+}
+
+struct SensorSample {
+    var timestamp: Double
+    var dataType:  DataType
+    var blob:      [UInt8]
+}
+
 final class SQLiteSaver {
     //    private var buffer: [String]
     //    private var index = 0
@@ -24,31 +38,42 @@ final class SQLiteSaver {
     private(set) var db: OpaquePointer?
     private var index = 0
     private var capacity: Int = 10000
+    private var flushAfterThisCount: Int = 10000
     private let maxFileSizeMB: Double = 5  // 👈 change this threshold
-    private let queue = DispatchQueue(label: "com.sensingapp.sqlitesaver")
-    
-    enum DataType: Int {
-        case accelerometer = 0
-        case gyroscope     = 1
-        case heartRate     = 2
-        // extend as needed
-    }
-    
-    struct DataBatch {
-        let timestamp: Double
-        let dataType:  DataType
-        let blob:      Data
-    }
+    private let accessQueue = DispatchQueue(label: "com.sensingapp.sqlitesaver")
     
     
+    private let buffer: CircularBufferSQLite
 
-    init(capacity: Int = 10_000) {
+    // semaphoreEmpty — how many slots are free to write into
+    // semaphoreFull  — how many slots are ready to be consumed
+    private let semaphoreEmpty: DispatchSemaphore
+    private let semaphoreFull:  DispatchSemaphore
+    
+    func configure(capacity: Int, flushAfterThisCount: Int) {
+        self.capacity    = capacity
+        self.flushAfterThisCount = flushAfterThisCount
+    }
+    
+    init() {
 
         //if last file doesn't exist, then add a new file
-        let filename = UserDefaults.standard.string(forKey: "dbFileName") ?? "sqlite_\(currentTimestampString()).db"
+        let filename = UserDefaults.standard.string(forKey: "dbFileName") ?? "sqlite_\(SQLiteSaver.currentTimestampString()).db"
         let fileManager = FileManager.default
         let docsURL = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first!
         self.databaseURL = docsURL.appendingPathComponent("to-be-processed").appendingPathComponent(filename)
+        
+        self.buffer         = CircularBufferSQLite(capacity: self.capacity)
+        
+        // semaphoreEmpty — how many slots are free to write into
+        // semaphoreFull  — how many slots are ready to be consumed
+        
+        // "semaphoreEmpty": non-zero means there is some slots empty in the queue,
+        //                   so producers can add to queue. Else, block
+        // "semaphoreFull": non-zero means there is some slots full in the queue,
+        //                   so consumer can take from the queue. Else, block
+        self.semaphoreEmpty = DispatchSemaphore(value: self.capacity) // all slots free
+        self.semaphoreFull  = DispatchSemaphore(value: 0)        // nothing to consume yet
         
         //  if !fileManager.fileExists(atPath: self.databaseURL.path){
         //       createNewDatabaseFile()
@@ -56,7 +81,7 @@ final class SQLiteSaver {
         
         //store filename to default
         UserDefaults.standard.set(filename, forKey: "dbFileName")
-        self.capacity = capacity
+        
         
         //We are opening file at the beginning
         //creating all the tables if they do not exist
@@ -65,27 +90,30 @@ final class SQLiteSaver {
         createTables()
         //
         close()
+        
+        //start Consumer
+        startConsumer()
     }
     
     private func createNewDatabaseFile() {
-        let filename = "sqlite_\(currentTimestampString()).db"
+        let filename = "sqlite_\(SQLiteSaver.currentTimestampString()).db"
         let fileManager = FileManager.default
         let docsURL = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first!
         self.databaseURL =  docsURL.appendingPathComponent("to-be-processed").appendingPathComponent(filename)
 
         //--
         UserDefaults.standard.set(filename, forKey: "dbFileName")
-
+        
+        print("DB: New file created at: \(filename)")
+        
         open()
         createTables()
-        close()
+        //close() -- Not closing as this files will be use
     }
     
     
     func open() {
         let path = self.databaseURL.path
-        
-        
         
         guard sqlite3_open(path, &db) == SQLITE_OK else {
             let msg = String(cString: sqlite3_errmsg(db))
@@ -95,20 +123,37 @@ final class SQLiteSaver {
         }
 
         // Performance pragmas
-        //        sqlite3_exec(db, "PRAGMA journal_mode = WAL;",  nil, nil, nil)
-        //        sqlite3_exec(db, "PRAGMA synchronous = NORMAL;", nil, nil, nil)
-        //        sqlite3_exec(db, "PRAGMA foreign_keys = ON;",   nil, nil, nil)
+        
+        // You are already using WAL mode (PRAGMA journal_mode = WAL).
+        // In WAL mode every sqlite3_step() that completes successfully is
+        // already durable on disk — the data is in the WAL file (.wal) and
+        // will be recovered automatically on the next open even if the app
+        // crashes immediately after.
+        sqlite3_exec(db, "PRAGMA journal_mode = WAL;",  nil, nil, nil)
+        // With synchronous = NORMAL SQLite syncs at the most critical moments
+        // — enough to survive a crash, though not a power loss mid-write.
+        sqlite3_exec(db, "PRAGMA synchronous = NORMAL;", nil, nil, nil)
+        sqlite3_exec(db, "PRAGMA foreign_keys = ON;",   nil, nil, nil)
 
         print("✅ Database opened at: \(path)")
     }
     
     func close() {
         guard let db else { return } //means database is already closed.
+        
+        // sqlite3_close does two things:
+        //
+        // 1. Flushes any pending in-memory state to the WAL file
+        // 2. Releases the file lock so other processes can access the db
+        //
+        // It does not move data from disk to some safer place — the data is
+        // already on disk after each successful sqlite3_step.
+        //
         sqlite3_close(db)
         self.db = nil
         print("🔒 Database closed")
         
-        //deleteWALFiles()  // then safe to delete
+        deleteWALFiles()  // then safe to delete
     }
     
     // MARK: - Helpers
@@ -119,8 +164,8 @@ final class SQLiteSaver {
             .appendingPathComponent(databaseURL.lastPathComponent + "-shm")
         let walURL = databaseURL.deletingLastPathComponent()
             .appendingPathComponent(databaseURL.lastPathComponent + "-wal")
-        print(shmURL)
-        print(walURL)
+        // print(shmURL)
+        // print(walURL)
 
         for url in [shmURL, walURL] {
             do {
@@ -132,6 +177,10 @@ final class SQLiteSaver {
                 print("❌ Failed to delete \(url.lastPathComponent): \(error)")
             }
         }
+        
+        //Todo: We should delete any remaining WAL files?
+        //  Think, we should open all the related SQL files to make sure
+        //  The WAL's are merged?
     }
 
     func lastError() -> String {
@@ -140,7 +189,7 @@ final class SQLiteSaver {
     }
 
     /// Add one row — thread-safe via serial queue
-    func addRow(timestamp: Double, dataType: DataType, blob: Data) {
+    func addRow(timestamp: Double, dataType: DataType, blob: [UInt8], counter:Int = 0) {
         //sync or async
         //--- sync is here to wait
         //--- async will not wait
@@ -153,26 +202,73 @@ final class SQLiteSaver {
         
         //Problem here is to keep the database open or close
         //
-        queue.sync {
-            if db == nil {
-                //means database is not open.
-                open()
-            }
+        accessQueue.sync {
             
-            insertData(timestamp: timestamp, dataType: dataType, blob: blob)
-            index += 1
-
-            // auto flush when full
-            if index == capacity {
-                flush()
+            // Wait decreases semaphoreEmpty by 1.
+            // semaphoreEmpty's initial value is circular buffer capacity
+            // if semaphoreEmpty values is zero, the wait will lock
+            // block if buffer is full — waits for consumer to free a slot
+            semaphoreEmpty.wait()
+            
+            //figure out how add three values
+            _ = buffer.enqueue(timestamp: timestamp, dataType: dataType, blob: blob)
+            
+            //Debug
+            print("Producer: Queuing data #\(counter)")
+            
+            //signal will increase semaphoreFull
+            //so any wait will be unlocked.-1
+            semaphoreFull.signal()      // tell consumer a new sample is ready
+        }
+    }
+    
+    
+    private func startConsumer() {
+        let thread = Thread {  [weak self] in
+            guard let self else { return }
+            while true {
+  
+                //block until a sample is available
+                //This will block until there is some data
+                //This unblocked by producer (i.e., 'addRow')
+                //
+                //Waits until the queue has something in it)
+                self.semaphoreFull.wait()
                 
-                // If the filesize is larger than "maxFileSizeMB", we create new file.
-                if fileSizeMB(at: self.databaseURL) > maxFileSizeMB {
-                    close()
-                    createNewDatabaseFile()  // already calls open() + createTables() internally
+                let sample = self.accessQueue.sync {
+                    self.buffer.dequeue()
+                }
+                
+                
+                
+                if let sample {
+                    
+                    //Debug
+                    print("Consumer: DeQueuing data")
+                    
+                    if db == nil {
+                        //means database is not open.
+                        open()
+                    }else{
+                        print("DB: db already open, \(self.databaseURL.lastPathComponent)")
+                    }
+
+                    insertData(timestamp: sample.timestamp, dataType: sample.dataType, blob: sample.blob)
+                    index += 1
+                    
+                    // auto flush when full
+                    if index == flushAfterThisCount {
+                        flushDataToDb()
+                    }
+                    
+                    //signals is not full anymore
+                    self.semaphoreEmpty.signal()
                 }
             }
         }
+        thread.name = "com.sensingapp.consumer"
+        thread.qualityOfService = .utility
+        thread.start()
     }
     
     /// Returns file size in MB, or 0 if the file doesn't exist yet.
@@ -180,9 +276,30 @@ final class SQLiteSaver {
         let bytes = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
         return Double(bytes) / (1024 * 1024)
     }
+    
+    public func flushDataToDb(forceNewFile: Bool = false){
+        print("DB: Flushing data to db (count: \(index))")
+        flush()
+        index = 0 //means no data to flush yet.
+        
+        // If the filesize is larger than "maxFileSizeMB", we create new file.
+        if fileSizeMB(at: self.databaseURL) > maxFileSizeMB ||
+            forceNewFile == true {
+            
+            if forceNewFile == false{
+                print("DB: Starting a new file. Current \(self.databaseURL.lastPathComponent)  file size is too big: \(fileSizeMB(at: self.databaseURL))")
+            }
+            else{
+                print("DB: Current file is \(self.databaseURL.lastPathComponent)  \(fileSizeMB(at: self.databaseURL)). Force creating a new file.")
+            }
+            
+            close()
+            createNewDatabaseFile()  // already calls open() + createTables() internally
+        }
+    }
 
     
-    func currentTimestampString() -> String {
+    static func currentTimestampString() -> String {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd_HH-mm-ss"
         formatter.timeZone = TimeZone.current
@@ -201,5 +318,44 @@ final class SQLiteSaver {
             return false
         }
         return true
+    }
+}
+
+
+
+final class CircularBufferSQLite {
+    private var buffer: [SensorSample]
+    private var readIndex  = 0
+    private var writeIndex = 0
+    private var count      = 0
+    let capacity: Int
+    
+    //Todo: pre-allocate the buffer for bytes
+ 
+    init(capacity: Int) {
+        self.capacity = capacity
+        self.buffer   = Array(repeating: SensorSample(timestamp: -1, dataType: .dummy, blob: [UInt8]()), count: capacity)
+    }
+ 
+    var isEmpty: Bool { count == 0 }
+    var isFull:  Bool { count == capacity }
+ 
+    func enqueue(timestamp: Double, dataType: DataType, blob: [UInt8]) -> Bool {
+        guard !isFull else { return false }
+        buffer[writeIndex].timestamp = timestamp
+        buffer[writeIndex].dataType = dataType
+        buffer[writeIndex].blob = blob
+        writeIndex = (writeIndex + 1) % capacity
+        count += 1
+        return true
+    }
+ 
+    func dequeue() -> SensorSample? {
+        guard !isEmpty else { return nil }
+        let sample = buffer[readIndex]
+        //buffer[readIndex].timestamp = -1 //means free to enqueue, otherwise
+        readIndex = (readIndex + 1) % capacity
+        count -= 1
+        return sample
     }
 }

@@ -39,7 +39,7 @@ extension SQLiteSaver {
     // MARK: - Insert (single row)
 
     @discardableResult
-    func insertData(timestamp: Double, dataType: DataType, blob: Data) -> Bool {
+    func insertData(timestamp: Double, dataType: DataType, blob: [UInt8]) -> Bool {
         guard let db else {
             print("❌ insertData: no database connection")
             return false
@@ -57,11 +57,15 @@ extension SQLiteSaver {
 
         sqlite3_bind_double(stmt, 1, timestamp)
         sqlite3_bind_int(stmt,    2, Int32(dataType.rawValue))
+        // [UInt8] is already 1 byte per element; withUnsafeBytes gives a
+        // contiguous raw pointer valid only inside the closure — SQLite copies
+        // the bytes immediately via SQLITE_TRANSIENT so this is safe.
         blob.withUnsafeBytes { ptr in
-            sqlite3_bind_blob(stmt, 3,
-                              ptr.baseAddress,
-                              Int32(blob.count),
-                              SQLITE_TRANSIENT)
+            guard let base = ptr.baseAddress, !blob.isEmpty else {
+                sqlite3_bind_null(stmt, 3)
+                return
+            }
+            sqlite3_bind_blob(stmt, 3, base, Int32(blob.count), SQLITE_TRANSIENT)
         }
         
         let stepResult = sqlite3_step(stmt)
