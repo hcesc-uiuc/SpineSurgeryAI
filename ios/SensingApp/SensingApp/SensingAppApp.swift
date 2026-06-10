@@ -85,6 +85,11 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         // Use the Firebase library to configure APIs.
         FirebaseApp.configure()
         
+        //Force sqlite saver allocation.
+        //This one handles all the sensor data saving and threading
+        SQLiteSaver.shared.configure(capacity: 10000, flushAfterThisCount: 3000)        
+        _ = SQLiteSaver.shared   // now fully configured, consumer started
+        
         registerForPushNotifications()
         // Start background location updates immediately
         // LocationManager.shared.start()

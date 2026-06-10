@@ -161,9 +161,9 @@ class AcclerometerRecorder {
         return formatter.string(from: date)
     }
     
-    func accelToBlob(x: Double, y: Double, z: Double) -> Data {
+    func accelToBlob(x: Double, y: Double, z: Double) -> [UInt8] {
         var values: [Float32] = [Float32(x), Float32(y), Float32(z)]
-        return Data(bytes: &values, count: values.count * MemoryLayout<Float32>.size)
+        return Data(bytes: &values, count: values.count * MemoryLayout<Float32>.size).map { $0 }
     }
 }
 

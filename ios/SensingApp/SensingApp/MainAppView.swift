@@ -374,54 +374,98 @@ struct MainAppView: View {
             Button("Fetch Recorded Data") {
                 Task { await fetchRecordedData() }
             }
-            .padding(.top, 20)
+            .padding(.top, 10)
 
-            Button("Start Survey") {
-                isSurveyPresented = true
-            }
-            .disabled(appState.isCompletedToday)
+            //            Button("Start Survey") {
+            //                isSurveyPresented = true
+            //            }
+            //            .disabled(appState.isCompletedToday)
+            //            .sheet(isPresented: $isSurveyPresented) {
+            //                SurgerySurveyView(appState: appState, authManager: authManager)
+            //            }
 
-            Button("Fetch data") {
-                Task { await self.fetchRecordedData() }
-            }.padding(.top, 30)
-
+            //            Button("Fetch data") {
+            //                Task { await self.fetchRecordedData() }
+            //            }.padding(.top, 30)
+            
             Button("Store Sensorkit Data") {
                 Task {
                     print("SensorKit fetcher is called")
                     SensorKitAccelerometerFetcher.shared.fetchLatestData()
                 }
-            }.padding(.top, 30)
-
+            }.padding(.top, 20)
+            
+            Button("Insert into SQLite db") {
+                Task {
+                    //Task will happen asynchronously
+                    let N = 50
+                    for i in 0..<N {
+                        
+                        let unixTime = Date().timeIntervalSince1970 * 1000
+                    
+                        // random size of 2-4 with random content
+                        let size  = Int.random(in: 2...4)
+                        let bytes = (0..<size).map { _ in UInt8.random(in: 0...255) }
+                    
+                        //database writes
+                        SQLiteSaver.shared.addRow(
+                            timestamp: unixTime,
+                            dataType: DataType.dummy,
+                            blob: bytes,
+                            counter: i
+                        )
+                    }
+                    
+                    // For the demo we are forcing a new file.
+                    // This does not work as the consumer is thread.
+                    // This is called before consumer finishes processing,
+                    // unless we wait 2 seconds.
+                    //
+                    // DispatchQueue.global().asyncAfter(deadline: .now() + 2) {
+                    //     SQLiteSaver.shared.flushDataToDb(forceNewFile: true)
+                    // }
+                }
+            }.padding(.top, 20)
+            Button("Flush and create new file") {
+                Task {
+                    SQLiteSaver.shared.flushDataToDb(forceNewFile: true)
+                }
+            }.padding(.top, 10)
+            
             Button("Print schedule bg task") {
                 Task { BackgroundScheduler.shared.printScheduledBackgroundTasks() }
-            }.padding(.top, 30)
+            }.padding(.top, 20)
 
             Button("Upload All Files") {
-                Task { await Uploader.shared.uploadFolder() }
-            }.padding(.top, 30)
+                Task {
+                    await Uploader.shared.uploadFolder()
+                }
+            }.padding(.top, 20)
 
             Button("Print log data") {
                 Task { self.printCurrentLogFile() }
-            }.padding(.top, 30)
+            }.padding(.top, 20)
 
             Button("Get HealthKit data") {
-                Task { HealthkitRecorder.shared.getHealthKitData() }
-            }.padding(.top, 30)
+                Task { 
+                  HealthkitRecorder.shared.getHealthKitData() 
+                }
+            }.padding(.top, 20)
 
             if CLLocationManager().authorizationStatus != .authorizedAlways {
                 Button("Always allow location") {
                     Task { showSettingsAlert = true }
-                }.padding(.top, 30)
+                }.padding(.top, 10)
             }
 
             if CLLocationManager().authorizationStatus == .authorizedAlways {
                 Text("Always allow location granted")
-                    .padding(.top, 30)
+                    .padding(.top, 10)
             }
 
             Button("Log Out") {
                 authManager.logout()
-            }.padding(.top, 10)
+            }.padding(.top, 20)
         }
         .padding()
         .alert("Motion Access Denied",
