@@ -1,5 +1,5 @@
 //
-//  AuthLoginView.swift
+//  LoginView.swift
 //  SensingApp
 //
 
@@ -9,6 +9,7 @@ import CoreMotion
 import CoreLocation
 import UserNotifications
 import HealthKit
+import SensorKit
 
 // ============================================================
 // MARK: - AuthLoginView Documentation
@@ -17,21 +18,17 @@ import HealthKit
 // PURPOSE:
 // The root authentication view for the Journey app. Handles:
 //   1. Detecting fresh installs and resetting permissions state
-//   2. Auditing required permissions on every launch
+//   2. Auditing all 5 required permissions on every launch
 //   3. Showing the login screen when not authenticated
 //   4. Routing to PermissionsFlowView if any permission is missing
 //   5. Routing to MainAppView once authenticated and all permissions granted
 //
-//    // MARK: - Login Logic
-//    private func attemptLogin() async {
-//        errorMessage = nil
-//        isWorking = true
-//        defer { isWorking = false }
+// NAVIGATION FLOW:
 //
 //   App Launch
 //       └── AuthLoginView.onAppear
-//             ├── detectReinstall()       — clears stale UserDefaults on fresh install
-//             └── auditPermissions()      — re-checks all permissions every launch
+//             ├── detectReinstall()   — clears stale UserDefaults on fresh install
+//             └── auditPermissions()  — re-checks all 5 permissions every launch
 //                   └── if any missing → permissionsComplete = false
 //
 //       └── AuthLoginView body
@@ -42,27 +39,33 @@ import HealthKit
 //
 // REINSTALL DETECTION:
 //   UserDefaults (AppStorage) can survive app deletion on some devices.
-//   This means permissionsComplete could be true on a fresh install,
-//   skipping the permissions flow entirely — users would never be prompted.
-//
-//   Fix: on first launch after install, we check for a Keychain sentinel key.
-//   Keychain IS reliably cleared on uninstall (unlike UserDefaults).
-//   If the sentinel is missing → fresh install → clear permissionsComplete.
-//   Then we write the sentinel so subsequent launches don't reset.
+//   Keychain IS reliably cleared on uninstall — we use a Keychain sentinel
+//   to detect fresh installs and reset permissionsComplete accordingly.
 //
 // PERMISSION AUDIT:
-//   Even after onboarding, users can revoke permissions in iOS Settings.
-//   On every launch, we silently check all required permissions.
-//   If any is missing → permissionsComplete = false → PermissionsFlowView shown.
-//   This ensures data collection is never silently broken.
+//   Checks all 5 permissions: Motion, Location (Always), SensorKit,
+//   Notifications, Health. If any are missing → permissionsComplete = false.
+//   Real-time mid-session revocation is handled by MainAppView via scenePhase.
+//
+// NOTIFICATION CONFLICT:
+//   AppDelegate.registerForPushNotifications() must NOT call
+//   UNUserNotificationCenter.requestAuthorization() — doing so causes
+//   iOS to silently skip the prompt in PermissionsFlowView.
+//   Remove that call from AppDelegate, keep only registerForRemoteNotifications().
+//
+// SIMULATOR NOTE:
+//   SensorKit cannot be authorized on the iOS simulator. All SensorKit
+//   checks are guarded with #if targetEnvironment(simulator) and return
+//   true automatically so the audit does not block the flow on simulator.
 //
 // ============================================================
 
 struct AuthLoginView: View {
 
     // MARK: - Auth Manager
+    // Injected from SensingAppApp — do NOT declare @StateObject here
     @EnvironmentObject private var authManager: SecureAuthManager
-    
+
     // MARK: - UI State
     @State private var isWorking = false
     @State private var appeared  = false
@@ -71,18 +74,12 @@ struct AuthLoginView: View {
     @State private var errorMessage: String?
 
     // MARK: - Permissions State
-    //
-    // permissionsComplete — AppStorage (UserDefaults).
-    // Reset to false by detectReinstall() or auditPermissions() when needed.
-    // Only set to true by PermissionsFlowView after all permissions granted.
     @AppStorage("permissionsComplete") private var permissionsComplete = false
 
     // MARK: - Logo Assets
     private let logos   = ["uiuclogo", "uiclogo", "upennlogo", "osflogo"]
     private let columns = [GridItem(.flexible()), GridItem(.flexible())]
 
-    // Sentinel key stored in Keychain to detect reinstalls.
-    // Keychain is reliably cleared on uninstall; UserDefaults is not.
     private let installSentinelKey = "journey_install_sentinel"
 
     // MARK: - Body
@@ -97,10 +94,10 @@ struct AuthLoginView: View {
             loginScreen
         }
     }
-    
+
+    // MARK: - Login Screen UI
     private var loginScreen: some View {
         ZStack {
-            // Warm gradient background
             LinearGradient(
                 colors: [
                     Color(red: 0.98, green: 0.95, blue: 0.91),
@@ -110,13 +107,12 @@ struct AuthLoginView: View {
                 endPoint: .bottomTrailing
             )
             .ignoresSafeArea()
-            
+
             ScrollView {
                 VStack(spacing: 0) {
-                    
+
                     // ── Header ──────────────────────────────────────
                     VStack(spacing: 8) {
-                        // Soft icon mark
                         ZStack {
                             Circle()
                                 .fill(
@@ -130,8 +126,10 @@ struct AuthLoginView: View {
                                     )
                                 )
                                 .frame(width: 72, height: 72)
-                                .shadow(color: Color(red: 0.72, green: 0.55, blue: 0.50).opacity(0.35), radius: 12, y: 6)
-                            
+                                .shadow(
+                                    color: Color(red: 0.72, green: 0.55, blue: 0.50).opacity(0.35),
+                                    radius: 12, y: 6
+                                )
                             Image(systemName: "figure.walk.motion")
                                 .font(.system(size: 32, weight: .medium))
                                 .foregroundStyle(.white)
@@ -163,7 +161,6 @@ struct AuthLoginView: View {
                             .padding(.horizontal, 4)
                             .padding(.bottom, 4)
 
-                        // MARK: - Sign in with Apple Button
                         SignInWithAppleButton(.signIn) { request in
                             request.requestedScopes = [.fullName, .email]
                         } onCompletion: { result in
@@ -193,21 +190,21 @@ struct AuthLoginView: View {
                             .padding(.horizontal, 4)
                             .transition(.opacity.combined(with: .move(edge: .top)))
                         }
-                        // ↓ PASTE THIS BLOCK RIGHT HERE ↓
-                                               #if DEBUG
-                                               Button("Skip Sign In (Debug)") {
-                                                   Task {
-                                                       try? await authManager.login(
-                                                           identityToken: "debug_token",
-                                                           fullName:      "Test User",
-                                                           appleUserID:   "debug_apple_user"
-                                                       )
-                                                   }
-                                               }
-                                               .font(.system(size: 13, design: .rounded))
-                                               .foregroundStyle(Color(red: 0.55, green: 0.47, blue: 0.44).opacity(0.7))
-                                               .padding(.top, 4)
-                                               #endif
+
+                        #if DEBUG
+                        Button("Skip Sign In (Debug)") {
+                            Task {
+                                try? await authManager.login(
+                                    identityToken: "debug_token",
+                                    fullName:      "Test User",
+                                    appleUserID:   "debug_apple_user"
+                                )
+                            }
+                        }
+                        .font(.system(size: 13, design: .rounded))
+                        .foregroundStyle(Color(red: 0.55, green: 0.47, blue: 0.44).opacity(0.7))
+                        .padding(.top, 4)
+                        #endif
                     }
                     .padding(24)
                     .background(
@@ -251,28 +248,20 @@ struct AuthLoginView: View {
         }
         .onAppear {
             appeared = true
-            detectReinstall()       // must run before auditPermissions
+            detectReinstall()     // must run before auditPermissions
             auditPermissions()
         }
         .animation(.default, value: errorMessage)
     }
 
     // MARK: - Reinstall Detection
-    //
-    // Checks for the Keychain sentinel written on the previous install.
-    // If missing → this is a fresh install → clear permissionsComplete
-    // so the user is walked through the permissions flow again.
-    //
-    // Keychain is cleared on app uninstall; UserDefaults is not.
-    // This is the only reliable way to detect a reinstall on iOS.
     private func detectReinstall() {
         let sentinel = KeychainManager.shared.read(key: installSentinelKey)
         if sentinel == nil {
-            // Fresh install — reset any stale UserDefaults permissions flag
             permissionsComplete = false
-            // Write sentinel so we don't reset again on next launch
+            UserDefaults.standard.removeObject(forKey: "journey_permissions_ever_completed")
             KeychainManager.shared.save(
-                key: installSentinelKey,
+                key:  installSentinelKey,
                 data: Data("installed".utf8)
             )
         }
@@ -280,51 +269,58 @@ struct AuthLoginView: View {
 
     // MARK: - Permission Audit
     //
-    // Called on every app launch after detectReinstall().
-    // Checks each required permission synchronously (except notifications,
-    // which requires an async call — handled separately).
+    // Checks all 5 required permissions on every launch.
+    // Any missing permission resets permissionsComplete = false.
     //
-    // If ANY permission is not in the required state → permissionsComplete = false
-    // → body re-evaluates → PermissionsFlowView is shown, focused on the
-    //   missing permission card.
+    // HEALTH FIX: Uses actual authorizationStatus for stepCount rather than
+    // isHealthDataAvailable() which is always true on a real device.
     //
-    // This catches:
-    //   • Users who revoked a permission in iOS Settings after onboarding
-    //   • Users who granted "While Using" for location instead of "Always"
-    //   • Any edge case where permissionsComplete was set prematurely
+    // SENSORKIT: Skipped on simulator — cannot be authorized there.
     private func auditPermissions() {
-        // Motion
-        let motionOK = CMMotionActivityManager.authorizationStatus() == .authorized
+        // Sync checks
+        // Motion: if hardware unavailable (simulator), treat as granted — mirrors requestMotion().
+        let motionOK   = !CMMotionActivityManager.isActivityAvailable() ||
+                         CMMotionActivityManager.authorizationStatus() == .authorized
+        let locationOK = CLLocationManager().authorizationStatus == .authorizedAlways
 
-        // Location — must be Always, not just WhenInUse
-        let locationStatus = CLLocationManager().authorizationStatus
-        let locationOK = locationStatus == .authorizedAlways
-
-        // Health — HealthKit always reports authorized from app side;
-        // we check availability as a proxy (same logic as PermissionsFlowView)
-        let healthOK = HKHealthStore.isHealthDataAvailable()
-
-        // All sync checks — if any fail, kick back to permissions flow
-        if !motionOK || !locationOK || !healthOK {
-            permissionsComplete = false
-            return
+        // Health — check actual authorization status, not just device availability
+        var healthOK = false
+        if HKHealthStore.isHealthDataAvailable() {
+            let store    = HKHealthStore()
+            let stepType = HKObjectType.quantityType(forIdentifier: .stepCount)!
+            healthOK     = store.authorizationStatus(for: stepType) != .notDetermined
         }
 
-        // Notifications — async, run in background, update if needed
+        if !motionOK || !locationOK || !healthOK {
+            permissionsComplete = false
+            // Don't return — the Task below must always run to keep the
+            // notifications flag in sync so PermissionsFlowView skips
+            // already-granted cards correctly.
+        }
+
+        // Async checks — SensorKit and Notifications
         Task {
-            let settings = await UNUserNotificationCenter.current().notificationSettings()
+            // SensorKit — not available on simulator, skip gracefully
+            #if targetEnvironment(simulator)
+            let sensorKitOK = true
+            #else
+            let sensorReader = SRSensorReader(sensor: .ambientLightSensor)
+            let sensorKitOK  = sensorReader.authorizationStatus == .authorized
+            #endif
+
+            // Notifications — sync the UserDefaults flag so computeStartIndex()
+            // only shows the notifications card when it's actually revoked.
+            let settings        = await UNUserNotificationCenter.current().notificationSettings()
             let notificationsOK = settings.authorizationStatus == .authorized
-            if !notificationsOK {
+            UserDefaults.standard.set(notificationsOK, forKey: "journey_notifications_authorized")
+
+            if !sensorKitOK || !notificationsOK {
                 await MainActor.run { permissionsComplete = false }
             }
         }
     }
 
     // MARK: - Apple Sign In Handler
-    //
-    // Handles the result from SignInWithAppleButton.
-    // Extracts identity token, full name (nil after first login), and
-    // Apple's stable user ID, then calls authManager.login().
     private func handleAppleSignIn(result: Result<ASAuthorization, Error>) async {
         errorMessage = nil
         isWorking    = true
@@ -332,7 +328,6 @@ struct AuthLoginView: View {
 
         switch result {
         case .failure(let error):
-            // ASAuthorizationError.canceled (1001) = user dismissed sheet — no error shown
             let asError = error as? ASAuthorizationError
             if asError?.code != .canceled {
                 errorMessage = "Sign in failed. Please try again."
@@ -353,8 +348,6 @@ struct AuthLoginView: View {
                 return
             }
 
-            // Full name — only present on very first Apple login ever.
-            // Pass nil when empty — backend only needs it once.
             let fullNameString = [
                 credential.fullName?.givenName,
                 credential.fullName?.familyName
@@ -380,4 +373,5 @@ struct AuthLoginView: View {
 
 #Preview {
     AuthLoginView()
+        .environmentObject(SecureAuthManager())
 }

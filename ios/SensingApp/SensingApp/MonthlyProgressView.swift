@@ -36,7 +36,7 @@ struct MonthlyProgressView: View {
     var body: some View {
         NavigationStack {
             MonthlyCalendarView()
-                .navigationTitle("Progress")
+                .navigationTitle("Calendar")
                 .navigationBarTitleDisplayMode(.large)
         }
     }
@@ -73,6 +73,9 @@ struct MonthlyCalendarView: View {
                 VStack(spacing: 20) {
                     monthNavigationHeader
                     streakSummaryCard
+                    if progressData.isEmpty {
+                        emptyStateCard
+                    }
                     legendRow
                     dayOfWeekHeader
                     calendarGrid
@@ -168,6 +171,29 @@ struct MonthlyCalendarView: View {
         Rectangle()
             .fill(Color(red: 0.80, green: 0.65, blue: 0.58).opacity(0.25))
             .frame(width: 1, height: 36)
+    }
+
+    private var emptyStateCard: some View {
+        VStack(spacing: 10) {
+            Image(systemName: "calendar.badge.checkmark")
+                .font(.system(size: 32))
+                .foregroundStyle(Color(red: 0.80, green: 0.55, blue: 0.45))
+            Text("No check-ins logged yet")
+                .font(.system(size: 16, weight: .semibold, design: .rounded))
+                .foregroundStyle(Color(red: 0.28, green: 0.22, blue: 0.20))
+            Text("Complete today's survey to start your streak.")
+                .font(.system(size: 13, design: .rounded))
+                .foregroundStyle(Color(red: 0.50, green: 0.42, blue: 0.39))
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 24)
+        .padding(.horizontal, 20)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color(red: 0.99, green: 0.97, blue: 0.95))
+                .shadow(color: Color(red: 0.60, green: 0.45, blue: 0.40).opacity(0.10), radius: 12, y: 4)
+        )
     }
 
     private func summaryItem(value: String, label: String) -> some View {

@@ -80,9 +80,9 @@ class HealthKitManager: ObservableObject {
     }
  
     init() {
-        if HKHealthStore.isHealthDataAvailable() {
-            requestPermissions()
-        }
+        // HealthKit authorization is requested by PermissionsFlowView's health card.
+        // Calling requestPermissions() here would show a second system sheet
+        // for types not covered by the onboarding request (hrv, oxygen, etc.).
     }
      // MARK: - Permissions & Background
     func requestPermissions() {
