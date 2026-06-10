@@ -7,6 +7,7 @@ import SwiftUI
 struct ContentView: View {
     var body: some View {
         AuthLoginView() // completely handles login, persistence, and navigation
+            .preferredColorScheme(.light)
     }
 }
 

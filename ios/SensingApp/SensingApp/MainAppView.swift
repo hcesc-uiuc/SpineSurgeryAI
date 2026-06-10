@@ -15,16 +15,19 @@ import SensorKit
 // ============================================================
 
 enum JourneyTab: CaseIterable {
-    case home, sensors, surveys, progress, debug, settings
+    case home, sensors, progress
+    #if DEBUG
+        case debug
+    #endif
 
     var icon: String {
         switch self {
         case .home:     return "house.fill"
         case .sensors:  return "waveform"
-        case .surveys:  return "list.clipboard.fill"
         case .progress: return "calendar"
+        #if DEBUG
         case .debug:    return "ant.fill"
-        case .settings: return "gearshape.fill"
+        #endif
         }
     }
 
@@ -32,10 +35,10 @@ enum JourneyTab: CaseIterable {
         switch self {
         case .home:     return "Home"
         case .sensors:  return "Sensors"
-        case .surveys:  return "Surveys"
         case .progress: return "Calendar"
+        #if DEBUG
         case .debug:    return "Debug"
-        case .settings: return "Settings"
+        #endif
         }
     }
 
@@ -43,10 +46,10 @@ enum JourneyTab: CaseIterable {
         switch self {
         case .home:     return Color(red: 0.42, green: 0.62, blue: 0.55) // sage green
         case .sensors:  return Color(red: 0.38, green: 0.55, blue: 0.75) // warm blue
-        case .surveys:  return Color(red: 0.80, green: 0.55, blue: 0.45) // terracotta
         case .progress: return Color(red: 0.38, green: 0.55, blue: 0.75) // warm blue
+        #if DEBUG
         case .debug:    return Color(red: 0.55, green: 0.47, blue: 0.44) // muted brown
-        case .settings: return Color(red: 0.58, green: 0.48, blue: 0.72) // muted purple
+        #endif
         }
     }
 }
@@ -63,7 +66,6 @@ struct MainAppView: View {
     // navigation back to PermissionsFlowView automatically
     @AppStorage("permissionsComplete") private var permissionsComplete = false
 
-    @StateObject private var motionManager    = MotionManager()
     @StateObject private var appState         = AppState()
     @StateObject private var sensorKitManager = SensorKitManager()
     @StateObject var HKManager                = HealthKitManager()
@@ -81,15 +83,28 @@ struct MainAppView: View {
     // MARK: - Body
     var body: some View {
         TabView(selection: $selectedTab) {
-            ForEach(JourneyTab.allCases, id: \.self) { tab in
-                tabContent(for: tab)
-                    .tabItem {
-                        Label(tab.label, systemImage: tab.icon)
-                    }
-                    .tag(tab)
+            Tab(JourneyTab.home.label, systemImage: JourneyTab.home.icon, value: JourneyTab.home) {
+                HomeView(accentColor: JourneyTab.home.accentColor, onLogout: { authManager.logout() }, appState: appState, isSurveyPresented: $isSurveyPresented)
             }
+            Tab(JourneyTab.sensors.label, systemImage: JourneyTab.sensors.icon, value: JourneyTab.sensors) {
+                SensorView
+            }
+            Tab(JourneyTab.progress.label, systemImage: JourneyTab.progress.icon, value: JourneyTab.progress) {
+                MonthlyProgressView()
+            }
+            #if DEBUG
+            Tab(JourneyTab.debug.label, systemImage: JourneyTab.debug.icon, value: JourneyTab.debug) {
+                DebugView
+            }
+            #endif
         }
         .tint(selectedTab.accentColor)
+        .overlay(alignment: .bottomTrailing) {
+            if showSurveyButton { surveyButton }
+        }
+        .sheet(isPresented: $isSurveyPresented) {
+            SurgerySurveyView(appState: appState, authManager: authManager)
+        }
         .onAppear {
             guard !hasStartedCollection else { return }
             hasStartedCollection = true
@@ -132,29 +147,34 @@ struct MainAppView: View {
     }
 
     // ============================================================
-    // MARK: - Tab Content Router
+    // MARK: - Survey FAB
     // ============================================================
 
-    @ViewBuilder
-    private func tabContent(for tab: JourneyTab) -> some View {
-        switch tab {
-        case .home:
-            HomeView(accentColor: tab.accentColor)
-        case .sensors:
-            SensorView
-        case .surveys:
-            SurveysView(
-                accentColor: tab.accentColor,
-                appState: appState,
-                isSurveyPresented: $isSurveyPresented
-            )
-        case .progress:
-            MonthlyProgressView()
-        case .debug:
-            DebugView
-        case .settings:
-            SettingsView(accentColor: tab.accentColor, onLogout: { authManager.logout() })
+    private var surveyButton: some View {
+        Button(action: { isSurveyPresented = true }) {
+            Image(systemName: appState.isCompletedToday ? "checkmark" : "list.clipboard.fill")
+                .font(.system(size: 22, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 60, height: 60)
+                .glassEffect(
+                    .regular
+                        .tint(Color(red: 0.80, green: 0.55, blue: 0.45)) // terracotta
+                        .interactive(),
+                    in: .circle
+                )
         }
+        .buttonStyle(.plain)
+        .disabled(appState.isCompletedToday)
+        .padding(.trailing, 20)
+        .padding(.bottom, 24)
+    }
+
+    private var showSurveyButton: Bool {
+        #if DEBUG
+        return selectedTab != .debug
+        #else
+        return true
+        #endif
     }
 
     // ============================================================
@@ -216,13 +236,129 @@ struct MainAppView: View {
     // ============================================================
 
     private var SensorView: some View {
-        VStack {
-            Text("Sensor view")
-                .font(.title2)
-                .padding()
-            accelerometerView
-            gyroscopeView
+        NavigationStack {
+            ZStack {
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.98, green: 0.95, blue: 0.91),
+                        Color(red: 0.95, green: 0.91, blue: 0.88)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                .ignoresSafeArea()
+
+                ScrollView {
+                    VStack(spacing: 24) {
+                        // MOTION & ACTIVITY
+                        let sage = Color(red: 0.42, green: 0.62, blue: 0.55)
+                        sensorSection(title: "MOTION & ACTIVITY") {
+                            sensorRow(icon: "move.3d",    color: sage, name: "Accelerometer", detail: "Movement and orientation of your phone.")
+                            Divider().padding(.leading, 64)
+                            sensorRow(icon: "gyroscope",  color: sage, name: "Gyroscope",     detail: "Rotation and turning of your phone.")
+                        }
+
+                        // LOCATION
+                        let warmBlue = Color(red: 0.38, green: 0.55, blue: 0.75)
+                        sensorSection(title: "LOCATION") {
+                            sensorRow(icon: "location.fill", color: warmBlue, name: "Location", detail: "Approximate location, including in the background.")
+                        }
+
+                        // APPLE HEALTH
+                        let terracotta = Color(red: 0.80, green: 0.55, blue: 0.45)
+                        sensorSection(title: "APPLE HEALTH") {
+                            sensorRow(icon: "heart.fill",           color: terracotta, name: "Heart Rate",           detail: "Beats per minute over time.")
+                            Divider().padding(.leading, 64)
+                            sensorRow(icon: "waveform.path.ecg",    color: terracotta, name: "Heart Rate Variability", detail: "Variation between heartbeats.")
+                            Divider().padding(.leading, 64)
+                            sensorRow(icon: "figure.walk",          color: terracotta, name: "Steps & Walking",      detail: "Steps, walking speed, asymmetry, and steadiness.")
+                            Divider().padding(.leading, 64)
+                            sensorRow(icon: "lungs.fill",           color: terracotta, name: "Blood Oxygen",         detail: "Oxygen saturation when available.")
+                            Divider().padding(.leading, 64)
+                            sensorRow(icon: "flame.fill",           color: terracotta, name: "Active Energy",        detail: "Calories burned during activity.")
+                            Divider().padding(.leading, 64)
+                            sensorRow(icon: "bed.double.fill",      color: terracotta, name: "Sleep",                detail: "Time asleep and sleep stages.")
+                        }
+
+                        // APPLE WATCH
+                        let purple = Color(red: 0.58, green: 0.48, blue: 0.72)
+                        sensorSection(title: "APPLE WATCH") {
+                            sensorRow(icon: "applewatch",                   color: purple, name: "Watch Accelerometer", detail: "High-rate motion from your Apple Watch.",   badge: "Active")
+                            Divider().padding(.leading, 64)
+                            sensorRow(icon: "heart.fill",                   color: purple, name: "Watch Heart & PPG",   detail: "Heart rate and optical (PPG) signals.",       badge: "When available")
+                            Divider().padding(.leading, 64)
+                            sensorRow(icon: "waveform.path.ecg.rectangle",  color: purple, name: "ECG",                 detail: "Electrocardiogram readings.",                 badge: "When available")
+                            Divider().padding(.leading, 64)
+                            sensorRow(icon: "thermometer.medium",           color: purple, name: "Wrist Temperature",   detail: "Skin temperature at the wrist.",              badge: "When available")
+                            Divider().padding(.leading, 64)
+                            sensorRow(icon: "sun.max.fill",                 color: purple, name: "Ambient Light",       detail: "Surrounding light levels.",                   badge: "When available")
+                        }
+
+                        // DAILY SURVEY
+                        sensorSection(title: "DAILY SURVEY") {
+                            sensorRow(icon: "list.clipboard.fill", color: terracotta, name: "Recovery Check-in", detail: "Pain, function, medications, sleep, and falls.")
+                        }
+
+                        Spacer().frame(height: 90)
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.top, 16)
+                }
+            }
+            .navigationTitle("What We Collect")
         }
+    }
+
+    // Sensor section: uppercase header + rounded card around rows
+    private func sensorSection(title: String, @ViewBuilder rows: () -> some View) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                .foregroundStyle(Color(red: 0.55, green: 0.47, blue: 0.44))
+                .padding(.leading, 4)
+            VStack(spacing: 0) {
+                rows()
+            }
+            .background(
+                RoundedRectangle(cornerRadius: 20)
+                    .fill(Color(red: 0.99, green: 0.97, blue: 0.95))
+                    .shadow(color: Color(red: 0.60, green: 0.45, blue: 0.40).opacity(0.10), radius: 12, y: 4)
+            )
+        }
+    }
+
+    // Sensor row: icon chip + name/detail + optional badge
+    private func sensorRow(icon: String, color: Color, name: String, detail: String, badge: String? = nil) -> some View {
+        HStack(spacing: 12) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 9)
+                    .fill(color.opacity(0.15))
+                    .frame(width: 34, height: 34)
+                Image(systemName: icon)
+                    .font(.system(size: 16))
+                    .foregroundStyle(color)
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                Text(name)
+                    .font(.system(size: 16, weight: .semibold, design: .rounded))
+                    .foregroundStyle(Color(red: 0.28, green: 0.22, blue: 0.20))
+                Text(detail)
+                    .font(.system(size: 13, design: .rounded))
+                    .foregroundStyle(Color(red: 0.50, green: 0.42, blue: 0.39))
+            }
+            Spacer()
+            if let badge {
+                Text(badge)
+                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .foregroundStyle(color)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(color.opacity(0.15))
+                    .clipShape(Capsule())
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
     }
 
     // ============================================================
@@ -244,9 +380,6 @@ struct MainAppView: View {
                 isSurveyPresented = true
             }
             .disabled(appState.isCompletedToday)
-            .sheet(isPresented: $isSurveyPresented) {
-                SurgerySurveyView(appState: appState, authManager: authManager)
-            }
 
             Button("Fetch data") {
                 Task { await self.fetchRecordedData() }
@@ -331,12 +464,16 @@ struct MainAppView: View {
 
     struct HomeView: View {
         let accentColor: Color
+        let onLogout: () -> Void
+        @ObservedObject var appState: AppState
+        @Binding var isSurveyPresented: Bool
 
         private let daysSinceSurgery = 14
         private let patientFirstName = "Username"
-        private let checkInComplete  = false
+        private var checkInComplete: Bool { appState.isCompletedToday }
 
         @State private var appeared = false
+        @State private var showSettings = false
 
         var body: some View {
             NavigationStack {
@@ -373,10 +510,14 @@ struct MainAppView: View {
                                 .offset(y: appeared ? 0 : 16)
                                 .animation(.easeOut(duration: 0.45).delay(0.15), value: appeared)
 
-                            dailyCheckInCard
-                                .opacity(appeared ? 1 : 0)
-                                .offset(y: appeared ? 0 : 16)
-                                .animation(.easeOut(duration: 0.45).delay(0.25), value: appeared)
+                            Button(action: { isSurveyPresented = true }) {
+                                dailyCheckInCard
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(checkInComplete)
+                            .opacity(appeared ? 1 : 0)
+                            .offset(y: appeared ? 0 : 16)
+                            .animation(.easeOut(duration: 0.45).delay(0.25), value: appeared)
 
                             quickStatsRow
                                 .opacity(appeared ? 1 : 0)
@@ -391,6 +532,21 @@ struct MainAppView: View {
                 .navigationTitle("Journey")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbarBackground(Color.clear, for: .navigationBar)
+                .toolbar {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button(action: { showSettings = true }) {
+                            Image(systemName: "person.fill")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundStyle(accentColor)
+                                .frame(width: 36, height: 36)
+                                .glassEffect(.regular.interactive(), in: .circle)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .sheet(isPresented: $showSettings) {
+                    SettingsView(accentColor: Color(red: 0.58, green: 0.48, blue: 0.72), onLogout: onLogout)
+                }
             }
             .onAppear { appeared = true }
         }
@@ -519,77 +675,6 @@ struct MainAppView: View {
             case 30: return "🎉 1 month milestone!"
             case 90: return "🎉 3 month milestone!"
             default: return nil
-            }
-        }
-    }
-
-    // ============================================================
-    // MARK: - Surveys View
-    // ============================================================
-
-    struct SurveysView: View {
-        let accentColor: Color
-        @ObservedObject var appState: AppState
-        @Binding var isSurveyPresented: Bool
-        @EnvironmentObject private var authManager: SecureAuthManager
-
-        var body: some View {
-            NavigationStack {
-                ZStack {
-                    LinearGradient(
-                        colors: [
-                            Color(red: 0.98, green: 0.95, blue: 0.91),
-                            Color(red: 0.95, green: 0.91, blue: 0.88)
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                    .ignoresSafeArea()
-
-                    VStack(spacing: 24) {
-                        ZStack {
-                            Circle()
-                                .fill(accentColor.opacity(0.12))
-                                .frame(width: 90, height: 90)
-                            Image(systemName: "list.clipboard.fill")
-                                .font(.system(size: 36))
-                                .foregroundStyle(accentColor)
-                        }
-
-                        Text(appState.isCompletedToday ? "Survey complete for today!" : "Daily Survey Ready")
-                            .font(.system(size: 22, weight: .bold, design: .rounded))
-                            .foregroundStyle(Color(red: 0.28, green: 0.22, blue: 0.20))
-
-                        Text(appState.isCompletedToday
-                             ? "Great job! Come back tomorrow for your next check-in."
-                             : "Tap below to complete your daily recovery survey.")
-                            .font(.system(size: 15, design: .rounded))
-                            .foregroundStyle(Color(red: 0.50, green: 0.42, blue: 0.39))
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal, 40)
-
-                        Button(action: { isSurveyPresented = true }) {
-                            Text("Start Survey")
-                                .font(.system(size: 16, weight: .semibold, design: .rounded))
-                                .foregroundStyle(.white)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 16)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 16)
-                                        .fill(appState.isCompletedToday ? Color.gray : accentColor)
-                                )
-                        }
-                        .disabled(appState.isCompletedToday)
-                        .padding(.horizontal, 40)
-                        .sheet(isPresented: $isSurveyPresented) {
-                            SurgerySurveyView(appState: appState, authManager: authManager)
-                        }
-
-                        Spacer()
-                    }
-                    .padding(.top, 40)
-                }
-                .navigationTitle("Surveys")
             }
         }
     }
@@ -725,58 +810,6 @@ struct MainAppView: View {
         }()
         let durationMs = Int(p.duration * 1000)
         return "[\(dateStr)] |ID:\(p.id.uuidString)| TYPE:\(p.type) | VAL:\(displayValue) \(p.unit) | UNIX_START:\(unixStartStr) | UNIX_END:\(unixEndStr) | DUR:\(durationMs)ms | SRC:\(p.sourceName) | BID:\(p.bundleID) | DEV:\(p.deviceName ?? "NA") | MOD:\(p.deviceModel ?? "NA") | SW:\(p.softwareVer ?? "NA") | ID:\(p.id.uuidString) | META:{\(metaStr)}"
-    }
-
-    // ============================================================
-    // MARK: - Sensor Views
-    // ============================================================
-
-    private var accelerometerView: some View {
-        SensorCard(
-            title: "Accelerometer",
-            systemImage: "arrow.up.and.down.and.arrow.left.and.right"
-        ) {
-            if let d = motionManager.accelerometerData {
-                valueRow("X", d.acceleration.x)
-                valueRow("Y", d.acceleration.y)
-                valueRow("Z", d.acceleration.z)
-            } else {
-                statusText("No motion detected", color: .illiniOrange)
-            }
-        }
-    }
-
-    private var gyroscopeView: some View {
-        SensorCard(
-            title: "Gyroscope",
-            systemImage: "gyroscope"
-        ) {
-            if let g = motionManager.gyroscopeData {
-                valueRow("X", g.rotationRate.x)
-                valueRow("Y", g.rotationRate.y)
-                valueRow("Z", g.rotationRate.z)
-            } else {
-                statusText("No gyro detected", color: .illiniOrange)
-            }
-        }
-    }
-
-    private func valueRow(_ label: String, _ value: Double) -> some View {
-        HStack {
-            Text(label)
-                .fontWeight(.semibold)
-                .foregroundColor(.illiniBlue)
-            Spacer()
-            Text(String(format: "%.3f", value))
-                .monospacedDigit()
-                .foregroundColor(.secondary)
-        }
-    }
-
-    private func statusText(_ text: String, color: Color) -> some View {
-        Text(text)
-            .font(.subheadline)
-            .foregroundColor(color)
     }
 
     // ============================================================
