@@ -123,20 +123,37 @@ final class SQLiteSaver {
         }
 
         // Performance pragmas
-        //        sqlite3_exec(db, "PRAGMA journal_mode = WAL;",  nil, nil, nil)
-        //        sqlite3_exec(db, "PRAGMA synchronous = NORMAL;", nil, nil, nil)
-        //        sqlite3_exec(db, "PRAGMA foreign_keys = ON;",   nil, nil, nil)
+        
+        // You are already using WAL mode (PRAGMA journal_mode = WAL).
+        // In WAL mode every sqlite3_step() that completes successfully is
+        // already durable on disk — the data is in the WAL file (.wal) and
+        // will be recovered automatically on the next open even if the app
+        // crashes immediately after.
+        sqlite3_exec(db, "PRAGMA journal_mode = WAL;",  nil, nil, nil)
+        // With synchronous = NORMAL SQLite syncs at the most critical moments
+        // — enough to survive a crash, though not a power loss mid-write.
+        sqlite3_exec(db, "PRAGMA synchronous = NORMAL;", nil, nil, nil)
+        sqlite3_exec(db, "PRAGMA foreign_keys = ON;",   nil, nil, nil)
 
         print("✅ Database opened at: \(path)")
     }
     
     func close() {
         guard let db else { return } //means database is already closed.
+        
+        // sqlite3_close does two things:
+        //
+        // 1. Flushes any pending in-memory state to the WAL file
+        // 2. Releases the file lock so other processes can access the db
+        //
+        // It does not move data from disk to some safer place — the data is
+        // already on disk after each successful sqlite3_step.
+        //
         sqlite3_close(db)
         self.db = nil
         print("🔒 Database closed")
         
-        //deleteWALFiles()  // then safe to delete
+        deleteWALFiles()  // then safe to delete
     }
     
     // MARK: - Helpers
@@ -147,8 +164,8 @@ final class SQLiteSaver {
             .appendingPathComponent(databaseURL.lastPathComponent + "-shm")
         let walURL = databaseURL.deletingLastPathComponent()
             .appendingPathComponent(databaseURL.lastPathComponent + "-wal")
-        print(shmURL)
-        print(walURL)
+        // print(shmURL)
+        // print(walURL)
 
         for url in [shmURL, walURL] {
             do {
@@ -160,6 +177,10 @@ final class SQLiteSaver {
                 print("❌ Failed to delete \(url.lastPathComponent): \(error)")
             }
         }
+        
+        //Todo: We should delete any remaining WAL files?
+        //  Think, we should open all the related SQL files to make sure
+        //  The WAL's are merged?
     }
 
     func lastError() -> String {
@@ -228,6 +249,8 @@ final class SQLiteSaver {
                     if db == nil {
                         //means database is not open.
                         open()
+                    }else{
+                        print("DB: db already open, \(self.databaseURL.lastPathComponent)")
                     }
 
                     insertData(timestamp: sample.timestamp, dataType: sample.dataType, blob: sample.blob)
