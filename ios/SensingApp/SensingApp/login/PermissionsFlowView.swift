@@ -67,15 +67,18 @@ import SensorKit
 // MARK: - Permission Model
 
 enum JourneyPermission: CaseIterable, Identifiable {
-    case motion, location, sensorKit, notifications, health
-
+    
+    //disable sensorkit for now
+    //case motion, location, sensorKit, notifications, health
+    case motion, location, notifications, health
+    
     var id: Self { self }
 
     var icon: String {
         switch self {
         case .motion:        return "figure.walk.motion"
         case .location:      return "location.fill"
-        case .sensorKit:     return "iphone.radiowaves.left.and.right"
+        // case .sensorKit:     return "iphone.radiowaves.left.and.right"
         case .notifications: return "bell.fill"
         case .health:        return "heart.fill"
         }
@@ -85,7 +88,7 @@ enum JourneyPermission: CaseIterable, Identifiable {
         switch self {
         case .motion:        return Color(red: 0.80, green: 0.65, blue: 0.58)
         case .location:      return Color(red: 0.42, green: 0.62, blue: 0.55)
-        case .sensorKit:     return Color(red: 0.38, green: 0.55, blue: 0.75)
+        // case .sensorKit:     return Color(red: 0.38, green: 0.55, blue: 0.75)
         case .notifications: return Color(red: 0.55, green: 0.48, blue: 0.75)
         case .health:        return Color(red: 0.80, green: 0.35, blue: 0.38)
         }
@@ -95,7 +98,7 @@ enum JourneyPermission: CaseIterable, Identifiable {
         switch self {
         case .motion:        return "Motion & Activity"
         case .location:      return "Location Access"
-        case .sensorKit:     return "Device Sensors"
+        // case .sensorKit:     return "Device Sensors"
         case .notifications: return "Reminders"
         case .health:        return "Health Data"
         }
@@ -105,7 +108,7 @@ enum JourneyPermission: CaseIterable, Identifiable {
         switch self {
         case .motion:        return "Track your movement patterns"
         case .location:      return "Understand your daily activity"
-        case .sensorKit:     return "Capture device signals"
+        // case .sensorKit:     return "Capture device signals"
         case .notifications: return "Stay on top of your recovery"
         case .health:        return "Connect with your health metrics"
         }
@@ -117,8 +120,10 @@ enum JourneyPermission: CaseIterable, Identifiable {
             return "Your phone's motion sensors help us track walking patterns and physical activity during your recovery, giving your care team valuable insight into your progress."
         case .location:
             return "Location data helps us understand how much you're moving around day-to-day. This is used only for research purposes and is never shared outside the study."
+        /*
         case .sensorKit:
             return "Device usage patterns, motion and activity sensors, and health and biometric sensors help us detect subtle behavioral changes that may reflect your recovery progress. All data is anonymized and used for research only."
+        */
         case .notifications:
             return "We'll send gentle daily reminders for check-ins and surveys so you are always aware of what to expect."
         case .health:
@@ -343,7 +348,8 @@ struct PermissionsFlowView: View {
 
         case .location:
             return locationManager.authorizationStatus == .authorizedAlways
-
+        
+        /*
         case .sensorKit:
             // SensorKit cannot be authorized on the simulator — always skip
             #if targetEnvironment(simulator)
@@ -352,7 +358,8 @@ struct PermissionsFlowView: View {
             let reader = SRSensorReader(sensor: .ambientLightSensor)
             return reader.authorizationStatus == .authorized
             #endif
-
+         */
+            
         case .notifications:
             return UserDefaults.standard.bool(forKey: "journey_notifications_authorized")
 
@@ -386,7 +393,7 @@ struct PermissionsFlowView: View {
             switch permission {
             case .motion:        granted = await requestMotion()
             case .location:      granted = await requestLocation()
-            case .sensorKit:     granted = await requestSensorKit()
+            // case .sensorKit:     granted = await requestSensorKit()
             case .notifications: granted = await requestNotifications()
             case .health:        granted = await requestHealth()
             }
@@ -505,13 +512,13 @@ struct PermissionsFlowView: View {
                 onDenied:     { continuation.resume(returning: false) }
             )
 
-            SRSensorReader.requestAuthorization(sensors: sensors) { error in
-                if let error = error {
-                    print("SensorKit auth error: \(error)")
-                    continuation.resume(returning: false)
-                }
-                // Actual result comes via delegate — don't resume here
-            }
+            //            SRSensorReader.requestAuthorization(sensors: sensors) { error in
+            //                if let error = error {
+            //                    print("SensorKit auth error: \(error)")
+            //                    continuation.resume(returning: false)
+            //                }
+            //                // Actual result comes via delegate — don't resume here
+            //            }
         }
         #endif
     }

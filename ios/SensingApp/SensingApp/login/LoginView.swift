@@ -256,6 +256,7 @@ struct AuthLoginView: View {
 
     // MARK: - Reinstall Detection
     private func detectReinstall() {
+        //Akarsh-TODO: Needs some comment
         let sentinel = KeychainManager.shared.read(key: installSentinelKey)
         if sentinel == nil {
             permissionsComplete = false
@@ -284,6 +285,7 @@ struct AuthLoginView: View {
         let locationOK = CLLocationManager().authorizationStatus == .authorizedAlways
 
         // Health — check actual authorization status, not just device availability
+        // AkarshTodo: We want more than step count?
         var healthOK = false
         if HKHealthStore.isHealthDataAvailable() {
             let store    = HKHealthStore()
@@ -299,6 +301,7 @@ struct AuthLoginView: View {
         }
 
         // Async checks — SensorKit and Notifications
+        // AkarshTodo: Why is this a Task??
         Task {
             // SensorKit — not available on simulator, skip gracefully
             #if targetEnvironment(simulator)
