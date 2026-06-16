@@ -75,6 +75,17 @@ class AcclerometerRecorder {
                 let accel = data.acceleration
                 let unixTime = data.startDate.timeIntervalSince1970 * 1000
                 //print("\(unixTime),\(accel.x),\(accel.y),\(accel.z)")
+                
+                //sqlite write
+                SQLiteSaver.shared.addRow(
+                    timestamp: unixTime,
+                    dataType: DataType.accelerometer,
+                    blob: accelToBlob(x: accel.x, y: accel.y, z: accel.z),
+                    counter: -1
+                )
+                
+                
+                //csv file write
                 writer.addRowStr(rowOfData: "\(unixTime),\(accel.x),\(accel.y),\(accel.z)")
             }
         }

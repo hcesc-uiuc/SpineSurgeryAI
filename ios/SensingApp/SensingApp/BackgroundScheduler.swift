@@ -7,6 +7,7 @@
 
 import BackgroundTasks
 import Network
+import SensorKit
 
 class BackgroundScheduler {
     
@@ -31,6 +32,15 @@ class BackgroundScheduler {
         
         //check healthkit authorization
         HealthkitRecorder.shared.getHealthKitData()
+        
+        
+        //check sensorkit authorization
+        let authKey = "sk_authorization_status"
+        let raw = UserDefaults.standard.integer(forKey: authKey)
+        let authorizationStatus = SRAuthorizationStatus(rawValue: raw) ?? .notDetermined
+        if authorizationStatus == .authorized{
+            performSensorkitFetch()
+        }
         
         let now = Date()
         UserDefaults.standard.set(now, forKey: "lastSensorDateSaveTime")

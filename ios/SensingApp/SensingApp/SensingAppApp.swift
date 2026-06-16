@@ -14,7 +14,7 @@ struct SensingAppApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @StateObject private var appState = AppState()
     @StateObject private var locationManager = AdaptiveLocationManager.shared
-    @StateObject private var sensorKitManager = SensorKitManager()
+    // @StateObject private var sensorKitManager = SensorKitManager()
     
     // Makes Authorization Pathway consistent for all data files/types
     @StateObject private var authManager = SecureAuthManager()
@@ -28,7 +28,8 @@ struct SensingAppApp: App {
 
         // Notification and SensorKit auth are requested by PermissionsFlowView.
         // Starting them here fires the iOS dialog before the onboarding cards appear.
-        
+        // SurveyNotificationManager.shared.requestPermission()
+        // SensorKitAccelerometerFetcher.shared.startRecordingWithAuthorizationCheck()
         
         //        BackgroundScheduler.shared.registerBackgroundTasks()
         //        BackgroundScheduler.shared.scheduleBGProcessingTask()
@@ -46,6 +47,7 @@ struct SensingAppApp: App {
                 .environmentObject(authManager)
                 .onAppear {
                     // SensorKit auth is owned by PermissionsFlowView.
+                    // sensorKitManager.requestAuthorization()
                     SurveyNotificationManager.shared
                         .scheduleDailyReminder(
                             hour: 20,
@@ -89,6 +91,10 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         //This one handles all the sensor data saving and threading
         SQLiteSaver.shared.configure(capacity: 10000, flushAfterThisCount: 3000)        
         _ = SQLiteSaver.shared   // now fully configured, consumer started
+        
+        //This will start recording the sensor data if
+        //authorization is already available
+        SensorKitAccelerometerFetcher.shared.startRecordingWithAuthorizationCheck()
         
         registerForPushNotifications()
         // Start background location updates immediately
