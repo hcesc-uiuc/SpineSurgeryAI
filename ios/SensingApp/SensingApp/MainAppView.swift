@@ -219,7 +219,7 @@ struct MainAppView: View {
             let sensorKitOK  = sensorReader.authorizationStatus == .authorized
             #endif
 
-            // Notifications — sync the UserDefaults flag so computeStartIndex()
+            // Notifications — sync the UserDefaults flag so PermissionsFlowView
             // only shows the notifications card when it's actually revoked.
             let settings        = await UNUserNotificationCenter.current().notificationSettings()
             let notificationsOK = settings.authorizationStatus == .authorized

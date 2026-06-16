@@ -260,7 +260,6 @@ struct AuthLoginView: View {
         let sentinel = KeychainManager.shared.read(key: installSentinelKey)
         if sentinel == nil {
             permissionsComplete = false
-            UserDefaults.standard.removeObject(forKey: "journey_permissions_ever_completed")
             KeychainManager.shared.save(
                 key:  installSentinelKey,
                 data: Data("installed".utf8)
@@ -311,7 +310,7 @@ struct AuthLoginView: View {
             let sensorKitOK  = sensorReader.authorizationStatus == .authorized
             #endif
 
-            // Notifications — sync the UserDefaults flag so computeStartIndex()
+            // Notifications — sync the UserDefaults flag so PermissionsFlowView
             // only shows the notifications card when it's actually revoked.
             let settings        = await UNUserNotificationCenter.current().notificationSettings()
             let notificationsOK = settings.authorizationStatus == .authorized

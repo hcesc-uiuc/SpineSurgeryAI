@@ -53,8 +53,9 @@ import SensorKit
 // PERMISSION PERSISTENCE:
 //   permissionsComplete is AppStorage (UserDefaults). On reinstall it may
 //   survive — see AuthLoginView.detectReinstall() for Keychain sentinel fix.
-//   computeStartIndex() skips already-granted permissions so returning users
-//   only see cards for what they still need to grant.
+//   The flow always shows only cards for permissions that are not currently
+//   granted; a genuinely fresh device (all five notDetermined) shows all 5.
+//   If all permissions are already granted on entry, completes immediately.
 //
 // SIMULATOR NOTE:
 //   SensorKit cannot be authorized on the iOS simulator — there is no
@@ -132,12 +133,6 @@ enum JourneyPermission: CaseIterable, Identifiable {
     }
 
     var buttonLabel: String { "Allow Access" }
-
-    var stepLabel: String {
-        let all = JourneyPermission.allCases
-        let index = all.firstIndex(of: self)! + 1
-        return "Step \(index) of \(all.count)"
-    }
 }
 
 // MARK: - Permissions Flow Coordinator
@@ -155,16 +150,9 @@ struct PermissionsFlowView: View {
     @State private var showingAlwaysLocationPrompt = false
     @State private var locationRequester: LocationPermissionRequester?
 
-    private let permissions     = JourneyPermission.allCases
+    @State private var permissions: [JourneyPermission] = []
     private let locationManager = CLLocationManager()
     private let healthStore     = HKHealthStore()
-
-    // True until the user taps through all 5 cards for the first time.
-    // On first run we never skip cards — every card is shown regardless of
-    // prior auth state, so nothing gets silently bypassed on a new device.
-    private var isFirstRun: Bool {
-        !UserDefaults.standard.bool(forKey: "journey_permissions_ever_completed")
-    }
 
     var onComplete: () -> Void
 
@@ -182,6 +170,9 @@ struct PermissionsFlowView: View {
 
             VStack(spacing: 0) {
                 progressDots
+                    // A single dot carries no information — hide it when only
+                    // one card is shown, keeping opacity so layout doesn't shift.
+                    .opacity(permissions.count > 1 ? 1 : 0)
                     .padding(.top, 60)
                     .padding(.bottom, 32)
 
@@ -198,15 +189,16 @@ struct PermissionsFlowView: View {
         }
         .preferredColorScheme(.light)
         .onAppear {
-            let start = computeStartIndex()
-            // All permissions already granted on re-entry — complete without showing any card.
-            if start >= permissions.count {
-                UserDefaults.standard.set(true, forKey: "journey_permissions_ever_completed")
+            // Build the filtered list: only permissions that are not currently granted.
+            // A genuinely fresh device will have all 5; a returning user with some revoked
+            // will see only the cards they still need to grant.
+            permissions = JourneyPermission.allCases.filter { !isAlreadyGranted($0) }
+            if permissions.isEmpty {
                 permissionsComplete = true
                 onComplete()
                 return
             }
-            currentIndex = start
+            currentIndex = 0
             triggerCardAppear()
         }
         .alert("Permission Required", isPresented: $showingDeniedAlert) {
@@ -235,20 +227,6 @@ struct PermissionsFlowView: View {
             .interactiveDismissDisabled(true)
             .preferredColorScheme(.light)
         }
-    }
-
-    // MARK: - Compute Start Index
-    // Returns the index of the first permission that still needs granting.
-    // Returns permissions.count (sentinel) when all are already granted.
-    // On first run, always returns 0 so every card is shown.
-    private func computeStartIndex() -> Int {
-        if isFirstRun { return 0 }
-        for (index, permission) in permissions.enumerated() {
-            if !isAlreadyGranted(permission) {
-                return index
-            }
-        }
-        return permissions.count
     }
 
     // MARK: - Progress Dots
@@ -288,11 +266,15 @@ struct PermissionsFlowView: View {
             }
 
             VStack(spacing: 10) {
-                Text(permission.stepLabel)
-                    .font(.system(size: 12, weight: .semibold, design: .rounded))
-                    .foregroundStyle(Color(red: 0.55, green: 0.47, blue: 0.44))
-                    .tracking(1.2)
-                    .textCase(.uppercase)
+                // Hide the step counter when only a single card is shown
+                // (e.g. one revoked permission) — "Step 1 of 1" is noise.
+                if permissions.count > 1 {
+                    Text("Step \(currentIndex + 1) of \(permissions.count)")
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .foregroundStyle(Color(red: 0.55, green: 0.47, blue: 0.44))
+                        .tracking(1.2)
+                        .textCase(.uppercase)
+                }
 
                 Text(permission.title)
                     .font(.system(size: 28, weight: .bold, design: .rounded))
@@ -418,16 +400,13 @@ struct PermissionsFlowView: View {
         cardAppeared = false
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
             var next = currentIndex + 1
-            // On re-entry (permission was revoked), skip cards that are still granted
-            // so we only prompt for the one that needs fixing. On first run, show every
-            // card even if the permission was previously granted on this device.
-            if !isFirstRun {
-                while next < permissions.count && isAlreadyGranted(permissions[next]) {
-                    next += 1
-                }
+            // Safety skip: if a permission became granted mid-flow (e.g. the user
+            // already granted it in another path), skip it so we don't show a
+            // redundant card.
+            while next < permissions.count && isAlreadyGranted(permissions[next]) {
+                next += 1
             }
             if next >= permissions.count {
-                UserDefaults.standard.set(true, forKey: "journey_permissions_ever_completed")
                 permissionsComplete = true
                 onComplete()
             } else {
@@ -465,8 +444,13 @@ struct PermissionsFlowView: View {
     }
 
     /// Location — requires authorizedAlways (not WhenInUse).
-    /// Shows the iOS dialog for .notDetermined status and returns true only for Always.
-    /// WhenInUse and denied are handled by requestCurrentPermission() after this returns false.
+    /// For .notDetermined status, requests WhenInUse (NOT Always) so that iOS
+    /// reports a truthful status after the dialog: the user always lands in
+    /// WhenInUse, which triggers AlwaysLocationPromptView in requestCurrentPermission().
+    /// Requesting Always from .notDetermined yields provisional Always — iOS reports
+    /// .authorizedAlways even when the user picked "While Using App" — which previously
+    /// caused the upgrade sheet to be skipped entirely.
+    /// Denied is handled by requestCurrentPermission() after this returns false.
     private func requestLocation() async -> Bool {
         let status = CLLocationManager().authorizationStatus
         if status == .authorizedAlways  { return true  }
@@ -763,7 +747,15 @@ class LocationPermissionRequester: NSObject, CLLocationManagerDelegate {
             case .denied, .restricted:
                 self.resume(false)
             case .notDetermined:
-                self.manager.requestAlwaysAuthorization()
+                // Request WhenInUse (not Always) so iOS reports a truthful status.
+                // Requesting Always from .notDetermined yields provisional Always —
+                // authorizationStatus reports .authorizedAlways even when the user
+                // picked "Allow While Using App" — which skipped AlwaysLocationPromptView.
+                // With WhenInUse, the user always lands in .authorizedWhenInUse, which
+                // requestCurrentPermission() detects and routes through the upgrade sheet.
+                // The sheet's "I've updated it" check (== .authorizedAlways) is then only
+                // satisfied by a real Settings change.
+                self.manager.requestWhenInUseAuthorization()
             @unknown default:
                 self.resume(false)
             }
