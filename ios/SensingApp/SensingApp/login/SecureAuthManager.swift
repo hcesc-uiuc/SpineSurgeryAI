@@ -73,6 +73,12 @@ private struct BackendErrorResponse: Decodable {
     let error: String
 }
 
+// MARK: - Patient Profile Response
+private struct PatientProfileResponse: Decodable {
+    let full_name: String?
+    let surgery_date: String?
+}
+
 // MARK: - Token Response Models
 
 struct AuthTokenResponse: Codable {
@@ -168,6 +174,11 @@ class SecureAuthManager: ObservableObject {
     //
     // Throws: AuthError
     func login(identityToken: String, fullName: String?, appleUserID: String) async throws {
+
+        // Persist display name for both demo and real paths — runs before any branch.
+        if let fullName, !fullName.isEmpty {
+            UserDefaults.standard.set(fullName, forKey: "journey_display_name")
+        }
 
         // ── ⚠️ DEMO MODE BLOCK — DELETE BEFORE SHIPPING ─────────────
         if demoMode {
@@ -387,6 +398,31 @@ class SecureAuthManager: ObservableObject {
         UserDefaults.standard.removeObject(forKey: "demo_session_active")
         clearTokens()
         isAuthenticated = false
+    }
+
+    // MARK: - Patient Profile
+    //
+    // Fetches the patient's display name from the backend and caches it in
+    // UserDefaults ("journey_display_name") so the Home/Settings views
+    // show the correct name. Fails silently — demo mode returns immediately,
+    // and any network/decode error leaves the cached value untouched.
+    //
+    // ENDPOINT CONTRACT (backend team — not yet implemented server-side):
+    //   GET {baseURL}/api/patient/profile
+    //   Authorization: Bearer <access token>
+    //   200 → { "full_name": "Jane Doe", "surgery_date": "2026-06-02" }
+    //   Only "full_name" is consumed here; "surgery_date" is ignored.
+    func refreshPatientProfileCache() async {
+        guard !demoMode else { return }
+        do {
+            let data = try await authenticatedRequest(endpoint: "/api/patient/profile")
+            let profile = try JSONDecoder().decode(PatientProfileResponse.self, from: data)
+            if let name = profile.full_name, !name.isEmpty {
+                UserDefaults.standard.set(name, forKey: "journey_display_name")
+            }
+        } catch {
+            print("refreshPatientProfileCache: \(error)")
+        }
     }
 
     // MARK: - Private Helpers

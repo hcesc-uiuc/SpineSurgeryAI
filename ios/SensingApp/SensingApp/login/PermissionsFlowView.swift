@@ -203,9 +203,9 @@ struct PermissionsFlowView: View {
         }
         .alert("Permission Required", isPresented: $showingDeniedAlert) {
             Button("Open Settings") { openAppSettings(for: permissions[currentIndex]) }
-            Button("Try Again")     { requestCurrentPermission() }
+            Button("Not Now", role: .cancel) { }
         } message: {
-            Text("Journey needs \(deniedPermissionName) access to continue. Please allow it in Settings.")
+            Text("Journey needs \(deniedPermissionName) access to continue. Please enable it in Settings, then return to the app.")
         }
         .sheet(isPresented: $showingAlwaysLocationPrompt) {
             AlwaysLocationPromptView(
@@ -546,6 +546,7 @@ struct PermissionsFlowView: View {
             HKObjectType.quantityType(forIdentifier: .heartRate)!,
             HKObjectType.quantityType(forIdentifier: .distanceWalkingRunning)!,
             HKObjectType.quantityType(forIdentifier: .activeEnergyBurned)!,
+            HKObjectType.quantityType(forIdentifier: .flightsClimbed)!,
             HKObjectType.categoryType(forIdentifier: .sleepAnalysis)!
         ]
 
