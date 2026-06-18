@@ -33,6 +33,42 @@ class AcclerometerRecorder {
         }
     }
     
+    func simulateAccelerometerDataStroage() {
+        let now = Date()
+        let past = now.addingTimeInterval(-3600)
+        
+        //----
+        var counter = 0
+        let writer = PreallocatedCSVBuffer(filename: "accelerometer_demo_\(currentTimestampString()).csv", capacity: 100000)
+        if let dataList = recorder.accelerometerData(from: past, to: now) {
+            for case let data as CMRecordedAccelerometerData in dataList {
+                let accel = data.acceleration
+                let unixTime = data.startDate.timeIntervalSince1970 * 1000
+                //print("\(unixTime),\(accel.x),\(accel.y),\(accel.z)")
+                
+                //sqlite write
+                
+                SQLiteSaver.shared.addRow(
+                    timestamp: unixTime,
+                    dataType: DataType.accelerometer,
+                    blob: accelToBlob(x: accel.x, y: accel.y, z: accel.z),
+                    counter: counter
+                )
+                 
+                
+                
+                //csv file write
+                writer.addRowStr(rowOfData: "\(unixTime),\(accel.x),\(accel.y),\(accel.z)")
+                
+                //
+                counter = counter + 1
+            }
+        }
+        writer.flush()
+        writer.closeFile()
+        
+    }
+    
     func fetchAndSaveRecordedAcclerometerData() {
         let now = Date()
         let key = "lastAccelerometerSaveDate"

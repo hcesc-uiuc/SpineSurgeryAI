@@ -395,6 +395,10 @@ struct MainAppView: View {
                 }
             }.padding(.top, 20)
             
+            Button("Insert 1hr Accel to sqlite/csv") {
+                AcclerometerRecorder.shared.simulateAccelerometerDataStroage()
+            }.padding(.top, 20)
+            
             Button("Insert into SQLite db") {
                 Task {
                     //Task will happen asynchronously

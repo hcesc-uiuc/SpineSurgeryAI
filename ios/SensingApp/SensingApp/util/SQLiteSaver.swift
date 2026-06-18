@@ -23,6 +23,7 @@ struct SensorSample {
     var timestamp: Double
     var dataType:  DataType
     var blob:      [UInt8]
+    var counter: Int
 }
 
 final class SQLiteSaver {
@@ -37,8 +38,10 @@ final class SQLiteSaver {
     private var databaseURL: URL = URL(fileURLWithPath: "")
     private(set) var db: OpaquePointer?
     private var index = 0
-    private var capacity: Int = 10000
-    private var flushAfterThisCount: Int = 10000
+    //100Hz will fill for 3600 seconds=60 minutes of data. 100*3600 = 360,000
+    //We sometimes have to write hours of cached data.
+    private var capacity: Int = 60000
+    private var flushAfterThisCount: Int = 60000
     private let maxFileSizeMB: Double = 5  // 👈 change this threshold
     private let accessQueue = DispatchQueue(label: "com.sensingapp.sqlitesaver")
     
@@ -49,6 +52,8 @@ final class SQLiteSaver {
     // semaphoreFull  — how many slots are ready to be consumed
     private let semaphoreEmpty: DispatchSemaphore
     private let semaphoreFull:  DispatchSemaphore
+    private var semaphoreEmptyCount: Int
+    private var semaphoreFullCount: Int
     
     func configure(capacity: Int, flushAfterThisCount: Int) {
         self.capacity    = capacity
@@ -74,6 +79,8 @@ final class SQLiteSaver {
         //                   so consumer can take from the queue. Else, block
         self.semaphoreEmpty = DispatchSemaphore(value: self.capacity) // all slots free
         self.semaphoreFull  = DispatchSemaphore(value: 0)        // nothing to consume yet
+        self.semaphoreEmptyCount = self.capacity
+        self.semaphoreFullCount = 0
         
         //  if !fileManager.fileExists(atPath: self.databaseURL.path){
         //       createNewDatabaseFile()
@@ -190,36 +197,29 @@ final class SQLiteSaver {
 
     /// Add one row — thread-safe via serial queue
     func addRow(timestamp: Double, dataType: DataType, blob: [UInt8], counter:Int = 0) {
-        //sync or async
-        //--- sync is here to wait
-        //--- async will not wait
-        //------- sync is needed if we close the database in one call
-        //------- and trying to write it in another call
-        //------- Note that we will call addrow in a loop.
-        //------- The order insertion can be different from the order of call
-        //------- "queue.sync" will ensure that from different threads, we will be protected
-        //
+        // Wait OUTSIDE the serial queue to avoid priority inversion.
+        // If semaphoreEmpty.wait() were inside accessQueue.sync, a high-QoS
+        // caller would hold the queue lock while blocking on the utility-QoS
+        // consumer to signal — that is a priority inversion.
+        // By waiting first, we only enter the queue once a slot is guaranteed free.
         
-        //Problem here is to keep the database open or close
-        //
+        semaphoreEmpty.wait()
+        semaphoreEmptyCount = max(0, semaphoreEmptyCount - 1)
+        
         accessQueue.sync {
-            
-            // Wait decreases semaphoreEmpty by 1.
-            // semaphoreEmpty's initial value is circular buffer capacity
-            // if semaphoreEmpty values is zero, the wait will lock
-            // block if buffer is full — waits for consumer to free a slot
-            semaphoreEmpty.wait()
-            
-            //figure out how add three values
-            _ = buffer.enqueue(timestamp: timestamp, dataType: dataType, blob: blob)
-            
-            //Debug
+            _ = buffer.enqueue(timestamp: timestamp, dataType: dataType, blob: blob, counter: counter)
             print("Producer: Queuing data #\(counter)")
-            
-            //signal will increase semaphoreFull
-            //so any wait will be unlocked.-1
-            semaphoreFull.signal()      // tell consumer a new sample is ready
         }
+        
+        semaphoreFullCount = min(capacity, semaphoreFullCount + 1)
+        semaphoreFull.signal()
+        
+        // "semaphoreEmpty": non-zero means there is some slots empty in the queue,
+        //                   so producers can add to queue. Else, block.
+        //                   wait decreases value, signal increase values
+        // "semaphoreFull": non-zero means there is some slots full in the queue,
+        //                   so consumer can take from the queue. Else, block
+        
     }
     
     
@@ -233,37 +233,75 @@ final class SQLiteSaver {
                 //This unblocked by producer (i.e., 'addRow')
                 //
                 //Waits until the queue has something in it)
-                self.semaphoreFull.wait()
                 
-                let sample = self.accessQueue.sync {
-                    self.buffer.dequeue()
+                //note everytime a new producer
+                //call happened, semaphoreFull incremented.
+                //We will inititally wait if queue is empty
+                self.semaphoreFull.wait()
+                semaphoreFullCount = max(0, semaphoreFullCount - 1)
+                
+                var sampleReadFromQueue = 0
+                
+                //we are clearing out the buffer entirely.
+                //Otherwise, it becomes slow when buffer is full
+                //One sample is consumed, one is filled producers.
+                //There is a lot lock unlock happening at the same
+                //time.
+                
+                
+                while self.buffer.isEmpty == false {
+                    
+                    let sample = self.accessQueue.sync {
+                        self.buffer.dequeue()
+                    }
+                    
+                    // sample will be nil if buffer is empty
+                    // (See code below)
+                    if let sample {
+                        
+                        if db == nil {
+                            //means database is not open.
+                            open()
+                        }
+                        
+                        //Debug
+                        print("Consumer: DeQueuing data #\(sample.counter)")
+                        insertData(timestamp: sample.timestamp, dataType: sample.dataType, blob: sample.blob)
+                        index += 1
+                        
+                        // auto flush when full
+                        if index == flushAfterThisCount {
+                            flushDataToDb()
+                        }
+                        
+                    }
+                    
+                    sampleReadFromQueue = sampleReadFromQueue + 1
                 }
                 
                 
                 
-                if let sample {
-                    
-                    //Debug
-                    print("Consumer: DeQueuing data")
-                    
-                    if db == nil {
-                        //means database is not open.
-                        open()
-                    }else{
-                        print("DB: db already open, \(self.databaseURL.lastPathComponent)")
+                //signals is not full anymore
+                for _ in 0..<sampleReadFromQueue {
+                    // if i < sampleReadFromQueue - 1{
+                    //
+                    // }
+                    if semaphoreFullCount > 0 {
+                        //This is because when zero, it will the outer wait will stop
+                        //This consumer.
+                        self.semaphoreFull.wait()
+                        semaphoreFullCount = max(0, semaphoreFullCount - 1)
                     }
 
-                    insertData(timestamp: sample.timestamp, dataType: sample.dataType, blob: sample.blob)
-                    index += 1
-                    
-                    // auto flush when full
-                    if index == flushAfterThisCount {
-                        flushDataToDb()
-                    }
-                    
-                    //signals is not full anymore
+                    //calling it the number of time we got a sample.
+                    semaphoreEmptyCount = min(capacity, semaphoreEmptyCount + 1)
                     self.semaphoreEmpty.signal()
                 }
+                print("sampleReadFromQueue: \(sampleReadFromQueue)")
+                print("bufferElementCount: \(buffer.count)")
+                print("semaphoreFullCount: \(semaphoreFullCount)")
+                print("semaphoreEmptyCount: \(semaphoreEmptyCount)")
+                print("Capacity: \(capacity)" )
             }
         }
         thread.name = "com.sensingapp.consumer"
@@ -327,24 +365,25 @@ final class CircularBufferSQLite {
     private var buffer: [SensorSample]
     private var readIndex  = 0
     private var writeIndex = 0
-    private var count      = 0
+    public var count      = 0
     let capacity: Int
     
     //Todo: pre-allocate the buffer for bytes
  
     init(capacity: Int) {
         self.capacity = capacity
-        self.buffer   = Array(repeating: SensorSample(timestamp: -1, dataType: .dummy, blob: [UInt8]()), count: capacity)
+        self.buffer   = Array(repeating: SensorSample(timestamp: -1, dataType: .dummy, blob: [UInt8](), counter: 0), count: capacity)
     }
  
     var isEmpty: Bool { count == 0 }
     var isFull:  Bool { count == capacity }
  
-    func enqueue(timestamp: Double, dataType: DataType, blob: [UInt8]) -> Bool {
+    func enqueue(timestamp: Double, dataType: DataType, blob: [UInt8], counter: Int) -> Bool {
         guard !isFull else { return false }
         buffer[writeIndex].timestamp = timestamp
         buffer[writeIndex].dataType = dataType
         buffer[writeIndex].blob = blob
+        buffer[writeIndex].counter = counter
         writeIndex = (writeIndex + 1) % capacity
         count += 1
         return true

@@ -39,6 +39,7 @@ class BackgroundScheduler {
         let raw = UserDefaults.standard.integer(forKey: authKey)
         let authorizationStatus = SRAuthorizationStatus(rawValue: raw) ?? .notDetermined
         if authorizationStatus == .authorized{
+            print("SensorKit is authorize. We are fetching data")
             performSensorkitFetch()
         }
         
