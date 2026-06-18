@@ -841,11 +841,47 @@ struct MainAppView: View {
     // MARK: - HealthKit
     // ============================================================
 
+    private func getHealthKitData() {
+        let daysRequested = 1
+        //let metricsRequested: Set<SupportedMetric> = [.steps] // Empty = All
+        let metricsRequested: Set<SupportedMetric> = [] // Empty = All
+        
+        print("🚀 Requesting \(daysRequested)-day historical refresh...")
+        
+        HKManager.refreshWithNewRange(days: 1, types:metricsRequested) { data in
+            
+            print("Success! Data received. Len: \(data.count), Days:\(daysRequested), Types:\(metricsRequested)")
+                
+                //here I need to open a file
+                //This will create a file for the current day
+                
+                let hkDataLogger = HKDataLogger()
+                let isFileOpenSuccesful = hkDataLogger.open()
+                if isFileOpenSuccesful == true {
+                    for (index, point) in data.enumerated() {
+                        let hkDataPointString = formatRawString(
+                            point,
+                            unixStartStr: String(Int(point.startDate.timeIntervalSince1970)),
+                            unixEndStr: String(Int(point.endDate.timeIntervalSince1970))
+                        )
+                        print("\(index) - \(hkDataPointString)")
+                        print("")
+                        
+                        hkDataLogger.writeLine(hkDataPointString)
+                    }
+                    hkDataLogger.close()
+                }
+            
+                    //close a file here
+            
+            }
+        }
+    
     func formatRawString(_ p: HealthKitManager.RawDataPoint, unixStartStr: String, unixEndStr: String) -> String {
         let dateStr      = p.startDate.formatted(.dateTime.month().day().hour().minute().second())
         let displayValue = p.value ?? 0.0
         let metaStr: String = {
-            guard let md = p.metadata as? [AnyHashable: Any] else { return "" }
+            guard let md = p.metadata else { return "" }
             return md.map { key, value in
                 "\(String(describing: key)):\(String(describing: value))"
             }
