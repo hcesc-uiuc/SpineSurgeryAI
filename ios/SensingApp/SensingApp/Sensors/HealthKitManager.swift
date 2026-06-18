@@ -1,3 +1,11 @@
+//
+//  HealthKitManager.swift
+//  SensingApp
+//
+//  Created by Marcus Lam on 18/6/2026.
+//
+
+
 import Foundation
 import HealthKit
 internal import Combine
