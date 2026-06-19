@@ -36,12 +36,41 @@ final class SQLiteSaver {
     //
     static let shared = SQLiteSaver()
     private var databaseURL: URL = URL(fileURLWithPath: "")
+    /*
+     private(set): anyone can read db, only this type can write it.
+     External code can do `pipeline.db` but not `pipeline.db = something`.
+
+     OpaquePointer: Swift's wrapper for a C pointer to an unknown type.
+     SQLite is a C library — its sqlite3* handle points to an internal
+     struct Swift has no definition for. Rather than importing it as a
+     real type, Swift holds the address as OpaquePointer ("I have a
+     pointer, I don't know what's inside"). You pass it to C functions
+     like sqlite3_exec(db, ...) and they know what to do with it.
+
+     ?: Optional — the handle is nil before sqlite3_open succeeds.
+     If opening fails you hold nil instead of a garbage pointer.
+     Forces the rest of the code to check non-nil before using it.
+     */
     private(set) var db: OpaquePointer?
+    /*
+     OpaquePointer?: holds the compiled SQL statement handle returned
+     by sqlite3_prepare_v2. Like db, it's a C pointer to an internal
+     SQLite struct Swift can't see into — so OpaquePointer again.
+
+     nil until sqlite3_prepare_v2 runs successfully. Once prepared,
+     you reuse this same compiled statement on every insert by calling
+     sqlite3_reset(insertStmt) instead of re-preparing each time.
+
+     Must be finalized with sqlite3_finalize(insertStmt) in deinit
+     to avoid a memory leak — SQLite holds resources for it until
+     you explicitly release it.
+     */
+    var insertStmt: OpaquePointer?
     private var index = 0
     //100Hz will fill for 3600 seconds=60 minutes of data. 100*3600 = 360,000
     //We sometimes have to write hours of cached data.
-    private var capacity: Int = 60000
-    private var flushAfterThisCount: Int = 60000
+    private var capacity: Int = 120000
+    private var flushAfterThisCount: Int = 120000
     private let maxFileSizeMB: Double = 5  // 👈 change this threshold
     private let accessQueue = DispatchQueue(label: "com.sensingapp.sqlitesaver")
     
@@ -56,8 +85,8 @@ final class SQLiteSaver {
     private var semaphoreFullCount: Int
     
     func configure(capacity: Int, flushAfterThisCount: Int) {
-        self.capacity    = capacity
-        self.flushAfterThisCount = flushAfterThisCount
+        //self.capacity    = capacity
+        //self.flushAfterThisCount = flushAfterThisCount
     }
     
     init() {
@@ -93,7 +122,7 @@ final class SQLiteSaver {
         //We are opening file at the beginning
         //creating all the tables if they do not exist
         open()
-        //defined in an extension
+        //defined in an extension. Only created tables it does not exist
         createTables()
         //
         close()
@@ -115,6 +144,7 @@ final class SQLiteSaver {
         
         open()
         createTables()
+        prepareInsertStatement()
         //close() -- Not closing as this files will be use
     }
     
@@ -141,8 +171,33 @@ final class SQLiteSaver {
         // — enough to survive a crash, though not a power loss mid-write.
         sqlite3_exec(db, "PRAGMA synchronous = NORMAL;", nil, nil, nil)
         sqlite3_exec(db, "PRAGMA foreign_keys = ON;",   nil, nil, nil)
+        
+        
+        /*
+         defer runs its block when the enclosing scope exits — whether
+         that's a normal return, an early return, or a thrown error.
 
+         sqlite3_finalize releases the memory SQLite allocated for the
+         compiled statement. Without it, every call that prepares a
+         statement leaks resources.
+
+         Placing it immediately after sqlite3_prepare_v2 succeeds means
+         you can never forget to clean up — no matter how many early
+         returns or error paths follow, finalize is guaranteed to run.
+         */
+        // defer { sqlite3_finalize(insertStmt) }
+        
         print("✅ Database opened at: \(path)")
+    }
+    
+    func prepareInsertStatement(){
+        let sql = "INSERT INTO data (timestamp, data_type, blob) VALUES (?, ?, ?);"
+        sqlite3_prepare_v2(db, sql, -1, &insertStmt, nil)
+        
+        let rc = sqlite3_exec(db, "BEGIN", nil, nil, nil)
+        if rc != SQLITE_OK {
+            print("❌ BEGIN failed: \(String(cString: sqlite3_errmsg(db)))")
+        }
     }
     
     func close() {
@@ -156,6 +211,7 @@ final class SQLiteSaver {
         // It does not move data from disk to some safer place — the data is
         // already on disk after each successful sqlite3_step.
         //
+        sqlite3_finalize(insertStmt)
         sqlite3_close(db)
         self.db = nil
         print("🔒 Database closed")
@@ -240,14 +296,43 @@ final class SQLiteSaver {
                 self.semaphoreFull.wait()
                 semaphoreFullCount = max(0, semaphoreFullCount - 1)
                 
-                var sampleReadFromQueue = 0
                 
+                let sample = self.accessQueue.sync {
+                    self.buffer.dequeue()
+                }
+                
+                // sample will be nil if buffer is empty
+                // (See code below)
+                if let sample {
+                    
+                    if db == nil {
+                        //means database is not open.
+                        open()
+                        prepareInsertStatement()
+                    }
+                    
+                    //Debug
+                    print("Consumer: DeQueuing data #\(sample.counter), index \(index)")
+                    insertData(timestamp: sample.timestamp, dataType: sample.dataType, blob: sample.blob)
+                    index += 1
+                    
+                    // auto flush when full
+                    if index == flushAfterThisCount {
+                        flushDataToDb()
+                    }
+                    
+                }
+                
+                semaphoreEmptyCount = min(capacity, semaphoreEmptyCount + 1)
+                self.semaphoreEmpty.signal()
+                
+                /*
                 //we are clearing out the buffer entirely.
                 //Otherwise, it becomes slow when buffer is full
                 //One sample is consumed, one is filled producers.
                 //There is a lot lock unlock happening at the same
                 //time.
-                
+                var sampleReadFromQueue = 0
                 
                 while self.buffer.isEmpty == false {
                     
@@ -297,11 +382,14 @@ final class SQLiteSaver {
                     semaphoreEmptyCount = min(capacity, semaphoreEmptyCount + 1)
                     self.semaphoreEmpty.signal()
                 }
-                print("sampleReadFromQueue: \(sampleReadFromQueue)")
+                 print("sampleReadFromQueue: \(sampleReadFromQueue)")
+                */
+                /*
                 print("bufferElementCount: \(buffer.count)")
                 print("semaphoreFullCount: \(semaphoreFullCount)")
                 print("semaphoreEmptyCount: \(semaphoreEmptyCount)")
                 print("Capacity: \(capacity)" )
+                 */
             }
         }
         thread.name = "com.sensingapp.consumer"
@@ -321,6 +409,7 @@ final class SQLiteSaver {
         index = 0 //means no data to flush yet.
         
         // If the filesize is larger than "maxFileSizeMB", we create new file.
+        print("File size \(fileSizeMB(at: self.databaseURL)), \(self.databaseURL.lastPathComponent)")
         if fileSizeMB(at: self.databaseURL) > maxFileSizeMB ||
             forceNewFile == true {
             
@@ -328,11 +417,11 @@ final class SQLiteSaver {
                 print("DB: Starting a new file. Current \(self.databaseURL.lastPathComponent)  file size is too big: \(fileSizeMB(at: self.databaseURL))")
             }
             else{
-                print("DB: Current file is \(self.databaseURL.lastPathComponent)  \(fileSizeMB(at: self.databaseURL)). Force creating a new file.")
+                print("DB: Current file is \(self.databaseURL.lastPathComponent)  \(fileSizeMB(at: self.databaseURL)) MB. Force creating a new file.")
             }
             
             close()
-            createNewDatabaseFile()  // already calls open() + createTables() internally
+            createNewDatabaseFile()  // already calls open() + createTables() + insertPreage internally
         }
     }
 

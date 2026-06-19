@@ -21,6 +21,16 @@ class BackgroundScheduler {
     private init() {}
     
     func startSensorRecording() {
+        
+        //check sensorkit authorization
+        let authKey = "sk_authorization_status"
+        let raw = UserDefaults.standard.integer(forKey: authKey)
+        let authorizationStatus = SRAuthorizationStatus(rawValue: raw) ?? .notDetermined
+        if authorizationStatus == .authorized{
+            print("SensorKit is authorized. We are fetching data")
+            performSensorkitFetch()
+        }
+        
         var someSensorIsActive = false
         if(AcclerometerRecorder.shared.checkAccelerometerAuthorizationStatus() == true){
             // Restart motion recording
@@ -32,16 +42,6 @@ class BackgroundScheduler {
         
         //check healthkit authorization
         HealthkitRecorder.shared.getHealthKitData()
-        
-        
-        //check sensorkit authorization
-        let authKey = "sk_authorization_status"
-        let raw = UserDefaults.standard.integer(forKey: authKey)
-        let authorizationStatus = SRAuthorizationStatus(rawValue: raw) ?? .notDetermined
-        if authorizationStatus == .authorized{
-            print("SensorKit is authorize. We are fetching data")
-            performSensorkitFetch()
-        }
         
         let now = Date()
         UserDefaults.standard.set(now, forKey: "lastSensorDateSaveTime")

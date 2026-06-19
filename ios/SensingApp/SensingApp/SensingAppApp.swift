@@ -94,7 +94,9 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         
         //This will start recording the sensor data if
         //authorization is already available
+        #if !targetEnvironment(simulator)
         SensorKitAccelerometerFetcher.shared.startRecordingWithAuthorizationCheck()
+        #endif
         
         registerForPushNotifications()
         // Start background location updates immediately

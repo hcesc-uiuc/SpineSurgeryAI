@@ -110,10 +110,10 @@ struct MainAppView: View {
             hasStartedCollection = true
             // All permissions have been granted — begin data collection.
             AcclerometerRecorder.shared.startRecording()
-            HealthkitRecorder.shared.getHealthKitData()
-            #if !targetEnvironment(simulator)
-            SensorKitAccelerometerFetcher.shared.startRecording()
-            #endif
+            // HealthkitRecorder.shared.getHealthKitData()
+            // #if !targetEnvironment(simulator)
+            // // SensorKitAccelerometerFetcher.shared.startRecording()
+            // #endif
             BackgroundScheduler.shared.scheduleAppRefresh()
             BackgroundScheduler.shared.scheduleBGProcessingTask()
             BackgroundScheduler.shared.scheduleUploadBGTask()

@@ -355,7 +355,7 @@ extension SensorKitAccelerometerFetcher: SRSensorReaderDelegate {
                      ↓
              bufferSample(timestamp, x, y, z)
                      ↓
-             buffer.count == 1000?
+             buffer.count  == 1000?
                  YES → flushBuffer()
                  NO  → keep accumulating
          
