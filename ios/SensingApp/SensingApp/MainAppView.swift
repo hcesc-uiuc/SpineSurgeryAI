@@ -507,226 +507,348 @@ struct MainAppView: View {
     }
 
     // ============================================================
-    // MARK: - Home View
-    // ============================================================
+        // MARK: - Home View
+        // ============================================================
 
-    struct HomeView: View {
-        let accentColor: Color
-        let onLogout: () -> Void
-        @ObservedObject var appState: AppState
-        @Binding var isSurveyPresented: Bool
+        struct HomeView: View {
+            let accentColor: Color
+            let onLogout: () -> Void
+            @ObservedObject var appState: AppState
+            @Binding var isSurveyPresented: Bool
 
-        private let daysSinceSurgery = 14
-        private let patientFirstName = "Username"
-        private var checkInComplete: Bool { appState.isCompletedToday }
+            private let daysSinceSurgery = 14
+            private let patientFirstName = "Username"
+            private var checkInComplete: Bool { appState.isCompletedToday }
 
-        @State private var appeared = false
-        @State private var showSettings = false
+            @State private var appeared = false
+            @State private var showSettings = false
 
-        var body: some View {
-            NavigationStack {
-                ZStack {
-                    LinearGradient(
-                        colors: [
-                            Color(red: 0.98, green: 0.95, blue: 0.91),
-                            Color(red: 0.95, green: 0.91, blue: 0.88)
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                    .ignoresSafeArea()
+            // Weekly strip state
+            @State private var weeklyProgress: [Date: Bool] = [:]
+            private let calendar = Calendar.current
 
-                    ScrollView {
-                        VStack(spacing: 20) {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(greetingText)
-                                    .font(.system(size: 14, weight: .medium, design: .rounded))
-                                    .foregroundStyle(Color(red: 0.55, green: 0.47, blue: 0.44))
-                                Text("Hi, \(patientFirstName) 👋")
-                                    .font(.system(size: 28, weight: .bold, design: .rounded))
-                                    .foregroundStyle(Color(red: 0.28, green: 0.22, blue: 0.20))
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.horizontal, 24)
-                            .padding(.top, 8)
-                            .opacity(appeared ? 1 : 0)
-                            .offset(y: appeared ? 0 : 12)
-                            .animation(.easeOut(duration: 0.45).delay(0.05), value: appeared)
-
-                            recoveryDayCard
-                                .opacity(appeared ? 1 : 0)
-                                .offset(y: appeared ? 0 : 16)
-                                .animation(.easeOut(duration: 0.45).delay(0.15), value: appeared)
-
-                            Button(action: { isSurveyPresented = true }) {
-                                dailyCheckInCard
-                            }
-                            .buttonStyle(.plain)
-                            .disabled(checkInComplete)
-                            .opacity(appeared ? 1 : 0)
-                            .offset(y: appeared ? 0 : 16)
-                            .animation(.easeOut(duration: 0.45).delay(0.25), value: appeared)
-
-                            quickStatsRow
-                                .opacity(appeared ? 1 : 0)
-                                .offset(y: appeared ? 0 : 16)
-                                .animation(.easeOut(duration: 0.45).delay(0.35), value: appeared)
-
-                            Spacer().frame(height: 20)
-                        }
-                        .padding(.top, 8)
-                    }
-                }
-                .navigationTitle("Journey")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbarBackground(Color.clear, for: .navigationBar)
-                .toolbar {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button(action: { showSettings = true }) {
-                            Image(systemName: "person.fill")
-                                .font(.system(size: 16, weight: .semibold))
-                                .foregroundStyle(accentColor)
-                                .frame(width: 36, height: 36)
-                                .glassEffect(.regular.interactive(), in: .circle)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-                .sheet(isPresented: $showSettings) {
-                    SettingsView(accentColor: Color(red: 0.58, green: 0.48, blue: 0.72), onLogout: onLogout)
-                }
-            }
-            .onAppear { appeared = true }
-        }
-
-        private var recoveryDayCard: some View {
-            ZStack {
-                RoundedRectangle(cornerRadius: 24)
-                    .fill(
+            var body: some View {
+                NavigationStack {
+                    ZStack {
                         LinearGradient(
-                            colors: [accentColor, accentColor.opacity(0.75)],
+                            colors: [
+                                Color(red: 0.98, green: 0.95, blue: 0.91),
+                                Color(red: 0.95, green: 0.91, blue: 0.88)
+                            ],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )
-                    )
-                    .shadow(color: accentColor.opacity(0.35), radius: 16, y: 8)
-                VStack(spacing: 6) {
-                    Text("Day")
-                        .font(.system(size: 16, weight: .medium, design: .rounded))
-                        .foregroundStyle(.white.opacity(0.85))
-                    Text("\(daysSinceSurgery)")
-                        .font(.system(size: 72, weight: .bold, design: .rounded))
-                        .foregroundStyle(.white)
-                    Text("of your recovery journey")
-                        .font(.system(size: 14, weight: .medium, design: .rounded))
-                        .foregroundStyle(.white.opacity(0.85))
-                    if let milestone = currentMilestone {
-                        Text(milestone)
-                            .font(.system(size: 12, weight: .semibold, design: .rounded))
-                            .foregroundStyle(accentColor)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 5)
-                            .background(.white.opacity(0.9))
-                            .clipShape(Capsule())
-                            .padding(.top, 6)
+                        .ignoresSafeArea()
+
+                        ScrollView {
+                            VStack(spacing: 20) {
+                                // Greeting
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(greetingText)
+                                        .font(.system(size: 14, weight: .medium, design: .rounded))
+                                        .foregroundStyle(Color(red: 0.55, green: 0.47, blue: 0.44))
+                                    Text("Hi, \(patientFirstName) 👋")
+                                        .font(.system(size: 28, weight: .bold, design: .rounded))
+                                        .foregroundStyle(Color(red: 0.28, green: 0.22, blue: 0.20))
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, 24)
+                                .padding(.top, 8)
+                                .opacity(appeared ? 1 : 0)
+                                .offset(y: appeared ? 0 : 12)
+                                .animation(.easeOut(duration: 0.45).delay(0.05), value: appeared)
+
+                                // Recovery day card
+                                recoveryDayCard
+                                    .opacity(appeared ? 1 : 0)
+                                    .offset(y: appeared ? 0 : 16)
+                                    .animation(.easeOut(duration: 0.45).delay(0.15), value: appeared)
+
+                                // ── Weekly survey strip ──────────────
+                                weeklyStripCard
+                                    .opacity(appeared ? 1 : 0)
+                                    .offset(y: appeared ? 0 : 16)
+                                    .animation(.easeOut(duration: 0.45).delay(0.22), value: appeared)
+
+                                // ── Survey CTA ───────────────────────
+                                Button(action: { isSurveyPresented = true }) {
+                                    surveyCard
+                                }
+                                .buttonStyle(.plain)
+                                .disabled(checkInComplete)
+                                .opacity(appeared ? 1 : 0)
+                                .offset(y: appeared ? 0 : 16)
+                                .animation(.easeOut(duration: 0.45).delay(0.30), value: appeared)
+
+                                // Quick stats
+                                quickStatsRow
+                                    .opacity(appeared ? 1 : 0)
+                                    .offset(y: appeared ? 0 : 16)
+                                    .animation(.easeOut(duration: 0.45).delay(0.38), value: appeared)
+
+                                Spacer().frame(height: 20)
+                            }
+                            .padding(.top, 8)
+                        }
+                    }
+                    .navigationTitle("Journey")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbarBackground(Color.clear, for: .navigationBar)
+                    .toolbar {
+                        ToolbarItem(placement: .topBarTrailing) {
+                            Button(action: { showSettings = true }) {
+                                Image(systemName: "person.fill")
+                                    .font(.system(size: 16, weight: .semibold))
+                                    .foregroundStyle(accentColor)
+                                    .frame(width: 36, height: 36)
+                                    .glassEffect(.regular.interactive(), in: .circle)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .sheet(isPresented: $showSettings) {
+                        SettingsView(accentColor: Color(red: 0.58, green: 0.48, blue: 0.72), onLogout: onLogout)
                     }
                 }
-                .padding(.vertical, 32)
+                .onAppear {
+                    appeared = true
+                    loadWeeklyProgress()
+                }
             }
-            .padding(.horizontal, 24)
-        }
 
-        private var dailyCheckInCard: some View {
-            HStack(spacing: 16) {
+            // ── Weekly strip card ─────────────────────
+            private var weeklyStripCard: some View {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("This week")
+                        .font(.system(size: 13, weight: .semibold, design: .rounded))
+                        .foregroundStyle(Color(red: 0.55, green: 0.47, blue: 0.44))
+
+                    HStack(spacing: 0) {
+                        ForEach(currentWeekDays(), id: \.self) { date in
+                            let isToday    = calendar.isDateInToday(date)
+                            let isFuture   = date > Date()
+                            let completed  = weeklyProgress[calendar.startOfDay(for: date)] ?? false
+                            let dayLetter  = shortDayLetter(for: date)
+                            let dayNum     = calendar.component(.day, from: date)
+
+                            VStack(spacing: 6) {
+                                Text(dayLetter)
+                                    .font(.system(size: 11, weight: .medium, design: .rounded))
+                                    .foregroundStyle(isToday
+                                        ? Color(red: 0.22, green: 0.48, blue: 0.40)
+                                        : Color(red: 0.55, green: 0.47, blue: 0.44))
+
+                                ZStack {
+                                    Circle()
+                                        .fill(isFuture
+                                            ? Color.clear
+                                            : completed
+                                                ? Color(red: 0.22, green: 0.60, blue: 0.45)
+                                                : Color(red: 0.80, green: 0.75, blue: 0.72).opacity(0.5))
+                                        .frame(width: 34, height: 34)
+
+                                    if isToday && !completed {
+                                        Circle()
+                                            .strokeBorder(Color(red: 0.42, green: 0.62, blue: 0.55), lineWidth: 2)
+                                            .frame(width: 34, height: 34)
+                                    }
+
+                                    if !isFuture {
+                                        if completed {
+                                            Image(systemName: "checkmark")
+                                                .font(.system(size: 13, weight: .bold))
+                                                .foregroundStyle(.white)
+                                        } else {
+                                            Text("\(dayNum)")
+                                                .font(.system(size: 13, weight: isToday ? .bold : .regular, design: .rounded))
+                                                .foregroundStyle(Color(red: 0.40, green: 0.32, blue: 0.29))
+                                        }
+                                    } else {
+                                        Text("\(dayNum)")
+                                            .font(.system(size: 13, design: .rounded))
+                                            .foregroundStyle(Color(red: 0.70, green: 0.65, blue: 0.62).opacity(0.4))
+                                    }
+                                }
+                                .opacity(isFuture ? 0.4 : 1.0)
+                            }
+                            .frame(maxWidth: .infinity)
+                        }
+                    }
+                }
+                .padding(18)
+                .background(
+                    RoundedRectangle(cornerRadius: 20)
+                        .fill(Color(red: 0.99, green: 0.97, blue: 0.95))
+                        .shadow(color: Color(red: 0.60, green: 0.45, blue: 0.40).opacity(0.10), radius: 12, y: 4)
+                )
+                .padding(.horizontal, 24)
+            }
+
+            // ── Survey card ──────────────────────────
+            private var surveyCard: some View {
+                HStack(spacing: 16) {
+                    ZStack {
+                        Circle()
+                            .fill(checkInComplete
+                                  ? Color(red: 0.22, green: 0.60, blue: 0.45).opacity(0.15)
+                                  : Color(red: 0.80, green: 0.55, blue: 0.45).opacity(0.15))
+                            .frame(width: 52, height: 52)
+                        Image(systemName: checkInComplete ? "checkmark.circle.fill" : "pencil.and.list.clipboard")
+                            .font(.system(size: 24))
+                            .foregroundStyle(checkInComplete
+                                             ? Color(red: 0.22, green: 0.60, blue: 0.45)
+                                             : Color(red: 0.80, green: 0.55, blue: 0.45))
+                    }
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(checkInComplete ? "Today's check-in done ✓" : "Complete today's check-in")
+                            .font(.system(size: 16, weight: .semibold, design: .rounded))
+                            .foregroundStyle(Color(red: 0.28, green: 0.22, blue: 0.20))
+                        Text(checkInComplete
+                             ? "Great work. See you tomorrow."
+                             : "Takes about 2 minutes.")
+                            .font(.system(size: 13, design: .rounded))
+                            .foregroundStyle(Color(red: 0.50, green: 0.42, blue: 0.39))
+                    }
+
+                    Spacer()
+
+                    if !checkInComplete {
+                        Text("Start")
+                            .font(.system(size: 13, weight: .semibold, design: .rounded))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 8)
+                            .background(Color(red: 0.80, green: 0.55, blue: 0.45))
+                            .clipShape(Capsule())
+                    }
+                }
+                .padding(20)
+                .background(
+                    RoundedRectangle(cornerRadius: 20)
+                        .fill(Color(red: 0.99, green: 0.97, blue: 0.95))
+                        .shadow(color: Color(red: 0.60, green: 0.45, blue: 0.40).opacity(0.10), radius: 12, y: 4)
+                )
+                .padding(.horizontal, 24)
+            }
+
+            private var recoveryDayCard: some View {
                 ZStack {
-                    Circle()
-                        .fill(checkInComplete
-                              ? Color(red: 0.42, green: 0.62, blue: 0.55).opacity(0.15)
-                              : Color(red: 0.80, green: 0.55, blue: 0.45).opacity(0.15))
-                        .frame(width: 52, height: 52)
-                    Image(systemName: checkInComplete ? "checkmark.circle.fill" : "pencil.and.list.clipboard")
-                        .font(.system(size: 24))
-                        .foregroundStyle(checkInComplete
-                                         ? Color(red: 0.42, green: 0.62, blue: 0.55)
-                                         : Color(red: 0.80, green: 0.55, blue: 0.45))
+                    RoundedRectangle(cornerRadius: 24)
+                        .fill(
+                            LinearGradient(
+                                colors: [accentColor, accentColor.opacity(0.75)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .shadow(color: accentColor.opacity(0.35), radius: 16, y: 8)
+                    VStack(spacing: 6) {
+                        Text("Day")
+                            .font(.system(size: 16, weight: .medium, design: .rounded))
+                            .foregroundStyle(.white.opacity(0.85))
+                        Text("\(daysSinceSurgery)")
+                            .font(.system(size: 72, weight: .bold, design: .rounded))
+                            .foregroundStyle(.white)
+                        Text("of your recovery journey")
+                            .font(.system(size: 14, weight: .medium, design: .rounded))
+                            .foregroundStyle(.white.opacity(0.85))
+                        if let milestone = currentMilestone {
+                            Text(milestone)
+                                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                                .foregroundStyle(accentColor)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 5)
+                                .background(.white.opacity(0.9))
+                                .clipShape(Capsule())
+                                .padding(.top, 6)
+                        }
+                    }
+                    .padding(.vertical, 32)
                 }
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(checkInComplete ? "Check-in complete!" : "Daily check-in due")
-                        .font(.system(size: 16, weight: .semibold, design: .rounded))
+                .padding(.horizontal, 24)
+            }
+
+            private var quickStatsRow: some View {
+                HStack(spacing: 12) {
+                    statCard(icon: "figure.walk",       value: "2,840", label: "Steps today", color: Color(red: 0.42, green: 0.62, blue: 0.55))
+                    statCard(icon: "waveform.path.ecg", value: "3/10",  label: "Pain level",  color: Color(red: 0.80, green: 0.55, blue: 0.45))
+                    statCard(icon: "calendar",          value: "3d",    label: "Next survey", color: Color(red: 0.38, green: 0.55, blue: 0.75))
+                }
+                .padding(.horizontal, 24)
+            }
+
+            private func statCard(icon: String, value: String, label: String, color: Color) -> some View {
+                VStack(spacing: 8) {
+                    Image(systemName: icon)
+                        .font(.system(size: 20))
+                        .foregroundStyle(color)
+                    Text(value)
+                        .font(.system(size: 18, weight: .bold, design: .rounded))
                         .foregroundStyle(Color(red: 0.28, green: 0.22, blue: 0.20))
-                    Text(checkInComplete
-                         ? "Great work today. See you tomorrow."
-                         : "Takes about 2 minutes to complete.")
-                        .font(.system(size: 13, design: .rounded))
-                        .foregroundStyle(Color(red: 0.50, green: 0.42, blue: 0.39))
+                    Text(label)
+                        .font(.system(size: 11, weight: .medium, design: .rounded))
+                        .foregroundStyle(Color(red: 0.55, green: 0.47, blue: 0.44))
+                        .multilineTextAlignment(.center)
                 }
-                Spacer()
-                if !checkInComplete {
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(Color(red: 0.80, green: 0.55, blue: 0.45))
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 16)
+                .background(
+                    RoundedRectangle(cornerRadius: 16)
+                        .fill(Color(red: 0.99, green: 0.97, blue: 0.95))
+                        .shadow(color: Color(red: 0.60, green: 0.45, blue: 0.40).opacity(0.10), radius: 8, y: 3)
+                )
+            }
+
+            // ── Weekly strip helpers ──────────────────
+            private func currentWeekDays() -> [Date] {
+                let today      = calendar.startOfDay(for: Date())
+                let weekday    = calendar.component(.weekday, from: today) // 1=Sun
+                let startOfWeek = calendar.date(byAdding: .day, value: -(weekday - 1), to: today)!
+                return (0..<7).compactMap { calendar.date(byAdding: .day, value: $0, to: startOfWeek) }
+            }
+
+            private func shortDayLetter(for date: Date) -> String {
+                let symbols = ["S", "M", "T", "W", "T", "F", "S"]
+                let weekday = calendar.component(.weekday, from: date) - 1
+                return symbols[weekday]
+            }
+
+            private func loadWeeklyProgress() {
+                let days   = currentWeekDays()
+                let month  = days.first ?? Date()
+                let records = SQLiteSaver.shared.fetchSurveys(forMonth: month)
+                let formatter = DateFormatter()
+                formatter.dateFormat = "yyyy-MM-dd"
+
+                var result: [Date: Bool] = [:]
+                for record in records {
+                    guard let date = formatter.date(from: record.dateString) else { continue }
+                    result[calendar.startOfDay(for: date)] = record.completed
+                }
+                weeklyProgress = result
+            }
+
+            // ── Other helpers ─────────────────────────
+            private var greetingText: String {
+                let hour = Calendar.current.component(.hour, from: Date())
+                switch hour {
+                case 0..<12:  return "Good morning"
+                case 12..<17: return "Good afternoon"
+                default:      return "Good evening"
                 }
             }
-            .padding(20)
-            .background(
-                RoundedRectangle(cornerRadius: 20)
-                    .fill(Color(red: 0.99, green: 0.97, blue: 0.95))
-                    .shadow(color: Color(red: 0.60, green: 0.45, blue: 0.40).opacity(0.10), radius: 12, y: 4)
-            )
-            .padding(.horizontal, 24)
-        }
 
-        private var quickStatsRow: some View {
-            HStack(spacing: 12) {
-                statCard(icon: "figure.walk",       value: "2,840", label: "Steps today", color: Color(red: 0.42, green: 0.62, blue: 0.55))
-                statCard(icon: "waveform.path.ecg", value: "3/10",  label: "Pain level",  color: Color(red: 0.80, green: 0.55, blue: 0.45))
-                statCard(icon: "calendar",          value: "3d",    label: "Next survey", color: Color(red: 0.38, green: 0.55, blue: 0.75))
-            }
-            .padding(.horizontal, 24)
-        }
-
-        private func statCard(icon: String, value: String, label: String, color: Color) -> some View {
-            VStack(spacing: 8) {
-                Image(systemName: icon)
-                    .font(.system(size: 20))
-                    .foregroundStyle(color)
-                Text(value)
-                    .font(.system(size: 18, weight: .bold, design: .rounded))
-                    .foregroundStyle(Color(red: 0.28, green: 0.22, blue: 0.20))
-                Text(label)
-                    .font(.system(size: 11, weight: .medium, design: .rounded))
-                    .foregroundStyle(Color(red: 0.55, green: 0.47, blue: 0.44))
-                    .multilineTextAlignment(.center)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 16)
-            .background(
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(Color(red: 0.99, green: 0.97, blue: 0.95))
-                    .shadow(color: Color(red: 0.60, green: 0.45, blue: 0.40).opacity(0.10), radius: 8, y: 3)
-            )
-        }
-
-        private var greetingText: String {
-            let hour = Calendar.current.component(.hour, from: Date())
-            switch hour {
-            case 0..<12:  return "Good morning"
-            case 12..<17: return "Good afternoon"
-            default:      return "Good evening"
+            private var currentMilestone: String? {
+                switch daysSinceSurgery {
+                case 7:  return "🎉 1 week milestone!"
+                case 14: return "🎉 2 week milestone!"
+                case 30: return "🎉 1 month milestone!"
+                case 90: return "🎉 3 month milestone!"
+                default: return nil
+                }
             }
         }
-
-        private var currentMilestone: String? {
-            switch daysSinceSurgery {
-            case 7:  return "🎉 1 week milestone!"
-            case 14: return "🎉 2 week milestone!"
-            case 30: return "🎉 1 month milestone!"
-            case 90: return "🎉 3 month milestone!"
-            default: return nil
-            }
-        }
-    }
-
     // ============================================================
     // MARK: - Settings View
     // ============================================================
