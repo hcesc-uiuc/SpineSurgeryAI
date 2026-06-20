@@ -22,7 +22,7 @@ public enum S3UploadConfig {
     public nonisolated(unsafe) static let baseURL      = _baseURL
     public nonisolated(unsafe) static let presignURL   = "\(_baseURL)/api/noauth/uploads/presign"
     public nonisolated(unsafe) static let completeURL  = "\(_baseURL)/api/noauth/uploads/complete"
-    public nonisolated(unsafe) static let participantID = "P0001"   // change to a real test participant
+    public static var participantID: String { ParticipantID.current }   // anonymous SHA-256 participant hash
 }
 
 // Top-level aliases for backwards compatibility

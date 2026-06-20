@@ -30,10 +30,10 @@ internal import Combine
 //
 // FLOW:
 //   1. Patient taps "Sign in with Apple"
-//   2. Apple returns a one-time identity token (JWT) + optional full name
-//   3. App sends { identity_token, full_name? } to POST /auth/login
+//   2. Apple returns a one-time identity token (JWT)
+//   3. App sends { identity_token } to POST /auth/login
 //   4. Backend verifies our access code and returns { access_token, refresh_token }
-//   5. Both tokens stored securely in iOS Keychain (maybe change it if not implemented)
+//   5. Both tokens stored securely in iOS Keychain via KeychainManager
 //   6. Every subsequent API call uses access token as Bearer header
 //   7. On app relaunch, silentRefresh() restores session automatically
 //   8. On 401 from any API call → refresh access token → retry once
@@ -41,10 +41,11 @@ internal import Combine
 //  10. Logout calls POST /auth/logout (invalidates refresh token server-side)
 //      then clears all tokens from Keychain
 //
-// IMPORTANT — FULL NAME:
-//   Apple only provides the user's full name on the very first login ever.
-//   It is nil on all subsequent logins. Send it when present — backend
-//   discards it if the user already exists.
+// IMPORTANT — ANONYMITY:
+//   The patient's name is never stored or transmitted. At login the app
+//   derives a stable, one-way SHA-256 hash of Apple's per-user identifier
+//   (ParticipantID) and tags all uploaded data with it, so a participant's
+//   data links correctly in the backend without revealing who they are.
 //
 // ============================================================
 
@@ -71,12 +72,6 @@ private let demoMode = true
 // token_expired (just needs refresh).
 private struct BackendErrorResponse: Decodable {
     let error: String
-}
-
-// MARK: - Patient Profile Response
-private struct PatientProfileResponse: Decodable {
-    let full_name: String?
-    let surgery_date: String?
 }
 
 // MARK: - Token Response Models
@@ -175,10 +170,10 @@ class SecureAuthManager: ObservableObject {
     // Throws: AuthError
     func login(identityToken: String, fullName: String?, appleUserID: String) async throws {
 
-        // Persist display name for both demo and real paths — runs before any branch.
-        if let fullName, !fullName.isEmpty {
-            UserDefaults.standard.set(fullName, forKey: "journey_display_name")
-        }
+        // Derive and persist the anonymous participant hash for both demo and
+        // real paths — runs before any branch so demo sessions get one too.
+        // The patient's name is intentionally never stored or uploaded.
+        ParticipantID.store(forAppleUserID: appleUserID)
 
         // ── ⚠️ DEMO MODE BLOCK — DELETE BEFORE SHIPPING ─────────────
         if demoMode {
@@ -194,10 +189,9 @@ class SecureAuthManager: ObservableObject {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.timeoutInterval = 15
 
-        // Only include full_name when Apple actually provided it.
-        // Backend ignores it for existing users; stores it for new ones.
-        var body: [String: String] = ["identity_token": identityToken]
-        if let name = fullName { body["full_name"] = name }
+        // Identity is conveyed solely by the Apple identity token; the
+        // patient's name is never transmitted.
+        let body: [String: String] = ["identity_token": identityToken]
         request.httpBody = try JSONEncoder().encode(body)
 
         let (data, response) = try await session.data(for: request)
@@ -212,9 +206,8 @@ class SecureAuthManager: ObservableObject {
                 throw AuthError.decodingError
             }
             storeTokens(
-                access:      tokens.accessToken,
-                refresh:     tokens.refreshToken,
-                appleUserID: appleUserID
+                access:  tokens.accessToken,
+                refresh: tokens.refreshToken
             )
             isAuthenticated = true
 
@@ -400,37 +393,15 @@ class SecureAuthManager: ObservableObject {
         isAuthenticated = false
     }
 
-    // MARK: - Patient Profile
-    //
-    // Fetches the patient's display name from the backend and caches it in
-    // UserDefaults ("journey_display_name") so the Home/Settings views
-    // show the correct name. Fails silently — demo mode returns immediately,
-    // and any network/decode error leaves the cached value untouched.
-    //
-    // ENDPOINT CONTRACT (backend team — not yet implemented server-side):
-    //   GET {baseURL}/api/patient/profile
-    //   Authorization: Bearer <access token>
-    //   200 → { "full_name": "Jane Doe", "surgery_date": "2026-06-02" }
-    //   Only "full_name" is consumed here; "surgery_date" is ignored.
-    func refreshPatientProfileCache() async {
-        guard !demoMode else { return }
-        do {
-            let data = try await authenticatedRequest(endpoint: "/api/patient/profile")
-            let profile = try JSONDecoder().decode(PatientProfileResponse.self, from: data)
-            if let name = profile.full_name, !name.isEmpty {
-                UserDefaults.standard.set(name, forKey: "journey_display_name")
-            }
-        } catch {
-            print("refreshPatientProfileCache: \(error)")
-        }
-    }
-
     // MARK: - Private Helpers
 
-    private func storeTokens(access: String, refresh: String, appleUserID: String) {
+    private func storeTokens(access: String, refresh: String) {
         KeychainManager.shared.save(key: accessTokenKey,  data: Data(access.utf8))
         KeychainManager.shared.save(key: refreshTokenKey, data: Data(refresh.utf8))
-        KeychainManager.shared.save(key: appleUserIDKey,  data: Data(appleUserID.utf8))
+        // NOTE: the raw Apple user ID is intentionally NOT stored — only the
+        // one-way ParticipantID hash (UserDefaults) is kept, so the device
+        // never holds a raw re-identification key. clearTokens() still deletes
+        // appleUserIDKey to purge any value written by earlier builds.
     }
 
     private func clearTokens() {

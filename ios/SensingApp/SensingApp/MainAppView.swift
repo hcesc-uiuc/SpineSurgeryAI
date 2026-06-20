@@ -516,10 +516,7 @@ struct MainAppView: View {
         @ObservedObject var appState: AppState
         @Binding var isSurveyPresented: Bool
 
-        @EnvironmentObject private var authManager: SecureAuthManager
-
         @AppStorage("journey_first_open_date") private var firstOpenTimestamp: Double = 0
-        @AppStorage("journey_display_name") private var storedDisplayName: String = ""
 
         private var currentDay: Int {
             guard firstOpenTimestamp != 0 else { return 1 }
@@ -527,11 +524,6 @@ struct MainAppView: View {
             let start = cal.startOfDay(for: Date(timeIntervalSince1970: firstOpenTimestamp))
             let today = cal.startOfDay(for: Date())
             return max(1, (cal.dateComponents([.day], from: start, to: today).day ?? 0) + 1)
-        }
-
-        private var patientFirstName: String? {
-            guard !storedDisplayName.isEmpty else { return nil }
-            return storedDisplayName.components(separatedBy: .whitespaces).first
         }
 
         private var checkInComplete: Bool { appState.isCompletedToday }
@@ -567,7 +559,7 @@ struct MainAppView: View {
                                 Text(greetingText)
                                     .font(.system(size: 14, weight: .medium, design: .rounded))
                                     .foregroundStyle(Color(red: 0.55, green: 0.47, blue: 0.44))
-                                Text(patientFirstName.map { "Hi, \($0) 👋" } ?? "Hi there 👋")
+                                Text("Hi there 👋")
                                     .font(.system(size: 28, weight: .bold, design: .rounded))
                                     .foregroundStyle(Color(red: 0.28, green: 0.22, blue: 0.20))
                             }
@@ -632,7 +624,6 @@ struct MainAppView: View {
                 if firstOpenTimestamp == 0 { firstOpenTimestamp = Date().timeIntervalSince1970 }
                 loadTodayHealthStats()
                 loadWeeklyProgress()
-                Task { await authManager.refreshPatientProfileCache() }
             }
         }
 
@@ -1000,12 +991,6 @@ struct MainAppView: View {
         @State private var showingLogoutAlert = false
         @State private var showingPrivacySheet = false
         @State private var showingHelpSheet = false
-        @AppStorage("journey_display_name") private var storedDisplayName: String = ""
-
-        private var displayName: String {
-            storedDisplayName.isEmpty ? "Patient" : storedDisplayName
-        }
-
         var body: some View {
             NavigationStack {
                 ZStack {
@@ -1030,7 +1015,7 @@ struct MainAppView: View {
                                     .foregroundStyle(accentColor)
                             }
                             VStack(alignment: .leading, spacing: 3) {
-                                Text(displayName)
+                                Text("User")
                                     .font(.system(size: 17, weight: .semibold, design: .rounded))
                                     .foregroundStyle(Color(red: 0.28, green: 0.22, blue: 0.20))
                                 Text("Journey Study Participant")
