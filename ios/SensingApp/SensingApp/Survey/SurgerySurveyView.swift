@@ -835,6 +835,10 @@ struct SurgerySurveyView: View {
                 SurveyLocalStore.shared.markSurveyCompleted(on: Date(), for: currentUserID)
                 completedSurveyDates = SurveyLocalStore.shared.completedSurveyDates(for: currentUserID)
 
+                // Persist to SQLite so the Calendar tab and the Home weekly strip
+                // (both read SQLiteSaver.fetchSurveys) reflect this completion.
+                _ = SQLiteSaver.shared.insertSurvey(painScore: painNRS)
+
                 appState.markCompletedToday()
                 isSubmitting = false
                 dismiss()
