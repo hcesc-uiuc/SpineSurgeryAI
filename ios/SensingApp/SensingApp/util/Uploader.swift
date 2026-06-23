@@ -34,12 +34,14 @@ struct Uploader {
         //let file_prefixes = ["accelerometer_"] //, "log_"] //add more extension in future
         //let file_prefixes = ["log_"] //add more extension in future
         let todaysDateString = getTodaysDateString()
-        let file_prefixes = ["locations_", "accelerometer_", "healthkit_"]
+        let file_prefixes = ["locations_", "accelerometer_", "healthkit_", "sqlite_", "sensorkit_"]
         //let kinds = ["location", "accelerometer", "healthkit"]
         let kinds = [
             "locations_": "loc",
             "accelerometer_": "accel",
-            "healthkit_": "hk"
+            "healthkit_": "hk",
+            "sqlite_": "other",
+            "sensorkit_": "other",
         ]
         
         for file_prefix in file_prefixes {
@@ -59,7 +61,8 @@ struct Uploader {
                     print("\(index+1)/\(numberOfFiles) Uploading file: \(file.lastPathComponent); \(fileSizeInKB)KB")
                     
                     let kind = kinds[file_prefix]!
-                    if kind == "accel" {
+                    if kind == "accel" || kind == "other"{
+                        //Direct S3 upload
                         let uploadSuccess = await uploader.runFullFlow(filenameURL: file, kind: kind)
                         if uploadSuccess {
                             // Move the file to "processed/" so it isn't re-uploaded on the next run

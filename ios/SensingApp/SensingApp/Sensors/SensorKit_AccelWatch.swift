@@ -62,7 +62,7 @@ class SensorKitAccelerometerFetcher: NSObject {
     // Buffer for batched CSV writes
     // private var buffer: [(timestamp: Double, x: Float, y: Float, z: Float)] = []
     private var buffer: CircularBuffer
-    private let batchSize = 1000
+    private let batchSize = 2000
     
     // CSV file management
     private var currentFileURL: URL
@@ -115,6 +115,9 @@ class SensorKitAccelerometerFetcher: NSObject {
     }
     
     func startRecording(){
+        /*
+         
+         */
         print("SK: Attempting to start sensor recording")
         reader.startRecording()
     }
@@ -138,9 +141,11 @@ class SensorKitAccelerometerFetcher: NSObject {
         
         if authorizationStatus != .authorized {
             print("SK: Sensorkit is not authorized, skipping")
+            Logger.shared.append("SK: Sensorkit is not authorized, skipping")
             return
         }else{
             print("SK: Sensorkit is authorized, fetching devices")
+            Logger.shared.append("SK: Sensorkit is authorized, fetching devices")
             openCurrentFile()
             reader.fetchDevices()
         }
@@ -240,6 +245,7 @@ class SensorKitAccelerometerFetcher: NSObject {
         fileHandle?.seekToEndOfFile()
         
         print("CSV file: \(currentFileURL.lastPathComponent)")
+        Logger.shared.append("SK: Current CSV file: \(currentFileURL.lastPathComponent)")
     }
     
     private func rotateFileIfNeeded() {
@@ -252,6 +258,7 @@ class SensorKitAccelerometerFetcher: NSObject {
             fileIndex += 1
             openCurrentFile()
             print("Rotated to file index \(fileIndex)")
+            Logger.shared.append("SK: Rotated to file index \(fileIndex)")
         }
     }
     
@@ -288,6 +295,7 @@ class SensorKitAccelerometerFetcher: NSObject {
         }
         
         print("Flushed \(samples.count) samples → \(currentFileURL.lastPathComponent)")
+        Logger.shared.append("SK: Flushed \(samples.count) samples → \(currentFileURL.lastPathComponent)")
         rotateFileIfNeeded()
     }
     
@@ -303,10 +311,12 @@ extension SensorKitAccelerometerFetcher: SRSensorReaderDelegate {
     
     func sensorReaderWillStartRecording(_ reader: SRSensorReader) {
         print("✅ SK: SensorKit recording successfully started")
+        Logger.shared.append("✅ SK: SensorKit recording successfully started")
     }
 
     func sensorReader(_ reader: SRSensorReader, startRecordingFailedWithError error: Error) {
         print("❌ SensorKit recording failed: \(error)")
+        Logger.shared.append("❌ SensorKit recording failed: \(error)")
     }
     
     func sensorReader(_ reader: SRSensorReader, didFetch devices: [SRDevice]) {
@@ -317,6 +327,7 @@ extension SensorKitAccelerometerFetcher: SRSensorReaderDelegate {
         // print all available devices
         for device in devices {
             print("SK: Device: \(device.name) — model: \(device.model)")
+            Logger.shared.append("SK: Device: \(device.name) — model: \(device.model)")
         }
         
         let watchDevice = devices.first { $0.model.lowercased().contains("watch") }
@@ -394,6 +405,7 @@ extension SensorKitAccelerometerFetcher: SRSensorReaderDelegate {
         flushBuffer()
         fileHandle?.synchronizeFile()  // fsync to disk
         print("Fetch complete. Files in documents:")
+        Logger.shared.append("SK: Fetch complete. Files in documents")
         listCSVFiles()
     }
     
