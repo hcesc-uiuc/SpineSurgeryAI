@@ -72,10 +72,7 @@ struct MonthlyCalendarView: View {
             ScrollView {
                 VStack(spacing: 20) {
                     monthNavigationHeader
-                    streakSummaryCard
-                    if progressData.isEmpty {
-                        emptyStateCard
-                    }
+                    surveysCompletedCard
                     legendRow
                     dayOfWeekHeader
                     calendarGrid
@@ -142,21 +139,22 @@ struct MonthlyCalendarView: View {
         }
     }
 
-    // ── Summary card ─────────────────────────
-    private var streakSummaryCard: some View {
+    // ── Surveys completed count card ─────────
+    private var surveysCompletedCard: some View {
         let surveysCompleted = progressData.values.filter(\.surveyCompleted).count
         let pastDays         = pastDaysCount()
-        let streak           = currentStreak()
-        let rate             = pastDays > 0 ? Int((Double(surveysCompleted) / Double(pastDays)) * 100) : 0
 
-        return HStack(spacing: 0) {
-            summaryItem(value: "\(streak)",          label: "Day streak")
-            divider
-            summaryItem(value: "\(surveysCompleted)", label: "Surveys done")
-            divider
-            summaryItem(value: "\(rate)%",           label: "Completion")
+        return HStack(spacing: 6) {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 20))
+                .foregroundStyle(Color(red: 0.22, green: 0.48, blue: 0.40))
+            Text("\(surveysCompleted) of \(pastDays) surveys completed this month")
+                .font(.system(size: 15, weight: .semibold, design: .rounded))
+                .foregroundStyle(Color(red: 0.28, green: 0.22, blue: 0.20))
+            Spacer()
         }
-        .padding(.vertical, 16)
+        .padding(.vertical, 14)
+        .padding(.horizontal, 18)
         .background(
             RoundedRectangle(cornerRadius: 16)
                 .fill(Color(red: 0.99, green: 0.97, blue: 0.95).opacity(0.95))
@@ -167,52 +165,11 @@ struct MonthlyCalendarView: View {
         )
     }
 
-    private var divider: some View {
-        Rectangle()
-            .fill(Color(red: 0.80, green: 0.65, blue: 0.58).opacity(0.25))
-            .frame(width: 1, height: 36)
-    }
-
-    private var emptyStateCard: some View {
-        VStack(spacing: 10) {
-            Image(systemName: "calendar.badge.checkmark")
-                .font(.system(size: 32))
-                .foregroundStyle(Color(red: 0.80, green: 0.55, blue: 0.45))
-            Text("No check-ins logged yet")
-                .font(.system(size: 16, weight: .semibold, design: .rounded))
-                .foregroundStyle(Color(red: 0.28, green: 0.22, blue: 0.20))
-            Text("Complete today's survey to start your streak.")
-                .font(.system(size: 13, design: .rounded))
-                .foregroundStyle(Color(red: 0.50, green: 0.42, blue: 0.39))
-                .multilineTextAlignment(.center)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 24)
-        .padding(.horizontal, 20)
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color(red: 0.99, green: 0.97, blue: 0.95))
-                .shadow(color: Color(red: 0.60, green: 0.45, blue: 0.40).opacity(0.10), radius: 12, y: 4)
-        )
-    }
-
-    private func summaryItem(value: String, label: String) -> some View {
-        VStack(spacing: 3) {
-            Text(value)
-                .font(.system(size: 24, weight: .bold, design: .rounded))
-                .foregroundStyle(Color(red: 0.22, green: 0.48, blue: 0.40))
-            Text(label)
-                .font(.system(size: 12, weight: .medium, design: .rounded))
-                .foregroundStyle(Color(red: 0.50, green: 0.42, blue: 0.39))
-        }
-        .frame(maxWidth: .infinity)
-    }
-
     // ── Legend ───────────────────────────────
     private var legendRow: some View {
         HStack(spacing: 14) {
-            legendItem(color: Color(red: 0.86, green: 0.93, blue: 0.90), label: "Survey done")
-            legendItem(color: Color(red: 0.43, green: 0.77, blue: 0.70), label: "Survey + score")
+            legendItem(color: Color(red: 0.22, green: 0.60, blue: 0.45), label: "Completed")
+            legendItem(color: Color(red: 0.80, green: 0.75, blue: 0.72), label: "Not completed")
             Spacer()
         }
     }
@@ -278,9 +235,9 @@ struct MonthlyCalendarView: View {
         var cells: [CalendarCell] = (0..<firstWeekday).map { _ in CalendarCell(day: nil) }
 
         for d in 1...daysCount {
-            let date      = calendar.date(byAdding: .day, value: d - 1, to: displayedMonth)!
+            let date       = calendar.date(byAdding: .day, value: d - 1, to: displayedMonth)!
             let normalised = calendar.startOfDay(for: date)
-            let progress  = progressData[normalised] ?? DayProgress(
+            let progress   = progressData[normalised] ?? DayProgress(
                 date: normalised,
                 surveyCompleted: false,
                 painScore: nil
@@ -302,16 +259,6 @@ struct MonthlyCalendarView: View {
         return calendar.component(.day, from: today)
     }
 
-    private func currentStreak() -> Int {
-        var streak = 0
-        var day    = calendar.startOfDay(for: Date())
-        while let progress = progressData[day], progress.surveyCompleted {
-            streak += 1
-            day = calendar.date(byAdding: .day, value: -1, to: day)!
-        }
-        return streak
-    }
-
     private func goToPreviousMonth() {
         displayedMonth = calendar.date(byAdding: .month, value: -1, to: displayedMonth) ?? displayedMonth
     }
@@ -323,7 +270,7 @@ struct MonthlyCalendarView: View {
 }
 
 // ─────────────────────────────────────────────
-// MARK: - Day cell
+// MARK: - Day cell  (green = done, gray = not done)
 // ─────────────────────────────────────────────
 
 struct CalendarDayCell: View {
@@ -332,27 +279,26 @@ struct CalendarDayCell: View {
     let isFuture: Bool
 
     private var fillColor: Color {
-        guard !isFuture else { return Color.clear }
-        switch day.tier {
-        case .surveyAndScore: return Color(red: 0.43, green: 0.77, blue: 0.70)
-        case .surveyOnly:     return Color(red: 0.86, green: 0.93, blue: 0.90)
-        case .none:           return Color.clear
-        }
+        if isFuture { return Color.clear }
+        return day.surveyCompleted
+            ? Color(red: 0.22, green: 0.60, blue: 0.45)          // solid green
+            : Color(red: 0.80, green: 0.75, blue: 0.72).opacity(0.45) // soft gray
     }
 
     private var textColor: Color {
-        isFuture
-            ? Color(red: 0.70, green: 0.65, blue: 0.62).opacity(0.5)
-            : day.tier == .none
-                ? Color(red: 0.40, green: 0.32, blue: 0.29)
-                : Color(red: 0.10, green: 0.35, blue: 0.28)
+        if isFuture {
+            return Color(red: 0.70, green: 0.65, blue: 0.62).opacity(0.4)
+        }
+        return day.surveyCompleted
+            ? .white
+            : Color(red: 0.40, green: 0.32, blue: 0.29)
     }
 
     var body: some View {
         let dayNum = Calendar.current.component(.day, from: day.date)
         ZStack {
             Circle().fill(fillColor)
-            if isToday {
+            if isToday && !day.surveyCompleted {
                 Circle().strokeBorder(Color(red: 0.42, green: 0.62, blue: 0.55), lineWidth: 2)
             }
             Text("\(dayNum)")
@@ -360,7 +306,7 @@ struct CalendarDayCell: View {
                 .foregroundStyle(textColor)
         }
         .aspectRatio(1, contentMode: .fit)
-        .opacity(isFuture ? 0.4 : 1.0)
+        .opacity(isFuture ? 0.35 : 1.0)
     }
 }
 
@@ -390,7 +336,7 @@ struct DayDetailSheet: View {
                 detailRow(
                     icon: "checkmark.circle.fill",
                     iconColor: day.surveyCompleted
-                        ? Color(red: 0.42, green: 0.62, blue: 0.55)
+                        ? Color(red: 0.22, green: 0.60, blue: 0.45)
                         : Color(red: 0.70, green: 0.60, blue: 0.55),
                     label: "Survey",
                     value: day.surveyCompleted ? "Completed" : "Not recorded"

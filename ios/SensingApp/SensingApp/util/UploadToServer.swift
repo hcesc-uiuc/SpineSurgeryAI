@@ -23,7 +23,7 @@ class UploadToServer {
         let body : [String: Any] = [
             "title": "Upload device token",
             "deviceToken": deviceToken,
-            "userId": "sub0x"
+            "userId": ParticipantID.current
         ]
         
         let responseMessage: String = await self.sendPostRequest(linktoPost: linkToPost, postBody: body)

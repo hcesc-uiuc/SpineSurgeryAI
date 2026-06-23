@@ -121,7 +121,7 @@ struct Uploader {
         let parameters = [
             [
                 "key": "participantId",
-                "value": "P0001",
+                "value": ParticipantID.current,
                 "type": "text"
             ],
             [

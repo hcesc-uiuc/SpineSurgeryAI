@@ -300,6 +300,20 @@ struct SurgerySurveyView: View {
                                             title: "Did you seek medical attention?",
                                             isChecked: $fallSoughtMedicalAttention
                                         )
+                                        // Safety note — static informational text, no logic
+                                        HStack(alignment: .top, spacing: 8) {
+                                            Image(systemName: "cross.case.fill")
+                                                .font(.system(size: 13, design: .rounded))
+                                            Text("If you've been hurt in a fall, please contact your care team. If this is an emergency, call 911.")
+                                                .font(.system(size: 13, design: .rounded))
+                                        }
+                                        .foregroundStyle(Color(red: 0.75, green: 0.25, blue: 0.22))
+                                        .padding(12)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                        .background(
+                                            RoundedRectangle(cornerRadius: 12)
+                                                .fill(Color(red: 0.75, green: 0.25, blue: 0.22).opacity(0.08))
+                                        )
                                     }
                                     .padding(.top, 4)
                                 }
@@ -820,6 +834,10 @@ struct SurgerySurveyView: View {
                 SurveyLocalStore.shared.saveLastMedications(validMeds, for: currentUserID)
                 SurveyLocalStore.shared.markSurveyCompleted(on: Date(), for: currentUserID)
                 completedSurveyDates = SurveyLocalStore.shared.completedSurveyDates(for: currentUserID)
+
+                // Persist to SQLite so the Calendar tab and the Home weekly strip
+                // (both read SQLiteSaver.fetchSurveys) reflect this completion.
+                _ = SQLiteSaver.shared.insertSurvey(painScore: painNRS)
 
                 appState.markCompletedToday()
                 isSubmitting = false
