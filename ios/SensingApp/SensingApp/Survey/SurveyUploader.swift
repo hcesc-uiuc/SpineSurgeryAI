@@ -112,7 +112,7 @@ final class SurveyUploader {
 
         let timestampUTC  = isoFormatter.string(from: now)
         let timestampUnix = Int(now.timeIntervalSince1970)
-        let userID        = surveyData["user_id"] as? String ?? "unknown"
+        let userID        = surveyData["user_id"] as? String ?? ParticipantID.current
 
         // MARK: Build Wrapped Payload (identical to original)
         let wrappedPayload: [String: Any] = [

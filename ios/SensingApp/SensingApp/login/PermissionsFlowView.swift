@@ -70,8 +70,8 @@ import SensorKit
 enum JourneyPermission: CaseIterable, Identifiable {
     
     //disable sensorkit for now
-    //case motion, location, sensorKit, notifications, health
-    case motion, location, notifications, health
+    case motion, location, sensorKit, notifications, health
+    // case motion, location, notifications, health
     
     var id: Self { self }
 
@@ -79,7 +79,7 @@ enum JourneyPermission: CaseIterable, Identifiable {
         switch self {
         case .motion:        return "figure.walk.motion"
         case .location:      return "location.fill"
-        // case .sensorKit:     return "iphone.radiowaves.left.and.right"
+        case .sensorKit:     return "iphone.radiowaves.left.and.right"
         case .notifications: return "bell.fill"
         case .health:        return "heart.fill"
         }
@@ -89,7 +89,7 @@ enum JourneyPermission: CaseIterable, Identifiable {
         switch self {
         case .motion:        return Color(red: 0.80, green: 0.65, blue: 0.58)
         case .location:      return Color(red: 0.42, green: 0.62, blue: 0.55)
-        // case .sensorKit:     return Color(red: 0.38, green: 0.55, blue: 0.75)
+        case .sensorKit:     return Color(red: 0.38, green: 0.55, blue: 0.75)
         case .notifications: return Color(red: 0.55, green: 0.48, blue: 0.75)
         case .health:        return Color(red: 0.80, green: 0.35, blue: 0.38)
         }
@@ -99,7 +99,7 @@ enum JourneyPermission: CaseIterable, Identifiable {
         switch self {
         case .motion:        return "Motion & Activity"
         case .location:      return "Location Access"
-        // case .sensorKit:     return "Device Sensors"
+        case .sensorKit:     return "Device Sensors"
         case .notifications: return "Reminders"
         case .health:        return "Health Data"
         }
@@ -107,11 +107,11 @@ enum JourneyPermission: CaseIterable, Identifiable {
 
     var headline: String {
         switch self {
-        case .motion:        return "Track your movement patterns"
-        case .location:      return "Understand your daily activity"
-        // case .sensorKit:     return "Capture device signals"
-        case .notifications: return "Stay on top of your recovery"
-        case .health:        return "Connect with your health metrics"
+            case .motion:        return "Track your movement patterns"
+            case .location:      return "Understand your daily activity"
+            case .sensorKit:     return "Capture device signals"
+            case .notifications: return "Stay on top of your recovery"
+            case .health:        return "Connect with your health metrics"
         }
     }
 
@@ -121,10 +121,10 @@ enum JourneyPermission: CaseIterable, Identifiable {
             return "Your phone's motion sensors help us track walking patterns and physical activity during your recovery, giving your care team valuable insight into your progress."
         case .location:
             return "Location data helps us understand how much you're moving around day-to-day. This is used only for research purposes and is never shared outside the study."
-        /*
+        
         case .sensorKit:
             return "Device usage patterns, motion and activity sensors, and health and biometric sensors help us detect subtle behavioral changes that may reflect your recovery progress. All data is anonymized and used for research only."
-        */
+        
         case .notifications:
             return "We'll send gentle daily reminders for check-ins and surveys so you are always aware of what to expect."
         case .health:
@@ -203,9 +203,9 @@ struct PermissionsFlowView: View {
         }
         .alert("Permission Required", isPresented: $showingDeniedAlert) {
             Button("Open Settings") { openAppSettings(for: permissions[currentIndex]) }
-            Button("Try Again")     { requestCurrentPermission() }
+            Button("Not Now", role: .cancel) { }
         } message: {
-            Text("Journey needs \(deniedPermissionName) access to continue. Please allow it in Settings.")
+            Text("Journey needs \(deniedPermissionName) access to continue. Please enable it in Settings, then return to the app.")
         }
         .sheet(isPresented: $showingAlwaysLocationPrompt) {
             AlwaysLocationPromptView(
@@ -323,33 +323,36 @@ struct PermissionsFlowView: View {
     // MARK: - isAlreadyGranted
     private func isAlreadyGranted(_ permission: JourneyPermission) -> Bool {
         switch permission {
-        case .motion:
-            // Mirror requestMotion(): if hardware is unavailable (simulator), treat as granted.
-            guard CMMotionActivityManager.isActivityAvailable() else { return true }
-            return CMMotionActivityManager.authorizationStatus() == .authorized
+            case .motion:
+                // Mirror requestMotion(): if hardware is unavailable (simulator), treat as granted.
+                guard CMMotionActivityManager.isActivityAvailable() else { return true }
+                return CMMotionActivityManager.authorizationStatus() == .authorized
 
-        case .location:
-            return locationManager.authorizationStatus == .authorizedAlways
-        
-        /*
-        case .sensorKit:
-            // SensorKit cannot be authorized on the simulator — always skip
-            #if targetEnvironment(simulator)
-            return true
-            #else
-            let reader = SRSensorReader(sensor: .ambientLightSensor)
-            return reader.authorizationStatus == .authorized
-            #endif
-         */
+            case .location:
+                return locationManager.authorizationStatus == .authorizedAlways
             
-        case .notifications:
-            return UserDefaults.standard.bool(forKey: "journey_notifications_authorized")
+            
+            case .sensorKit:
+                // SensorKit cannot be authorized on the simulator — always skip
+                #if targetEnvironment(simulator)
+                return true
+                #else
+                // let reader = SRSensorReader(sensor: .ambientLightSensor)
+                let authKey = "sk_authorization_status"
+                let raw = UserDefaults.standard.integer(forKey: authKey)
+                let authorizationStatus = SRAuthorizationStatus(rawValue: raw) ?? .notDetermined
+                return authorizationStatus == .authorized
+                #endif
+             
+                
+            case .notifications:
+                return UserDefaults.standard.bool(forKey: "journey_notifications_authorized")
 
-        case .health:
-            guard HKHealthStore.isHealthDataAvailable() else { return false }
-            let stepType = HKObjectType.quantityType(forIdentifier: .stepCount)!
-            let status = healthStore.authorizationStatus(for: stepType)
-            return status != .notDetermined
+            case .health:
+                guard HKHealthStore.isHealthDataAvailable() else { return false }
+                let stepType = HKObjectType.quantityType(forIdentifier: .stepCount)!
+                let status = healthStore.authorizationStatus(for: stepType)
+                return status != .notDetermined
         }
     }
 
@@ -373,11 +376,11 @@ struct PermissionsFlowView: View {
         Task {
             let granted: Bool
             switch permission {
-            case .motion:        granted = await requestMotion()
-            case .location:      granted = await requestLocation()
-            // case .sensorKit:     granted = await requestSensorKit()
-            case .notifications: granted = await requestNotifications()
-            case .health:        granted = await requestHealth()
+                case .motion:        granted = await requestMotion()
+                case .location:      granted = await requestLocation()
+                case .sensorKit:     granted = await requestSensorKit()
+                case .notifications: granted = await requestNotifications()
+                case .health:        granted = await requestHealth()
             }
             await MainActor.run {
                 if granted {
@@ -477,6 +480,23 @@ struct PermissionsFlowView: View {
         return true
         #else
         return await withCheckedContinuation { continuation in
+            
+            SRSensorReader.requestAuthorization(sensors: [.accelerometer]) { error in
+
+                if let error = error {
+                    print("SensorKit auth error: \(error)")
+                    UserDefaults.standard.set(SRAuthorizationStatus.denied.rawValue, forKey: "sk_authorization_status")
+                    continuation.resume(returning: false)
+                    return
+                }
+                UserDefaults.standard.set(SRAuthorizationStatus.authorized.rawValue, forKey: "sk_authorization_status")
+                print("SensorKit authorization granted")
+                SensorKitAccelerometerFetcher.shared.startRecording()
+                continuation.resume(returning: true)
+            }
+            
+            /*
+            // Multi-sensor for sensorkit. Disabling now.
             let sensors: Set<SRSensor> = [
                 .ambientLightSensor,
                 .accelerometer,
@@ -495,6 +515,7 @@ struct PermissionsFlowView: View {
                 onAuthorized: { continuation.resume(returning: true) },
                 onDenied:     { continuation.resume(returning: false) }
             )
+            */
 
             //            SRSensorReader.requestAuthorization(sensors: sensors) { error in
             //                if let error = error {
@@ -546,6 +567,7 @@ struct PermissionsFlowView: View {
             HKObjectType.quantityType(forIdentifier: .heartRate)!,
             HKObjectType.quantityType(forIdentifier: .distanceWalkingRunning)!,
             HKObjectType.quantityType(forIdentifier: .activeEnergyBurned)!,
+            HKObjectType.quantityType(forIdentifier: .flightsClimbed)!,
             HKObjectType.categoryType(forIdentifier: .sleepAnalysis)!
         ]
 

@@ -30,10 +30,10 @@ internal import Combine
 //
 // FLOW:
 //   1. Patient taps "Sign in with Apple"
-//   2. Apple returns a one-time identity token (JWT) + optional full name
-//   3. App sends { identity_token, full_name? } to POST /auth/login
+//   2. Apple returns a one-time identity token (JWT)
+//   3. App sends { identity_token } to POST /auth/login
 //   4. Backend verifies our access code and returns { access_token, refresh_token }
-//   5. Both tokens stored securely in iOS Keychain (maybe change it if not implemented)
+//   5. Both tokens stored securely in iOS Keychain via KeychainManager
 //   6. Every subsequent API call uses access token as Bearer header
 //   7. On app relaunch, silentRefresh() restores session automatically
 //   8. On 401 from any API call → refresh access token → retry once
@@ -41,10 +41,11 @@ internal import Combine
 //  10. Logout calls POST /auth/logout (invalidates refresh token server-side)
 //      then clears all tokens from Keychain
 //
-// IMPORTANT — FULL NAME:
-//   Apple only provides the user's full name on the very first login ever.
-//   It is nil on all subsequent logins. Send it when present — backend
-//   discards it if the user already exists.
+// IMPORTANT — ANONYMITY:
+//   The patient's name is never stored or transmitted. At login the app
+//   derives a stable, one-way SHA-256 hash of Apple's per-user identifier
+//   (ParticipantID) and tags all uploaded data with it, so a participant's
+//   data links correctly in the backend without revealing who they are.
 //
 // ============================================================
 
@@ -169,6 +170,11 @@ class SecureAuthManager: ObservableObject {
     // Throws: AuthError
     func login(identityToken: String, fullName: String?, appleUserID: String) async throws {
 
+        // Derive and persist the anonymous participant hash for both demo and
+        // real paths — runs before any branch so demo sessions get one too.
+        // The patient's name is intentionally never stored or uploaded.
+        ParticipantID.store(forAppleUserID: appleUserID)
+
         // ── ⚠️ DEMO MODE BLOCK — DELETE BEFORE SHIPPING ─────────────
         if demoMode {
             UserDefaults.standard.set(true, forKey: "demo_session_active")
@@ -183,10 +189,9 @@ class SecureAuthManager: ObservableObject {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.timeoutInterval = 15
 
-        // Only include full_name when Apple actually provided it.
-        // Backend ignores it for existing users; stores it for new ones.
-        var body: [String: String] = ["identity_token": identityToken]
-        if let name = fullName { body["full_name"] = name }
+        // Identity is conveyed solely by the Apple identity token; the
+        // patient's name is never transmitted.
+        let body: [String: String] = ["identity_token": identityToken]
         request.httpBody = try JSONEncoder().encode(body)
 
         let (data, response) = try await session.data(for: request)
@@ -201,9 +206,8 @@ class SecureAuthManager: ObservableObject {
                 throw AuthError.decodingError
             }
             storeTokens(
-                access:      tokens.accessToken,
-                refresh:     tokens.refreshToken,
-                appleUserID: appleUserID
+                access:  tokens.accessToken,
+                refresh: tokens.refreshToken
             )
             isAuthenticated = true
 
@@ -391,10 +395,13 @@ class SecureAuthManager: ObservableObject {
 
     // MARK: - Private Helpers
 
-    private func storeTokens(access: String, refresh: String, appleUserID: String) {
+    private func storeTokens(access: String, refresh: String) {
         KeychainManager.shared.save(key: accessTokenKey,  data: Data(access.utf8))
         KeychainManager.shared.save(key: refreshTokenKey, data: Data(refresh.utf8))
-        KeychainManager.shared.save(key: appleUserIDKey,  data: Data(appleUserID.utf8))
+        // NOTE: the raw Apple user ID is intentionally NOT stored — only the
+        // one-way ParticipantID hash (UserDefaults) is kept, so the device
+        // never holds a raw re-identification key. clearTokens() still deletes
+        // appleUserIDKey to purge any value written by earlier builds.
     }
 
     private func clearTokens() {

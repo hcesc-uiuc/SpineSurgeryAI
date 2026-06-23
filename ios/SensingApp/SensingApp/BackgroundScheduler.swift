@@ -7,6 +7,7 @@
 
 import BackgroundTasks
 import Network
+import SensorKit
 
 class BackgroundScheduler {
     
@@ -20,6 +21,17 @@ class BackgroundScheduler {
     private init() {}
     
     func startSensorRecording() {
+        
+        //check sensorkit authorization
+        let authKey = "sk_authorization_status"
+        let raw = UserDefaults.standard.integer(forKey: authKey)
+        let authorizationStatus = SRAuthorizationStatus(rawValue: raw) ?? .notDetermined
+        if authorizationStatus == .authorized{
+            print("SensorKit is authorized. We are fetching data")
+            Logger.shared.append("SensorKit is authorized. We are fetching data")
+            performSensorkitFetch()
+        }
+        
         var someSensorIsActive = false
         if(AcclerometerRecorder.shared.checkAccelerometerAuthorizationStatus() == true){
             // Restart motion recording

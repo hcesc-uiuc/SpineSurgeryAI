@@ -16,40 +16,40 @@ import SensorKit
 
 enum JourneyTab: CaseIterable {
     case home, sensors, progress
-    #if DEBUG
-        case debug
-    #endif
-
+#if DEBUG
+    case debug
+#endif
+    
     var icon: String {
         switch self {
         case .home:     return "house.fill"
         case .sensors:  return "waveform"
         case .progress: return "calendar"
-        #if DEBUG
+#if DEBUG
         case .debug:    return "ant.fill"
-        #endif
+#endif
         }
     }
-
+    
     var label: String {
         switch self {
         case .home:     return "Home"
         case .sensors:  return "Sensors"
         case .progress: return "Calendar"
-        #if DEBUG
+#if DEBUG
         case .debug:    return "Debug"
-        #endif
+#endif
         }
     }
-
+    
     var accentColor: Color {
         switch self {
         case .home:     return Color(red: 0.42, green: 0.62, blue: 0.55) // sage green
         case .sensors:  return Color(red: 0.38, green: 0.55, blue: 0.75) // warm blue
         case .progress: return Color(red: 0.38, green: 0.55, blue: 0.75) // warm blue
-        #if DEBUG
+#if DEBUG
         case .debug:    return Color(red: 0.55, green: 0.47, blue: 0.44) // muted brown
-        #endif
+#endif
         }
     }
 }
@@ -59,27 +59,27 @@ enum JourneyTab: CaseIterable {
 // ============================================================
 
 struct MainAppView: View {
-
+    
     @EnvironmentObject private var authManager: SecureAuthManager
-
+    
     // Observed here so scenePhase audit can reset it and trigger
     // navigation back to PermissionsFlowView automatically
     @AppStorage("permissionsComplete") private var permissionsComplete = false
-
+    
     @StateObject private var appState         = AppState()
     @StateObject private var sensorKitManager = SensorKitManager()
     @StateObject var HKManager                = HealthKitManager()
-
+    
     @State private var isSurveyPresented = false
     @State private var showDeniedAlert   = false
     @State private var showSettingsAlert = false
-
+    
     @Environment(\.scenePhase) var scenePhase
     let motionActivityManager = CMMotionActivityManager()
-
+    
     @State private var selectedTab: JourneyTab = .home
     @State private var hasStartedCollection = false
-
+    
     // MARK: - Body
     var body: some View {
         TabView(selection: $selectedTab) {
@@ -92,11 +92,11 @@ struct MainAppView: View {
             Tab(JourneyTab.progress.label, systemImage: JourneyTab.progress.icon, value: JourneyTab.progress) {
                 MonthlyProgressView()
             }
-            #if DEBUG
+#if DEBUG
             Tab(JourneyTab.debug.label, systemImage: JourneyTab.debug.icon, value: JourneyTab.debug) {
                 DebugView
             }
-            #endif
+#endif
         }
         .tint(selectedTab.accentColor)
         .overlay(alignment: .bottomTrailing) {
@@ -110,10 +110,10 @@ struct MainAppView: View {
             hasStartedCollection = true
             // All permissions have been granted — begin data collection.
             AcclerometerRecorder.shared.startRecording()
-            HealthkitRecorder.shared.getHealthKitData()
-            #if !targetEnvironment(simulator)
-            SensorKitAccelerometerFetcher.shared.startRecording()
-            #endif
+            // HealthkitRecorder.shared.getHealthKitData()
+            // #if !targetEnvironment(simulator)
+            // // SensorKitAccelerometerFetcher.shared.startRecording()
+            // #endif
             BackgroundScheduler.shared.scheduleAppRefresh()
             BackgroundScheduler.shared.scheduleBGProcessingTask()
             BackgroundScheduler.shared.scheduleUploadBGTask()
@@ -129,7 +129,7 @@ struct MainAppView: View {
                 BackgroundScheduler.shared.scheduleBackgroundSensorkitFetch()
                 BackgroundScheduler.shared.scheduleHealthResearchBGProcessingTask()
                 Logger.shared.append("App moved to background")
-
+                
             } else if newPhase == .active {
                 print("App moved to foreground")
                 Logger.shared.append("App moved to foreground")
@@ -138,18 +138,18 @@ struct MainAppView: View {
                 // this immediately resets permissionsComplete and routes them
                 // back through PermissionsFlowView before any data is missed.
                 auditPermissionsOnForeground()
-
+                
             } else if newPhase == .inactive {
                 print("App is inactive")
                 Logger.shared.append("App moved to inactive")
             }
         }
     }
-
+    
     // ============================================================
     // MARK: - Survey FAB
     // ============================================================
-
+    
     private var surveyButton: some View {
         Button(action: { isSurveyPresented = true }) {
             Image(systemName: appState.isCompletedToday ? "checkmark" : "list.clipboard.fill")
@@ -168,15 +168,15 @@ struct MainAppView: View {
         .padding(.trailing, 20)
         .padding(.bottom, 24)
     }
-
+    
     private var showSurveyButton: Bool {
-        #if DEBUG
+#if DEBUG
         return selectedTab != .debug
-        #else
+#else
         return true
-        #endif
+#endif
     }
-
+    
     // ============================================================
     // MARK: - Foreground Permission Audit
     // ============================================================
@@ -191,9 +191,9 @@ struct MainAppView: View {
         // Sync checks
         // Motion: if hardware unavailable (simulator), treat as granted — mirrors requestMotion().
         let motionOK   = !CMMotionActivityManager.isActivityAvailable() ||
-                         CMMotionActivityManager.authorizationStatus() == .authorized
+        CMMotionActivityManager.authorizationStatus() == .authorized
         let locationOK = CLLocationManager().authorizationStatus == .authorizedAlways
-
+        
         // Health — check actual authorization status, not just device availability
         var healthOK = false
         if HKHealthStore.isHealthDataAvailable() {
@@ -201,40 +201,40 @@ struct MainAppView: View {
             let stepType = HKObjectType.quantityType(forIdentifier: .stepCount)!
             healthOK     = store.authorizationStatus(for: stepType) != .notDetermined
         }
-
+        
         if !motionOK || !locationOK || !healthOK {
             permissionsComplete = false
             // Don't return — the Task below must always run to keep the
             // notifications flag in sync so PermissionsFlowView skips
             // already-granted cards correctly.
         }
-
+        
         // Async checks — SensorKit and Notifications
         Task {
             // SensorKit — not available on simulator, skip gracefully
-            #if targetEnvironment(simulator)
+#if targetEnvironment(simulator)
             let sensorKitOK = true
-            #else
+#else
             let sensorReader = SRSensorReader(sensor: .ambientLightSensor)
             let sensorKitOK  = sensorReader.authorizationStatus == .authorized
-            #endif
-
+#endif
+            
             // Notifications — sync the UserDefaults flag so PermissionsFlowView
             // only shows the notifications card when it's actually revoked.
             let settings        = await UNUserNotificationCenter.current().notificationSettings()
             let notificationsOK = settings.authorizationStatus == .authorized
             UserDefaults.standard.set(notificationsOK, forKey: "journey_notifications_authorized")
-
+            
             if !sensorKitOK || !notificationsOK {
                 await MainActor.run { permissionsComplete = false }
             }
         }
     }
-
+    
     // ============================================================
     // MARK: - Sensor Tab
     // ============================================================
-
+    
     private var SensorView: some View {
         NavigationStack {
             ZStack {
@@ -247,7 +247,7 @@ struct MainAppView: View {
                     endPoint: .bottomTrailing
                 )
                 .ignoresSafeArea()
-
+                
                 ScrollView {
                     VStack(spacing: 24) {
                         // MOTION & ACTIVITY
@@ -257,13 +257,13 @@ struct MainAppView: View {
                             Divider().padding(.leading, 64)
                             sensorRow(icon: "gyroscope",  color: sage, name: "Gyroscope",     detail: "Rotation and turning of your phone.")
                         }
-
+                        
                         // LOCATION
                         let warmBlue = Color(red: 0.38, green: 0.55, blue: 0.75)
                         sensorSection(title: "LOCATION") {
                             sensorRow(icon: "location.fill", color: warmBlue, name: "Location", detail: "Approximate location, including in the background.")
                         }
-
+                        
                         // APPLE HEALTH
                         let terracotta = Color(red: 0.80, green: 0.55, blue: 0.45)
                         sensorSection(title: "APPLE HEALTH") {
@@ -279,7 +279,7 @@ struct MainAppView: View {
                             Divider().padding(.leading, 64)
                             sensorRow(icon: "bed.double.fill",      color: terracotta, name: "Sleep",                detail: "Time asleep and sleep stages.")
                         }
-
+                        
                         // APPLE WATCH
                         let purple = Color(red: 0.58, green: 0.48, blue: 0.72)
                         sensorSection(title: "APPLE WATCH") {
@@ -293,12 +293,12 @@ struct MainAppView: View {
                             Divider().padding(.leading, 64)
                             sensorRow(icon: "sun.max.fill",                 color: purple, name: "Ambient Light",       detail: "Surrounding light levels.",                   badge: "When available")
                         }
-
+                        
                         // DAILY SURVEY
                         sensorSection(title: "DAILY SURVEY") {
                             sensorRow(icon: "list.clipboard.fill", color: terracotta, name: "Recovery Check-in", detail: "Pain, function, medications, sleep, and falls.")
                         }
-
+                        
                         Spacer().frame(height: 90)
                     }
                     .padding(.horizontal, 20)
@@ -308,7 +308,7 @@ struct MainAppView: View {
             .navigationTitle("What We Collect")
         }
     }
-
+    
     // Sensor section: uppercase header + rounded card around rows
     private func sensorSection(title: String, @ViewBuilder rows: () -> some View) -> some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -326,7 +326,7 @@ struct MainAppView: View {
             )
         }
     }
-
+    
     // Sensor row: icon chip + name/detail + optional badge
     private func sensorRow(icon: String, color: Color, name: String, detail: String, badge: String? = nil) -> some View {
         HStack(spacing: 12) {
@@ -360,22 +360,22 @@ struct MainAppView: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
     }
-
+    
     // ============================================================
     // MARK: - Debug Tab
     // ============================================================
-
+    
     private var DebugView: some View {
         VStack {
             Text("Journey app")
                 .font(.title2)
                 .padding()
-
+            
             Button("Fetch Recorded Data") {
                 Task { await fetchRecordedData() }
             }
             .padding(.top, 10)
-
+            
             //            Button("Start Survey") {
             //                isSurveyPresented = true
             //            }
@@ -383,7 +383,7 @@ struct MainAppView: View {
             //            .sheet(isPresented: $isSurveyPresented) {
             //                SurgerySurveyView(appState: appState, authManager: authManager)
             //            }
-
+            
             //            Button("Fetch data") {
             //                Task { await self.fetchRecordedData() }
             //            }.padding(.top, 30)
@@ -395,6 +395,10 @@ struct MainAppView: View {
                 }
             }.padding(.top, 20)
             
+            Button("Insert 1hr Accel to sqlite/csv") {
+                AcclerometerRecorder.shared.simulateAccelerometerDataStroage()
+            }.padding(.top, 20)
+            
             Button("Insert into SQLite db") {
                 Task {
                     //Task will happen asynchronously
@@ -402,11 +406,11 @@ struct MainAppView: View {
                     for i in 0..<N {
                         
                         let unixTime = Date().timeIntervalSince1970 * 1000
-                    
+                        
                         // random size of 2-4 with random content
                         let size  = Int.random(in: 2...4)
                         let bytes = (0..<size).map { _ in UInt8.random(in: 0...255) }
-                    
+                        
                         //database writes
                         SQLiteSaver.shared.addRow(
                             timestamp: unixTime,
@@ -435,34 +439,34 @@ struct MainAppView: View {
             Button("Print schedule bg task") {
                 Task { BackgroundScheduler.shared.printScheduledBackgroundTasks() }
             }.padding(.top, 20)
-
+            
             Button("Upload All Files") {
                 Task {
                     await Uploader.shared.uploadFolder()
                 }
             }.padding(.top, 20)
-
+            
             Button("Print log data") {
                 Task { self.printCurrentLogFile() }
             }.padding(.top, 20)
-
+            
             Button("Get HealthKit data") {
-                Task { 
-                  HealthkitRecorder.shared.getHealthKitData() 
+                Task {
+                    HealthkitRecorder.shared.getHealthKitData()
                 }
             }.padding(.top, 20)
-
+            
             if CLLocationManager().authorizationStatus != .authorizedAlways {
                 Button("Always allow location") {
                     Task { showSettingsAlert = true }
                 }.padding(.top, 10)
             }
-
+            
             if CLLocationManager().authorizationStatus == .authorizedAlways {
                 Text("Always allow location granted")
                     .padding(.top, 10)
             }
-
+            
             Button("Log Out") {
                 authManager.logout()
             }.padding(.top, 20)
@@ -501,23 +505,40 @@ struct MainAppView: View {
             }
         }
     }
-
+    
     // ============================================================
     // MARK: - Home View
     // ============================================================
-
+    
     struct HomeView: View {
         let accentColor: Color
         let onLogout: () -> Void
         @ObservedObject var appState: AppState
         @Binding var isSurveyPresented: Bool
 
-        private let daysSinceSurgery = 14
-        private let patientFirstName = "Username"
+        @AppStorage("journey_first_open_date") private var firstOpenTimestamp: Double = 0
+
+        private var currentDay: Int {
+            guard firstOpenTimestamp != 0 else { return 1 }
+            let cal = Calendar.current
+            let start = cal.startOfDay(for: Date(timeIntervalSince1970: firstOpenTimestamp))
+            let today = cal.startOfDay(for: Date())
+            return max(1, (cal.dateComponents([.day], from: start, to: today).day ?? 0) + 1)
+        }
+
         private var checkInComplete: Bool { appState.isCompletedToday }
 
         @State private var appeared = false
         @State private var showSettings = false
+        @State private var todaySteps: Int? = nil
+        @State private var todayDistanceMeters: Double? = nil
+        @State private var latestHeartRate: Int? = nil
+        @State private var lastNightSleepHours: Double? = nil
+        @State private var todayActiveEnergy: Int? = nil
+        @State private var todayFlights: Int? = nil
+        @State private var weeklyProgress: [Date: Bool] = [:]
+
+        private let calendar = Calendar.current
 
         var body: some View {
             NavigationStack {
@@ -538,7 +559,7 @@ struct MainAppView: View {
                                 Text(greetingText)
                                     .font(.system(size: 14, weight: .medium, design: .rounded))
                                     .foregroundStyle(Color(red: 0.55, green: 0.47, blue: 0.44))
-                                Text("Hi, \(patientFirstName) 👋")
+                                Text("Hi there 👋")
                                     .font(.system(size: 28, weight: .bold, design: .rounded))
                                     .foregroundStyle(Color(red: 0.28, green: 0.22, blue: 0.20))
                             }
@@ -553,6 +574,12 @@ struct MainAppView: View {
                                 .opacity(appeared ? 1 : 0)
                                 .offset(y: appeared ? 0 : 16)
                                 .animation(.easeOut(duration: 0.45).delay(0.15), value: appeared)
+
+                            // ── Weekly survey strip ──────────────
+                            weeklyStripCard
+                                .opacity(appeared ? 1 : 0)
+                                .offset(y: appeared ? 0 : 16)
+                                .animation(.easeOut(duration: 0.45).delay(0.20), value: appeared)
 
                             Button(action: { isSurveyPresented = true }) {
                                 dailyCheckInCard
@@ -592,7 +619,220 @@ struct MainAppView: View {
                     SettingsView(accentColor: Color(red: 0.58, green: 0.48, blue: 0.72), onLogout: onLogout)
                 }
             }
-            .onAppear { appeared = true }
+            .onAppear {
+                appeared = true
+                if firstOpenTimestamp == 0 { firstOpenTimestamp = Date().timeIntervalSince1970 }
+                loadTodayHealthStats()
+                loadWeeklyProgress()
+            }
+        }
+
+        // ── Weekly strip card ─────────────────────
+        private var weeklyStripCard: some View {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("This week")
+                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                    .foregroundStyle(Color(red: 0.55, green: 0.47, blue: 0.44))
+
+                HStack(spacing: 0) {
+                    ForEach(currentWeekDays(), id: \.self) { date in
+                        let isToday    = calendar.isDateInToday(date)
+                        let isFuture   = date > Date()
+                        let completed  = weeklyProgress[calendar.startOfDay(for: date)] ?? false
+                        let dayLetter  = shortDayLetter(for: date)
+                        let dayNum     = calendar.component(.day, from: date)
+
+                        VStack(spacing: 6) {
+                            Text(dayLetter)
+                                .font(.system(size: 11, weight: .medium, design: .rounded))
+                                .foregroundStyle(isToday
+                                    ? Color(red: 0.22, green: 0.48, blue: 0.40)
+                                    : Color(red: 0.55, green: 0.47, blue: 0.44))
+
+                            ZStack {
+                                Circle()
+                                    .fill(isFuture
+                                        ? Color.clear
+                                        : completed
+                                            ? Color(red: 0.22, green: 0.60, blue: 0.45)
+                                            : Color(red: 0.80, green: 0.75, blue: 0.72).opacity(0.5))
+                                    .frame(width: 34, height: 34)
+
+                                if isToday && !completed {
+                                    Circle()
+                                        .strokeBorder(Color(red: 0.42, green: 0.62, blue: 0.55), lineWidth: 2)
+                                        .frame(width: 34, height: 34)
+                                }
+
+                                if !isFuture {
+                                    if completed {
+                                        Image(systemName: "checkmark")
+                                            .font(.system(size: 13, weight: .bold))
+                                            .foregroundStyle(.white)
+                                    } else {
+                                        Text("\(dayNum)")
+                                            .font(.system(size: 13, weight: isToday ? .bold : .regular, design: .rounded))
+                                            .foregroundStyle(Color(red: 0.40, green: 0.32, blue: 0.29))
+                                    }
+                                } else {
+                                    Text("\(dayNum)")
+                                        .font(.system(size: 13, design: .rounded))
+                                        .foregroundStyle(Color(red: 0.70, green: 0.65, blue: 0.62).opacity(0.4))
+                                }
+                            }
+                            .opacity(isFuture ? 0.4 : 1.0)
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
+                }
+            }
+            .padding(18)
+            .background(
+                RoundedRectangle(cornerRadius: 20)
+                    .fill(Color(red: 0.99, green: 0.97, blue: 0.95))
+                    .shadow(color: Color(red: 0.60, green: 0.45, blue: 0.40).opacity(0.10), radius: 12, y: 4)
+            )
+            .padding(.horizontal, 24)
+        }
+
+        private func currentWeekDays() -> [Date] {
+            let today       = calendar.startOfDay(for: Date())
+            let weekday     = calendar.component(.weekday, from: today) // 1=Sun
+            let startOfWeek = calendar.date(byAdding: .day, value: -(weekday - 1), to: today)!
+            return (0..<7).compactMap { calendar.date(byAdding: .day, value: $0, to: startOfWeek) }
+        }
+
+        private func shortDayLetter(for date: Date) -> String {
+            let symbols = ["S", "M", "T", "W", "T", "F", "S"]
+            let weekday = calendar.component(.weekday, from: date) - 1
+            return symbols[weekday]
+        }
+
+        private func loadWeeklyProgress() {
+            let days = currentWeekDays()
+            let formatter = DateFormatter()
+            formatter.dateFormat = "yyyy-MM-dd"
+
+            // Fetch every month the visible week touches (it can straddle a boundary).
+            let months = Set(days.map { $0.startOfMonth() })
+            var result: [Date: Bool] = [:]
+            for month in months {
+                for record in SQLiteSaver.shared.fetchSurveys(forMonth: month) {
+                    guard let date = formatter.date(from: record.dateString) else { continue }
+                    result[calendar.startOfDay(for: date)] = record.completed
+                }
+            }
+            weeklyProgress = result
+        }
+
+        private func loadTodayHealthStats() {
+            guard HKHealthStore.isHealthDataAvailable() else { return }
+            let store = HKHealthStore()
+            let calendar = Calendar.current
+            let startOfDay = calendar.startOfDay(for: Date())
+            let predicate = HKQuery.predicateForSamples(withStart: startOfDay, end: Date(), options: .strictStartDate)
+
+            // Steps query
+            if let stepType = HKQuantityType.quantityType(forIdentifier: .stepCount) {
+                let stepsQuery = HKStatisticsQuery(
+                    quantityType: stepType,
+                    quantitySamplePredicate: predicate,
+                    options: .cumulativeSum
+                ) { _, result, _ in
+                    DispatchQueue.main.async {
+                        todaySteps = result?.sumQuantity().map { Int($0.doubleValue(for: .count())) }
+                    }
+                }
+                store.execute(stepsQuery)
+            }
+
+            // Distance query
+            if let distType = HKQuantityType.quantityType(forIdentifier: .distanceWalkingRunning) {
+                let distQuery = HKStatisticsQuery(
+                    quantityType: distType,
+                    quantitySamplePredicate: predicate,
+                    options: .cumulativeSum
+                ) { _, result, _ in
+                    DispatchQueue.main.async {
+                        todayDistanceMeters = result?.sumQuantity().map { $0.doubleValue(for: .meter()) }
+                    }
+                }
+                store.execute(distQuery)
+            }
+
+            // Active energy query
+            if let energyType = HKQuantityType.quantityType(forIdentifier: .activeEnergyBurned) {
+                let energyQuery = HKStatisticsQuery(
+                    quantityType: energyType,
+                    quantitySamplePredicate: predicate,
+                    options: .cumulativeSum
+                ) { _, result, _ in
+                    DispatchQueue.main.async {
+                        todayActiveEnergy = result?.sumQuantity().map { Int($0.doubleValue(for: .kilocalorie())) }
+                    }
+                }
+                store.execute(energyQuery)
+            }
+
+            // Flights climbed query
+            if let flightsType = HKQuantityType.quantityType(forIdentifier: .flightsClimbed) {
+                let flightsQuery = HKStatisticsQuery(
+                    quantityType: flightsType,
+                    quantitySamplePredicate: predicate,
+                    options: .cumulativeSum
+                ) { _, result, _ in
+                    DispatchQueue.main.async {
+                        todayFlights = result?.sumQuantity().map { Int($0.doubleValue(for: .count())) }
+                    }
+                }
+                store.execute(flightsQuery)
+            }
+
+            // Heart rate query — latest sample today
+            if let hrType = HKQuantityType.quantityType(forIdentifier: .heartRate) {
+                let hrQuery = HKSampleQuery(
+                    sampleType: hrType,
+                    predicate: predicate,
+                    limit: 1,
+                    sortDescriptors: [NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: false)]
+                ) { _, samples, _ in
+                    DispatchQueue.main.async {
+                        if let sample = samples?.first as? HKQuantitySample {
+                            latestHeartRate = Int(sample.quantity.doubleValue(for: HKUnit.count().unitDivided(by: .minute())))
+                        }
+                    }
+                }
+                store.execute(hrQuery)
+            }
+
+            // Sleep query — last night (yesterday 18:00 to now)
+            if let sleepType = HKObjectType.categoryType(forIdentifier: .sleepAnalysis) {
+                let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: Date())!
+                let sleepStart = Calendar.current.date(bySettingHour: 18, minute: 0, second: 0, of: yesterday)!
+                let sleepPredicate = HKQuery.predicateForSamples(withStart: sleepStart, end: Date(), options: .strictStartDate)
+                let sleepQuery = HKSampleQuery(
+                    sampleType: sleepType,
+                    predicate: sleepPredicate,
+                    limit: HKObjectQueryNoLimit,
+                    sortDescriptors: nil
+                ) { _, samples, _ in
+                    DispatchQueue.main.async {
+                        let asleepValues: Set<Int> = [
+                            HKCategoryValueSleepAnalysis.asleep.rawValue,
+                            HKCategoryValueSleepAnalysis.asleepCore.rawValue,
+                            HKCategoryValueSleepAnalysis.asleepDeep.rawValue,
+                            HKCategoryValueSleepAnalysis.asleepREM.rawValue,
+                            HKCategoryValueSleepAnalysis.asleepUnspecified.rawValue
+                        ]
+                        let totalSeconds = (samples as? [HKCategorySample])?.reduce(0.0) { acc, s in
+                            asleepValues.contains(s.value) ? acc + s.endDate.timeIntervalSince(s.startDate) : acc
+                        } ?? 0.0
+                        let hours = totalSeconds / 3600.0
+                        lastNightSleepHours = hours > 0 ? hours : nil
+                    }
+                }
+                store.execute(sleepQuery)
+            }
         }
 
         private var recoveryDayCard: some View {
@@ -610,10 +850,10 @@ struct MainAppView: View {
                     Text("Day")
                         .font(.system(size: 16, weight: .medium, design: .rounded))
                         .foregroundStyle(.white.opacity(0.85))
-                    Text("\(daysSinceSurgery)")
+                    Text("\(currentDay)")
                         .font(.system(size: 72, weight: .bold, design: .rounded))
                         .foregroundStyle(.white)
-                    Text("of your recovery journey")
+                    Text(currentDay == 1 ? "Welcome to your recovery journey!" : "of your recovery journey")
                         .font(.system(size: 14, weight: .medium, design: .rounded))
                         .foregroundStyle(.white.opacity(0.85))
                     if let milestone = currentMilestone {
@@ -672,32 +912,50 @@ struct MainAppView: View {
             .padding(.horizontal, 24)
         }
 
+        private let statColumns = [GridItem(.flexible(), spacing: 10),
+                                   GridItem(.flexible(), spacing: 10),
+                                   GridItem(.flexible(), spacing: 10)]
+
         private var quickStatsRow: some View {
-            HStack(spacing: 12) {
-                statCard(icon: "figure.walk",       value: "2,840", label: "Steps today", color: Color(red: 0.42, green: 0.62, blue: 0.55))
-                statCard(icon: "waveform.path.ecg", value: "3/10",  label: "Pain level",  color: Color(red: 0.80, green: 0.55, blue: 0.45))
-                statCard(icon: "calendar",          value: "3d",    label: "Next survey", color: Color(red: 0.38, green: 0.55, blue: 0.75))
+            LazyVGrid(columns: statColumns, spacing: 10) {
+                statCard(icon: "figure.walk",        value: todaySteps.map { formatSteps($0) } ?? "—",                        label: "Steps",       color: Color(red: 0.42, green: 0.62, blue: 0.55))
+                statCard(icon: "figure.walk.motion", value: todayDistanceMeters.map { formatDistance($0) } ?? "—",            label: "Distance",    color: Color(red: 0.38, green: 0.55, blue: 0.75))
+                statCard(icon: "heart.fill",         value: latestHeartRate.map { "\($0)" } ?? "—",                           label: "Heart rate",  color: Color(red: 0.80, green: 0.55, blue: 0.45))
+                statCard(icon: "flame.fill",         value: todayActiveEnergy.map { "\($0)" } ?? "—",                         label: "Active kcal", color: Color(red: 0.85, green: 0.50, blue: 0.35))
+                statCard(icon: "figure.stairs",      value: todayFlights.map { "\($0)" } ?? "—",                              label: "Flights",     color: Color(red: 0.50, green: 0.60, blue: 0.45))
+                statCard(icon: "bed.double.fill",    value: lastNightSleepHours.map { String(format: "%.1f hr", $0) } ?? "—", label: "Sleep",       color: Color(red: 0.58, green: 0.48, blue: 0.72))
             }
             .padding(.horizontal, 24)
         }
 
+        private func formatSteps(_ steps: Int) -> String {
+            let formatter = NumberFormatter()
+            formatter.numberStyle = .decimal
+            return formatter.string(from: NSNumber(value: steps)) ?? "\(steps)"
+        }
+
+        private func formatDistance(_ meters: Double) -> String {
+            let km = meters / 1000.0
+            return String(format: "%.1f km", km)
+        }
+
         private func statCard(icon: String, value: String, label: String, color: Color) -> some View {
-            VStack(spacing: 8) {
+            VStack(spacing: 6) {
                 Image(systemName: icon)
-                    .font(.system(size: 20))
+                    .font(.system(size: 18))
                     .foregroundStyle(color)
                 Text(value)
-                    .font(.system(size: 18, weight: .bold, design: .rounded))
+                    .font(.system(size: 16, weight: .bold, design: .rounded))
                     .foregroundStyle(Color(red: 0.28, green: 0.22, blue: 0.20))
                 Text(label)
-                    .font(.system(size: 11, weight: .medium, design: .rounded))
+                    .font(.system(size: 10, weight: .medium, design: .rounded))
                     .foregroundStyle(Color(red: 0.55, green: 0.47, blue: 0.44))
                     .multilineTextAlignment(.center)
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 16)
+            .padding(.vertical, 12)
             .background(
-                RoundedRectangle(cornerRadius: 16)
+                RoundedRectangle(cornerRadius: 14)
                     .fill(Color(red: 0.99, green: 0.97, blue: 0.95))
                     .shadow(color: Color(red: 0.60, green: 0.45, blue: 0.40).opacity(0.10), radius: 8, y: 3)
             )
@@ -713,7 +971,7 @@ struct MainAppView: View {
         }
 
         private var currentMilestone: String? {
-            switch daysSinceSurgery {
+            switch currentDay {
             case 7:  return "🎉 1 week milestone!"
             case 14: return "🎉 2 week milestone!"
             case 30: return "🎉 1 month milestone!"
@@ -731,7 +989,8 @@ struct MainAppView: View {
         let accentColor: Color
         var onLogout: () -> Void
         @State private var showingLogoutAlert = false
-
+        @State private var showingPrivacySheet = false
+        @State private var showingHelpSheet = false
         var body: some View {
             NavigationStack {
                 ZStack {
@@ -756,7 +1015,7 @@ struct MainAppView: View {
                                     .foregroundStyle(accentColor)
                             }
                             VStack(alignment: .leading, spacing: 3) {
-                                Text("Patient")
+                                Text("User")
                                     .font(.system(size: 17, weight: .semibold, design: .rounded))
                                     .foregroundStyle(Color(red: 0.28, green: 0.22, blue: 0.20))
                                 Text("Journey Study Participant")
@@ -773,11 +1032,24 @@ struct MainAppView: View {
                         )
 
                         VStack(spacing: 0) {
-                            settingsRow(icon: "bell.fill",                label: "Notifications", color: Color(red: 0.55, green: 0.48, blue: 0.75))
+                            Button {
+                                if let url = URL(string: UIApplication.openNotificationSettingsURLString) {
+                                    UIApplication.shared.open(url)
+                                }
+                            } label: {
+                                settingsRow(icon: "bell.fill", label: "Notifications", color: Color(red: 0.55, green: 0.48, blue: 0.75))
+                            }
+                            .buttonStyle(.plain)
                             Divider().padding(.leading, 56)
-                            settingsRow(icon: "lock.fill",                label: "Privacy",       color: Color(red: 0.38, green: 0.55, blue: 0.75))
+                            Button { showingPrivacySheet = true } label: {
+                                settingsRow(icon: "lock.fill", label: "Privacy", color: Color(red: 0.38, green: 0.55, blue: 0.75))
+                            }
+                            .buttonStyle(.plain)
                             Divider().padding(.leading, 56)
-                            settingsRow(icon: "questionmark.circle.fill", label: "Help & Support", color: Color(red: 0.42, green: 0.62, blue: 0.55))
+                            Button { showingHelpSheet = true } label: {
+                                settingsRow(icon: "questionmark.circle.fill", label: "Help & Support", color: Color(red: 0.42, green: 0.62, blue: 0.55))
+                            }
+                            .buttonStyle(.plain)
                         }
                         .background(
                             RoundedRectangle(cornerRadius: 20)
@@ -811,10 +1083,175 @@ struct MainAppView: View {
                 } message: {
                     Text("Are you sure you want to log out of Journey?")
                 }
+                .sheet(isPresented: $showingPrivacySheet) {
+                    privacySheet
+                }
+                .sheet(isPresented: $showingHelpSheet) {
+                    helpSheet
+                }
             }
         }
 
-        private func settingsRow(icon: String, label: String, color: Color) -> some View {
+        private var privacySheet: some View {
+            NavigationStack {
+                ZStack {
+                    LinearGradient(
+                        colors: [
+                            Color(red: 0.98, green: 0.95, blue: 0.91),
+                            Color(red: 0.95, green: 0.91, blue: 0.88)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                    .ignoresSafeArea()
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 16) {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("About This Study")
+                                    .font(.system(size: 17, weight: .semibold, design: .rounded))
+                                    .foregroundStyle(Color(red: 0.28, green: 0.22, blue: 0.20))
+                                Text("Journey is a multi-institution research study of recovery after spine surgery. Your phone and watch help your care team understand how you're healing day to day.")
+                                    .font(.system(size: 15, design: .rounded))
+                                    .foregroundStyle(Color(red: 0.40, green: 0.32, blue: 0.29))
+                                    .lineSpacing(3)
+                            }
+                            .padding(16)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(
+                                RoundedRectangle(cornerRadius: 16)
+                                    .fill(Color(red: 0.99, green: 0.97, blue: 0.95))
+                                    .shadow(color: Color(red: 0.60, green: 0.45, blue: 0.40).opacity(0.08), radius: 8, y: 3)
+                            )
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("What We Collect")
+                                    .font(.system(size: 17, weight: .semibold, design: .rounded))
+                                    .foregroundStyle(Color(red: 0.28, green: 0.22, blue: 0.20))
+                                ForEach(["Motion & activity", "Location", "Health metrics (steps, heart rate, sleep)", "Daily check-in answers"], id: \.self) { item in
+                                    HStack(spacing: 8) {
+                                        Circle()
+                                            .fill(Color(red: 0.42, green: 0.62, blue: 0.55))
+                                            .frame(width: 6, height: 6)
+                                        Text(item)
+                                            .font(.system(size: 15, design: .rounded))
+                                            .foregroundStyle(Color(red: 0.40, green: 0.32, blue: 0.29))
+                                    }
+                                }
+                            }
+                            .padding(16)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(
+                                RoundedRectangle(cornerRadius: 16)
+                                    .fill(Color(red: 0.99, green: 0.97, blue: 0.95))
+                                    .shadow(color: Color(red: 0.60, green: 0.45, blue: 0.40).opacity(0.08), radius: 8, y: 3)
+                            )
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Your Data")
+                                    .font(.system(size: 17, weight: .semibold, design: .rounded))
+                                    .foregroundStyle(Color(red: 0.28, green: 0.22, blue: 0.20))
+                                Text("Your data is used for research purposes only and is never sold or shared outside the study. You may withdraw at any time by contacting your study coordinator.")
+                                    .font(.system(size: 15, design: .rounded))
+                                    .foregroundStyle(Color(red: 0.40, green: 0.32, blue: 0.29))
+                                    .lineSpacing(3)
+                            }
+                            .padding(16)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(
+                                RoundedRectangle(cornerRadius: 16)
+                                    .fill(Color(red: 0.99, green: 0.97, blue: 0.95))
+                                    .shadow(color: Color(red: 0.60, green: 0.45, blue: 0.40).opacity(0.08), radius: 8, y: 3)
+                            )
+                        }
+                        .padding(20)
+                    }
+                }
+                .navigationTitle("About This Study")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button("Done") { showingPrivacySheet = false }
+                            .font(.system(size: 16, weight: .medium, design: .rounded))
+                            .foregroundStyle(Color(red: 0.55, green: 0.47, blue: 0.44))
+                    }
+                }
+            }
+            .preferredColorScheme(.light)
+        }
+
+        private var helpSheet: some View {
+            NavigationStack {
+                ZStack {
+                    LinearGradient(
+                        colors: [
+                            Color(red: 0.98, green: 0.95, blue: 0.91),
+                            Color(red: 0.95, green: 0.91, blue: 0.88)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                    .ignoresSafeArea()
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 16) {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Questions about the study or the app? Your study coordinator is happy to help.")
+                                    .font(.system(size: 15, design: .rounded))
+                                    .foregroundStyle(Color(red: 0.40, green: 0.32, blue: 0.29))
+                                    .lineSpacing(3)
+                            }
+                            .padding(16)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(
+                                RoundedRectangle(cornerRadius: 16)
+                                    .fill(Color(red: 0.99, green: 0.97, blue: 0.95))
+                                    .shadow(color: Color(red: 0.60, green: 0.45, blue: 0.40).opacity(0.08), radius: 8, y: 3)
+                            )
+                            VStack(spacing: 0) {
+                                HStack {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text("Study coordinator")
+                                            .font(.system(size: 15, weight: .semibold, design: .rounded))
+                                            .foregroundStyle(Color(red: 0.28, green: 0.22, blue: 0.20))
+                                        Text("Contact details provided by your care team")
+                                            .font(.system(size: 13, design: .rounded))
+                                            .foregroundStyle(Color(red: 0.55, green: 0.47, blue: 0.44))
+                                    }
+                                    Spacer()
+                                }
+                                .padding(16)
+                                Divider().padding(.leading, 16)
+                                HStack {
+                                    Text("App version")
+                                        .font(.system(size: 15, design: .rounded))
+                                        .foregroundStyle(Color(red: 0.28, green: 0.22, blue: 0.20))
+                                    Spacer()
+                                    Text(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—")
+                                        .font(.system(size: 15, design: .rounded))
+                                        .foregroundStyle(Color(red: 0.55, green: 0.47, blue: 0.44))
+                                }
+                                .padding(16)
+                            }
+                            .background(
+                                RoundedRectangle(cornerRadius: 16)
+                                    .fill(Color(red: 0.99, green: 0.97, blue: 0.95))
+                                    .shadow(color: Color(red: 0.60, green: 0.45, blue: 0.40).opacity(0.08), radius: 8, y: 3)
+                            )
+                        }
+                        .padding(20)
+                    }
+                }
+                .navigationTitle("Help & Support")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button("Done") { showingHelpSheet = false }
+                            .font(.system(size: 16, weight: .medium, design: .rounded))
+                            .foregroundStyle(Color(red: 0.55, green: 0.47, blue: 0.44))
+                    }
+                }
+            }
+            .preferredColorScheme(.light)
+        }
+
+        private func settingsRow(icon: String, label: String, color: Color, trailingValue: String? = nil) -> some View {
             HStack(spacing: 14) {
                 ZStack {
                     RoundedRectangle(cornerRadius: 8)
@@ -828,6 +1265,11 @@ struct MainAppView: View {
                     .font(.system(size: 16, design: .rounded))
                     .foregroundStyle(Color(red: 0.28, green: 0.22, blue: 0.20))
                 Spacer()
+                if let trailingValue {
+                    Text(trailingValue)
+                        .font(.system(size: 14, design: .rounded))
+                        .foregroundStyle(Color(red: 0.55, green: 0.47, blue: 0.44))
+                }
                 Image(systemName: "chevron.right")
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(Color(red: 0.75, green: 0.65, blue: 0.62))

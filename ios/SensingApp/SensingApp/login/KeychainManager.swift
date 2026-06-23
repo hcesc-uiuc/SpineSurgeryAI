@@ -23,13 +23,16 @@ import Security
 // STORED KEYS (set by SecureAuthManager):
 //   "journey_access_token"    — short-lived JWT for API requests
 //   "journey_refresh_token"   — long-lived token for silent re-auth
-//   "journey_apple_user_id"   — Apple's stable user identifier string
+//   (The raw Apple user ID is NOT stored — only its one-way hash, in
+//    UserDefaults via ParticipantID — so no re-identification key is kept.)
 //
 // ACCESSIBILITY:
-//   kSecAttrAccessibleAfterFirstUnlock is used so tokens remain
-//   readable after the device is unlocked once — this supports
+//   kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly is used so tokens
+//   remain readable after the device is unlocked once — this supports
 //   background tasks and silent refresh on app relaunch without
-//   requiring the user to unlock the device first.
+//   requiring the user to unlock the device first. "ThisDeviceOnly"
+//   keeps tokens out of encrypted backups, so they never migrate to
+//   another device (PHI hardening) — the user re-authenticates instead.
 //
 // USAGE:
 //   KeychainManager.shared.save(key: "my_key", data: Data("value".utf8))
@@ -64,15 +67,15 @@ class KeychainManager {
     // then re-added — standard upsert pattern for Keychain since
     // SecItemUpdate requires more complex handling.
     //
-    // kSecAttrAccessibleAfterFirstUnlock ensures the item is readable
-    // after the first device unlock, which is required for background
-    // token refresh to work without the user actively using the device.
+    // kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly ensures the item is
+    // readable after the first device unlock (required for background token
+    // refresh) while never leaving the device via iCloud or encrypted backups.
     func save(key: String, data: Data) {
         let query: [CFString: Any] = [
             kSecClass:          kSecClassGenericPassword,
             kSecAttrAccount:    key,
             kSecValueData:      data,
-            kSecAttrAccessible: kSecAttrAccessibleAfterFirstUnlock  // ← required for background refresh
+            kSecAttrAccessible: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly  // ← background refresh; ThisDeviceOnly = never restored to another device via backup
         ]
         SecItemDelete(query as CFDictionary)
         SecItemAdd(query as CFDictionary, nil)

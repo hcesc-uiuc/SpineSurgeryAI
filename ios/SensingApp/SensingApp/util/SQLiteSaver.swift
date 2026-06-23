@@ -23,6 +23,7 @@ struct SensorSample {
     var timestamp: Double
     var dataType:  DataType
     var blob:      [UInt8]
+    var counter: Int
 }
 
 final class SQLiteSaver {
@@ -35,10 +36,41 @@ final class SQLiteSaver {
     //
     static let shared = SQLiteSaver()
     private var databaseURL: URL = URL(fileURLWithPath: "")
+    /*
+     private(set): anyone can read db, only this type can write it.
+     External code can do `pipeline.db` but not `pipeline.db = something`.
+
+     OpaquePointer: Swift's wrapper for a C pointer to an unknown type.
+     SQLite is a C library — its sqlite3* handle points to an internal
+     struct Swift has no definition for. Rather than importing it as a
+     real type, Swift holds the address as OpaquePointer ("I have a
+     pointer, I don't know what's inside"). You pass it to C functions
+     like sqlite3_exec(db, ...) and they know what to do with it.
+
+     ?: Optional — the handle is nil before sqlite3_open succeeds.
+     If opening fails you hold nil instead of a garbage pointer.
+     Forces the rest of the code to check non-nil before using it.
+     */
     private(set) var db: OpaquePointer?
+    /*
+     OpaquePointer?: holds the compiled SQL statement handle returned
+     by sqlite3_prepare_v2. Like db, it's a C pointer to an internal
+     SQLite struct Swift can't see into — so OpaquePointer again.
+
+     nil until sqlite3_prepare_v2 runs successfully. Once prepared,
+     you reuse this same compiled statement on every insert by calling
+     sqlite3_reset(insertStmt) instead of re-preparing each time.
+
+     Must be finalized with sqlite3_finalize(insertStmt) in deinit
+     to avoid a memory leak — SQLite holds resources for it until
+     you explicitly release it.
+     */
+    var insertStmt: OpaquePointer?
     private var index = 0
-    private var capacity: Int = 10000
-    private var flushAfterThisCount: Int = 10000
+    //100Hz will fill for 3600 seconds=60 minutes of data. 100*3600 = 360,000
+    //We sometimes have to write hours of cached data.
+    private var capacity: Int = 120000
+    private var flushAfterThisCount: Int = 120000
     private let maxFileSizeMB: Double = 5  // 👈 change this threshold
     private let accessQueue = DispatchQueue(label: "com.sensingapp.sqlitesaver")
     
@@ -49,10 +81,12 @@ final class SQLiteSaver {
     // semaphoreFull  — how many slots are ready to be consumed
     private let semaphoreEmpty: DispatchSemaphore
     private let semaphoreFull:  DispatchSemaphore
+    private var semaphoreEmptyCount: Int
+    private var semaphoreFullCount: Int
     
     func configure(capacity: Int, flushAfterThisCount: Int) {
-        self.capacity    = capacity
-        self.flushAfterThisCount = flushAfterThisCount
+        //self.capacity    = capacity
+        //self.flushAfterThisCount = flushAfterThisCount
     }
     
     init() {
@@ -74,6 +108,8 @@ final class SQLiteSaver {
         //                   so consumer can take from the queue. Else, block
         self.semaphoreEmpty = DispatchSemaphore(value: self.capacity) // all slots free
         self.semaphoreFull  = DispatchSemaphore(value: 0)        // nothing to consume yet
+        self.semaphoreEmptyCount = self.capacity
+        self.semaphoreFullCount = 0
         
         //  if !fileManager.fileExists(atPath: self.databaseURL.path){
         //       createNewDatabaseFile()
@@ -86,7 +122,7 @@ final class SQLiteSaver {
         //We are opening file at the beginning
         //creating all the tables if they do not exist
         open()
-        //defined in an extension
+        //defined in an extension. Only created tables it does not exist
         createTables()
         //
         close()
@@ -108,6 +144,7 @@ final class SQLiteSaver {
         
         open()
         createTables()
+        prepareInsertStatement()
         //close() -- Not closing as this files will be use
     }
     
@@ -134,8 +171,33 @@ final class SQLiteSaver {
         // — enough to survive a crash, though not a power loss mid-write.
         sqlite3_exec(db, "PRAGMA synchronous = NORMAL;", nil, nil, nil)
         sqlite3_exec(db, "PRAGMA foreign_keys = ON;",   nil, nil, nil)
+        
+        
+        /*
+         defer runs its block when the enclosing scope exits — whether
+         that's a normal return, an early return, or a thrown error.
 
+         sqlite3_finalize releases the memory SQLite allocated for the
+         compiled statement. Without it, every call that prepares a
+         statement leaks resources.
+
+         Placing it immediately after sqlite3_prepare_v2 succeeds means
+         you can never forget to clean up — no matter how many early
+         returns or error paths follow, finalize is guaranteed to run.
+         */
+        // defer { sqlite3_finalize(insertStmt) }
+        
         print("✅ Database opened at: \(path)")
+    }
+    
+    func prepareInsertStatement(){
+        let sql = "INSERT INTO data (timestamp, data_type, blob) VALUES (?, ?, ?);"
+        sqlite3_prepare_v2(db, sql, -1, &insertStmt, nil)
+        
+        let rc = sqlite3_exec(db, "BEGIN", nil, nil, nil)
+        if rc != SQLITE_OK {
+            print("❌ BEGIN failed: \(String(cString: sqlite3_errmsg(db)))")
+        }
     }
     
     func close() {
@@ -149,6 +211,7 @@ final class SQLiteSaver {
         // It does not move data from disk to some safer place — the data is
         // already on disk after each successful sqlite3_step.
         //
+        sqlite3_finalize(insertStmt)
         sqlite3_close(db)
         self.db = nil
         print("🔒 Database closed")
@@ -190,36 +253,29 @@ final class SQLiteSaver {
 
     /// Add one row — thread-safe via serial queue
     func addRow(timestamp: Double, dataType: DataType, blob: [UInt8], counter:Int = 0) {
-        //sync or async
-        //--- sync is here to wait
-        //--- async will not wait
-        //------- sync is needed if we close the database in one call
-        //------- and trying to write it in another call
-        //------- Note that we will call addrow in a loop.
-        //------- The order insertion can be different from the order of call
-        //------- "queue.sync" will ensure that from different threads, we will be protected
-        //
+        // Wait OUTSIDE the serial queue to avoid priority inversion.
+        // If semaphoreEmpty.wait() were inside accessQueue.sync, a high-QoS
+        // caller would hold the queue lock while blocking on the utility-QoS
+        // consumer to signal — that is a priority inversion.
+        // By waiting first, we only enter the queue once a slot is guaranteed free.
         
-        //Problem here is to keep the database open or close
-        //
+        semaphoreEmpty.wait()
+        semaphoreEmptyCount = max(0, semaphoreEmptyCount - 1)
+        
         accessQueue.sync {
-            
-            // Wait decreases semaphoreEmpty by 1.
-            // semaphoreEmpty's initial value is circular buffer capacity
-            // if semaphoreEmpty values is zero, the wait will lock
-            // block if buffer is full — waits for consumer to free a slot
-            semaphoreEmpty.wait()
-            
-            //figure out how add three values
-            _ = buffer.enqueue(timestamp: timestamp, dataType: dataType, blob: blob)
-            
-            //Debug
+            _ = buffer.enqueue(timestamp: timestamp, dataType: dataType, blob: blob, counter: counter)
             print("Producer: Queuing data #\(counter)")
-            
-            //signal will increase semaphoreFull
-            //so any wait will be unlocked.-1
-            semaphoreFull.signal()      // tell consumer a new sample is ready
         }
+        
+        semaphoreFullCount = min(capacity, semaphoreFullCount + 1)
+        semaphoreFull.signal()
+        
+        // "semaphoreEmpty": non-zero means there is some slots empty in the queue,
+        //                   so producers can add to queue. Else, block.
+        //                   wait decreases value, signal increase values
+        // "semaphoreFull": non-zero means there is some slots full in the queue,
+        //                   so consumer can take from the queue. Else, block
+        
     }
     
     
@@ -233,26 +289,30 @@ final class SQLiteSaver {
                 //This unblocked by producer (i.e., 'addRow')
                 //
                 //Waits until the queue has something in it)
+                
+                //note everytime a new producer
+                //call happened, semaphoreFull incremented.
+                //We will inititally wait if queue is empty
                 self.semaphoreFull.wait()
+                semaphoreFullCount = max(0, semaphoreFullCount - 1)
+                
                 
                 let sample = self.accessQueue.sync {
                     self.buffer.dequeue()
                 }
                 
-                
-                
+                // sample will be nil if buffer is empty
+                // (See code below)
                 if let sample {
-                    
-                    //Debug
-                    print("Consumer: DeQueuing data")
                     
                     if db == nil {
                         //means database is not open.
                         open()
-                    }else{
-                        print("DB: db already open, \(self.databaseURL.lastPathComponent)")
+                        prepareInsertStatement()
                     }
-
+                    
+                    //Debug
+                    print("Consumer: DeQueuing data #\(sample.counter), index \(index)")
                     insertData(timestamp: sample.timestamp, dataType: sample.dataType, blob: sample.blob)
                     index += 1
                     
@@ -261,9 +321,75 @@ final class SQLiteSaver {
                         flushDataToDb()
                     }
                     
-                    //signals is not full anymore
+                }
+                
+                semaphoreEmptyCount = min(capacity, semaphoreEmptyCount + 1)
+                self.semaphoreEmpty.signal()
+                
+                /*
+                //we are clearing out the buffer entirely.
+                //Otherwise, it becomes slow when buffer is full
+                //One sample is consumed, one is filled producers.
+                //There is a lot lock unlock happening at the same
+                //time.
+                var sampleReadFromQueue = 0
+                
+                while self.buffer.isEmpty == false {
+                    
+                    let sample = self.accessQueue.sync {
+                        self.buffer.dequeue()
+                    }
+                    
+                    // sample will be nil if buffer is empty
+                    // (See code below)
+                    if let sample {
+                        
+                        if db == nil {
+                            //means database is not open.
+                            open()
+                        }
+                        
+                        //Debug
+                        print("Consumer: DeQueuing data #\(sample.counter)")
+                        insertData(timestamp: sample.timestamp, dataType: sample.dataType, blob: sample.blob)
+                        index += 1
+                        
+                        // auto flush when full
+                        if index == flushAfterThisCount {
+                            flushDataToDb()
+                        }
+                        
+                    }
+                    
+                    sampleReadFromQueue = sampleReadFromQueue + 1
+                }
+                
+                
+                
+                //signals is not full anymore
+                for _ in 0..<sampleReadFromQueue {
+                    // if i < sampleReadFromQueue - 1{
+                    //
+                    // }
+                    if semaphoreFullCount > 0 {
+                        //This is because when zero, it will the outer wait will stop
+                        //This consumer.
+                        self.semaphoreFull.wait()
+                        semaphoreFullCount = max(0, semaphoreFullCount - 1)
+                    }
+
+                    //calling it the number of time we got a sample.
+                    semaphoreEmptyCount = min(capacity, semaphoreEmptyCount + 1)
                     self.semaphoreEmpty.signal()
                 }
+                 print("sampleReadFromQueue: \(sampleReadFromQueue)")
+                */
+                /*
+                print("bufferElementCount: \(buffer.count)")
+                print("semaphoreFullCount: \(semaphoreFullCount)")
+                print("semaphoreEmptyCount: \(semaphoreEmptyCount)")
+                print("Capacity: \(capacity)" )
+                 */
             }
         }
         thread.name = "com.sensingapp.consumer"
@@ -283,6 +409,7 @@ final class SQLiteSaver {
         index = 0 //means no data to flush yet.
         
         // If the filesize is larger than "maxFileSizeMB", we create new file.
+        print("File size \(fileSizeMB(at: self.databaseURL)), \(self.databaseURL.lastPathComponent)")
         if fileSizeMB(at: self.databaseURL) > maxFileSizeMB ||
             forceNewFile == true {
             
@@ -290,11 +417,11 @@ final class SQLiteSaver {
                 print("DB: Starting a new file. Current \(self.databaseURL.lastPathComponent)  file size is too big: \(fileSizeMB(at: self.databaseURL))")
             }
             else{
-                print("DB: Current file is \(self.databaseURL.lastPathComponent)  \(fileSizeMB(at: self.databaseURL)). Force creating a new file.")
+                print("DB: Current file is \(self.databaseURL.lastPathComponent)  \(fileSizeMB(at: self.databaseURL)) MB. Force creating a new file.")
             }
             
             close()
-            createNewDatabaseFile()  // already calls open() + createTables() internally
+            createNewDatabaseFile()  // already calls open() + createTables() + insertPreage internally
         }
     }
 
@@ -327,24 +454,25 @@ final class CircularBufferSQLite {
     private var buffer: [SensorSample]
     private var readIndex  = 0
     private var writeIndex = 0
-    private var count      = 0
+    public var count      = 0
     let capacity: Int
     
     //Todo: pre-allocate the buffer for bytes
  
     init(capacity: Int) {
         self.capacity = capacity
-        self.buffer   = Array(repeating: SensorSample(timestamp: -1, dataType: .dummy, blob: [UInt8]()), count: capacity)
+        self.buffer   = Array(repeating: SensorSample(timestamp: -1, dataType: .dummy, blob: [UInt8](), counter: 0), count: capacity)
     }
  
     var isEmpty: Bool { count == 0 }
     var isFull:  Bool { count == capacity }
  
-    func enqueue(timestamp: Double, dataType: DataType, blob: [UInt8]) -> Bool {
+    func enqueue(timestamp: Double, dataType: DataType, blob: [UInt8], counter: Int) -> Bool {
         guard !isFull else { return false }
         buffer[writeIndex].timestamp = timestamp
         buffer[writeIndex].dataType = dataType
         buffer[writeIndex].blob = blob
+        buffer[writeIndex].counter = counter
         writeIndex = (writeIndex + 1) % capacity
         count += 1
         return true

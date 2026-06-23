@@ -230,11 +230,27 @@ struct AuthLoginView: View {
 
                         LazyVGrid(columns: columns, spacing: 16) {
                             ForEach(logos, id: \.self) { logo in
-                                Image(logo)
-                                    .resizable()
-                                    .scaledToFit()
-                                    .frame(height: 44)
-                                    .opacity(0.8)
+                                ZStack {
+                                    RoundedRectangle(cornerRadius: 14)
+                                        .fill(Color.white)
+                                        .shadow(
+                                            color: Color(red: 0.60, green: 0.45, blue: 0.40).opacity(0.08),
+                                            radius: 6, y: 2
+                                        )
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 14)
+                                                .strokeBorder(
+                                                    Color(red: 0.80, green: 0.70, blue: 0.66).opacity(0.35),
+                                                    lineWidth: 0.5
+                                                )
+                                        )
+                                    Image(logo)
+                                        .resizable()
+                                        .scaledToFit()
+                                        .padding(6)
+                                }
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 64)
                             }
                         }
                         .padding(.horizontal, 32)
@@ -256,7 +272,6 @@ struct AuthLoginView: View {
 
     // MARK: - Reinstall Detection
     private func detectReinstall() {
-        //Akarsh-TODO: Needs some comment
         let sentinel = KeychainManager.shared.read(key: installSentinelKey)
         if sentinel == nil {
             permissionsComplete = false
@@ -284,7 +299,6 @@ struct AuthLoginView: View {
         let locationOK = CLLocationManager().authorizationStatus == .authorizedAlways
 
         // Health — check actual authorization status, not just device availability
-        // AkarshTodo: We want more than step count?
         var healthOK = false
         if HKHealthStore.isHealthDataAvailable() {
             let store    = HKHealthStore()
@@ -300,7 +314,6 @@ struct AuthLoginView: View {
         }
 
         // Async checks — SensorKit and Notifications
-        // AkarshTodo: Why is this a Task??
         Task {
             // SensorKit — not available on simulator, skip gracefully
             #if targetEnvironment(simulator)
