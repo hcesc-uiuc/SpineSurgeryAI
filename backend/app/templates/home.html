@@ -1,15 +1,45 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Welcome Page</title>
-</head>
-<body>
-    <h1>Flask is running 🚀</h1>
-    <p>Try sending a POST request to <code>/api/upload</code></p>
-    <a href="{{ url_for('compliance') }}" 
-     style="display:inline-block; padding:10px 20px; background:#007bff; color:white; 
-            text-decoration:none; border-radius:5px;">
-      View Compliance Summary
-  </a>
-</body>
-</html>
+{% extends "base.html" %}
+{% block content %}
+<div class="text-center mt-5">
+  <h1 class="display-4"> Welcome to the SpineSurgery Study Dashboard</h1>
+  <p class="lead">Monitor participant compliance, ingestion health, and study metrics in one place.</p>
+  <hr class="my-4">
+  <div class="d-flex justify-content-center gap-3">
+    <a href="{{ url_for('dashboard_page.dashboard') }}" class="btn btn-primary btn-lg">View Dashboard</a>
+    <a href="{{ url_for('compliance') }}" class="btn btn-success btn-lg">Compliance Summary</a>
+  </div>
+</div>
+
+<!-- Quick Links Section -->
+<div class="row mt-5">
+  <div class="col-md-4">
+    <div class="card shadow-sm text-center">
+      <div class="card-body">
+        <h5 class="card-title">Dashboard</h5>
+        <p class="card-text">Interactive charts for accelerometer, gyroscope, heart rate, and surveys.</p>
+        <a href="{{ url_for('dashboard_page.dashboard') }}" class="btn btn-outline-primary">Open</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-4">
+    <div class="card shadow-sm text-center">
+      <div class="card-body">
+        <h5 class="card-title">Compliance</h5>
+        <p class="card-text">Summary of participant adherence to study protocols.</p>
+        <a href="{{ url_for('compliance') }}" class="btn btn-outline-success">Open</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-4">
+    <div class="card shadow-sm text-center">
+      <div class="card-body">
+        <h5 class="card-title">Upload API</h5>
+        <p class="card-text">Send data directly via <code>/api/upload</code>.</p>
+        <a href="/api/upload" class="btn btn-outline-secondary">Docs</a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

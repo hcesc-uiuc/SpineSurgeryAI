@@ -43,7 +43,7 @@ SQL_01_BASE = r"""
 CREATE TABLE IF NOT EXISTS participants (
   id           SERIAL PRIMARY KEY,
   external_id  TEXT UNIQUE NOT NULL,
-  created_at   TIMESTAMPTZ DEFAULT now()
+  uploaded_at   TIMESTAMPTZ DEFAULT now()
 );
 
 -- URL-based timeseries: store pointer to object (e.g., S3) per timestamp
@@ -52,7 +52,7 @@ CREATE TABLE IF NOT EXISTS accelerometer (
   participant_id INT NOT NULL REFERENCES participants(id) ON DELETE CASCADE,
   ts             TIMESTAMPTZ NOT NULL,
   object_url     TEXT NOT NULL,
-  created_at     TIMESTAMPTZ DEFAULT now()
+  uploaded_at     TIMESTAMPTZ DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS gyroscope (
@@ -60,7 +60,7 @@ CREATE TABLE IF NOT EXISTS gyroscope (
   participant_id INT NOT NULL REFERENCES participants(id) ON DELETE CASCADE,
   ts             TIMESTAMPTZ NOT NULL,
   object_url     TEXT NOT NULL,
-  created_at     TIMESTAMPTZ DEFAULT now()
+  uploaded_at     TIMESTAMPTZ DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS heart_rate (
@@ -68,8 +68,12 @@ CREATE TABLE IF NOT EXISTS heart_rate (
   participant_id INT NOT NULL REFERENCES participants(id) ON DELETE CASCADE,
   ts             TIMESTAMPTZ NOT NULL,
   object_url     TEXT NOT NULL,
-  created_at     TIMESTAMPTZ DEFAULT now()
+  uploaded_at     TIMESTAMPTZ DEFAULT now()
 );
+
+ALTER TABLE accelerometer ADD COLUMN IF NOT EXISTS file_size_bytes NUMERIC;
+ALTER TABLE gyroscope ADD COLUMN IF NOT EXISTS file_size_bytes NUMERIC;
+ALTER TABLE heart_rate ADD COLUMN IF NOT EXISTS file_size_bytes NUMERIC;
 """
 
 SQL_02_INDEXES = r"""
@@ -124,14 +128,16 @@ CREATE TABLE IF NOT EXISTS daily_survey (
   id             BIGSERIAL PRIMARY KEY,
   participant_id INT NOT NULL REFERENCES participants(id) ON DELETE CASCADE,
   survey_date    DATE NOT NULL,
+  object_url     TEXT NOT NULL,
   payload        JSONB NOT NULL,
-  created_at     TIMESTAMPTZ DEFAULT now(),
+  uploaded_at     TIMESTAMPTZ DEFAULT now(),
   CONSTRAINT uq_survey_participant_date UNIQUE (participant_id, survey_date)
 );
 
 CREATE INDEX IF NOT EXISTS ix_survey_participant_date
 ON daily_survey (participant_id, survey_date);
 """
+
 
 SQL_04_COMPLIANCE_VIEWS = r"""
 CREATE OR REPLACE FUNCTION fn_compliance_from_presence(presence_table regclass)
@@ -316,6 +322,7 @@ DROP VIEW IF EXISTS v_hr_compliance CASCADE;
 DROP VIEW IF EXISTS v_gyro_compliance CASCADE;
 DROP VIEW IF EXISTS v_accel_compliance CASCADE;
 DROP VIEW IF EXISTS v_survey_compliance CASCADE;
+DROP TABLE IF EXISTS ingestion_health CASCADE;
 
 DROP FUNCTION IF EXISTS fn_compliance_from_presence(regclass) CASCADE;
 DROP FUNCTION IF EXISTS fn_color(boolean,int,int) CASCADE;
@@ -331,6 +338,36 @@ DROP TABLE IF EXISTS gyroscope CASCADE;
 DROP TABLE IF EXISTS heart_rate CASCADE;
 DROP TABLE IF EXISTS daily_survey CASCADE;
 DROP TABLE IF EXISTS participants CASCADE;
+"""
+SQL_06_INGESTION_HEALTH = r"""
+CREATE TABLE IF NOT EXISTS ingestion_health (
+    modality        TEXT        NOT NULL,
+    participant_id  INT         NOT NULL REFERENCES participants(id) ON DELETE CASCADE,
+    window_start    TIMESTAMPTZ NOT NULL,
+    window_end      TIMESTAMPTZ NOT NULL,
+
+    -- Core counts / summary
+    expected_count  INT         NOT NULL,
+    actual_count    INT         NOT NULL,
+    pct_expected    NUMERIC,
+    status          TEXT,
+
+    -- Detailed analysis fields from analyze_uploaded_data(...)
+    format              TEXT,
+    row_count           INT,
+    sampling_rate_hz    NUMERIC,
+    completeness        NUMERIC,
+    total_gap_seconds   NUMERIC,
+    gap_fraction        NUMERIC,
+    is_usable           BOOLEAN,
+
+    updated_at      TIMESTAMPTZ DEFAULT now(),
+
+    PRIMARY KEY (modality, participant_id, window_start)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS ux_ingestion_health
+  ON ingestion_health (modality, participant_id, window_start);
 """
 
 # =========================
@@ -412,6 +449,7 @@ def init_all():
         exec_sql(conn, SQL_03A_PRESENCE_MV_UNIQUES, "03a_presence_mv_unique_indexes")
         exec_sql(conn, SQL_04_COMPLIANCE_VIEWS, "04_compliance_views")
         exec_sql(conn, SQL_05_OVERVIEW, "05_overview_views")
+        exec_sql(conn, SQL_06_INGESTION_HEALTH, "06_ingestion_health")
         print("✅ init complete.")
 
 def reset_all():
