@@ -132,11 +132,18 @@ public actor S3TestUploader {
             }
             guard status == 201 else {
                 print("ERROR: expected 201 from presign")
+                CrashReporter.recordFailure(
+                    "presign returned HTTP \(status)",
+                    context: "S3.presign",
+                    info: ["filename": filename, "kind": kind]
+                )
                 return nil
             }
             return try JSONDecoder().decode(PresignResponse.self, from: data)
         } catch {
             print("ERROR presign: \(error)")
+            CrashReporter.record(error, context: "S3.presign",
+                                 info: ["filename": filename, "kind": kind])
             return nil
         }
     }
@@ -155,9 +162,18 @@ public actor S3TestUploader {
             let (_, response) = try await URLSession.shared.upload(for: req, fromFile: fileURL)
             let status = (response as? HTTPURLResponse)?.statusCode ?? 0
             print("  S3 PUT HTTP status: \(status)")
+            if status != 200 {
+                CrashReporter.recordFailure(
+                    "S3 PUT returned HTTP \(status)",
+                    context: "S3.put",
+                    info: ["file": fileURL.lastPathComponent]
+                )
+            }
             return status == 200
         } catch {
             print("ERROR S3 PUT: \(error)")
+            CrashReporter.record(error, context: "S3.put",
+                                 info: ["file": fileURL.lastPathComponent])
             return false
         }
     }
@@ -183,6 +199,8 @@ public actor S3TestUploader {
             }
         } catch {
             print("ERROR complete: \(error)")
+            CrashReporter.record(error, context: "S3.complete",
+                                 info: ["upload_id": uploadID])
         }
     }
 }

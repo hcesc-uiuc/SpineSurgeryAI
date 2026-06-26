@@ -214,9 +214,17 @@ struct MainAppView: View {
                 Task { self.printCurrentLogFile() }
             }.padding(.top, 30)
 
+            Button("Start Gyro Recording") {
+                GyroscopeMotionRecorder.shared.startRecording()
+            }.padding(.top, 30)
+
+            Button("Stop Gyro Recording") {
+                GyroscopeMotionRecorder.shared.stopRecording()
+            }.padding(.top, 10)
+
             Button("Get HealthKit data") {
-                Task { 
-                  HealthkitRecorder.shared.getHealthKitData() 
+                Task {
+                  HealthkitRecorder.shared.getHealthKitData()
                 }
             }.padding(.top, 30)
 

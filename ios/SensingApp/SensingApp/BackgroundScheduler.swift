@@ -502,18 +502,27 @@ class BackgroundScheduler {
         }
     }
     
+    // Retains the in-flight SensorKit fetcher. SensorKit delivers its results
+    // through asynchronous delegate callbacks, so the fetcher must stay alive
+    // until those callbacks complete — a local variable would be deallocated
+    // immediately and the callbacks would never fire.
+    private var activeSensorKitFetcher: SensorKitAccelerometerFetcher?
+
     private func performSensorkitFetch(completion: @escaping (Bool) -> Void) {
-        // Your function goes here
         print("Performing sensorkit fetch")
         Logger.shared.append("BGSensorkitFetchTask: Performing sensorkit fetch")
-        Task {
-            //we need to change the fetch part
-            let accelFetcher = SensorKitAccelerometerFetcher()
-            // Fetcher will call setTaskCompleted in didCompleteFetch
-            // Todo: Do we need to wrap in another task again?
-            accelFetcher.fetchLatestData()
+
+        let fetcher = SensorKitAccelerometerFetcher()
+        self.activeSensorKitFetcher = fetcher   // retain until the fetch finishes
+
+        // completion (→ task.setTaskCompleted) is only called once SensorKit
+        // has actually finished delivering data via its delegate callbacks.
+        fetcher.fetchLatestData { [weak self] success in
+            print("SensorKit fetch finished, success: \(success)")
+            Logger.shared.append("BGSensorkitFetchTask: fetch finished, success: \(success)")
+            self?.activeSensorKitFetcher = nil   // release
+            completion(success)
         }
-        completion(true)
     }
     
     //=============================================================

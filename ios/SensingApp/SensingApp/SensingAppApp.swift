@@ -86,8 +86,10 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         //        _ = SQLiteSaver.shared
         
         // Use the Firebase library to configure APIs.
+        // Crashlytics auto-initializes as part of this call.
         FirebaseApp.configure()
-        
+        CrashReporter.log("app launched")
+
         registerForPushNotifications()
         // Start background location updates immediately
         // LocationManager.shared.start()

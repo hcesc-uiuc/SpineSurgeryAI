@@ -164,6 +164,10 @@ class SecureAuthManager: ObservableObject {
     // Throws: AuthError
     func login(identityToken: String, fullName: String?, appleUserID: String) async throws {
 
+        // Associate crash reports with this participant (opaque, app-scoped ID).
+        CrashReporter.setParticipant(appleUserID)
+        CrashReporter.log("login attempt")
+
         // ── ⚠️ DEMO MODE BLOCK — DELETE BEFORE SHIPPING ─────────────
         if demoMode {
             isAuthenticated = true
@@ -380,6 +384,8 @@ class SecureAuthManager: ObservableObject {
 
         clearTokens()
         isAuthenticated = false
+        CrashReporter.log("logout")
+        CrashReporter.clearParticipant()
     }
 
     // MARK: - Private Helpers

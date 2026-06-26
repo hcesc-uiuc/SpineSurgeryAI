@@ -10,6 +10,7 @@
 		626D3A2B2F967DD400CF9F66 /* HealthKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 626D3A2A2F967DD400CF9F66 /* HealthKit.framework */; };
 		AE19A8C52FBE125E00AF02A4 /* FirebaseCore in Frameworks */ = {isa = PBXBuildFile; productRef = AE19A8C42FBE125E00AF02A4 /* FirebaseCore */; };
 		AE19A8C72FBE125E00AF02A4 /* FirebaseCrashlytics in Frameworks */ = {isa = PBXBuildFile; productRef = AE19A8C62FBE125E00AF02A4 /* FirebaseCrashlytics */; };
+		AE19A8C92FBE125E00AF02A4 /* FirebaseAnalytics in Frameworks */ = {isa = PBXBuildFile; productRef = AE19A8C82FBE125E00AF02A4 /* FirebaseAnalytics */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -88,6 +89,7 @@
 				626D3A2B2F967DD400CF9F66 /* HealthKit.framework in Frameworks */,
 				AE19A8C52FBE125E00AF02A4 /* FirebaseCore in Frameworks */,
 				AE19A8C72FBE125E00AF02A4 /* FirebaseCrashlytics in Frameworks */,
+				AE19A8C92FBE125E00AF02A4 /* FirebaseAnalytics in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -147,6 +149,7 @@
 				AEABF3842EA06D020055052F /* Sources */,
 				AEABF3852EA06D020055052F /* Frameworks */,
 				AEABF3862EA06D020055052F /* Resources */,
+				AE0C2A5100000000000000F1 /* Crashlytics dSYM Upload */,
 			);
 			buildRules = (
 			);
@@ -159,6 +162,7 @@
 			packageProductDependencies = (
 				AE19A8C42FBE125E00AF02A4 /* FirebaseCore */,
 				AE19A8C62FBE125E00AF02A4 /* FirebaseCrashlytics */,
+				AE19A8C82FBE125E00AF02A4 /* FirebaseAnalytics */,
 			);
 			productName = SensingApp;
 			productReference = AEABF3882EA06D020055052F /* SensingApp.app */;
@@ -281,6 +285,31 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		AE0C2A5100000000000000F1 /* Crashlytics dSYM Upload */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"${DWARF_DSYM_FOLDER_PATH}/${DWARF_DSYM_FILE_NAME}",
+				"${BUILT_PRODUCTS_DIR}/${INFOPLIST_PATH}",
+				"$(SRCROOT)/$(PRODUCT_NAME)/GoogleService-Info.plist",
+			);
+			name = "Crashlytics dSYM Upload";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"${BUILD_DIR%/Build/*}/SourcePackages/checkouts/firebase-ios-sdk/Crashlytics/run\" -gsp \"${PROJECT_DIR}/${PRODUCT_NAME}/GoogleService-Info.plist\" -p ios\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		AEABF3842EA06D020055052F /* Sources */ = {
@@ -442,8 +471,8 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = SensingApp/SensingApp.entitlements;
-				CODE_SIGN_IDENTITY = "Apple Development: Mohammod Mashfiqui Rabbi Shuvo (4U3ZZW4H9D)";
-				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "Apple Development: Mohammod Mashfiqui Rabbi Shuvo (4U3ZZW4H9D)";
+				CODE_SIGN_IDENTITY = "Apple Development";
+				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Developer";
 				CODE_SIGN_STYLE = Manual;
 				CURRENT_PROJECT_VERSION = 1;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
@@ -461,8 +490,10 @@
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "This app writes health data to Apple Health.";
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "This app sends reminders to complete your recovery survey.";
 				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "App needs location for background tasks.";
-				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = YES;
-				INFOPLIST_KEY_NSMotionUsageDescription = "This app needs to be able to access your motion use";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "App needs location to record sensor context during your recovery study.";
+				INFOPLIST_KEY_NSMotionUsageDescription = "This study collects accelerometer data to analyze recovery patterns.";
+				INFOPLIST_KEY_NSSensorKitPrivacyPolicyURL = "https://my-site.example.com/privacy-policy/";
+				INFOPLIST_KEY_NSSensorKitUsageDescription = "This research study collects motion data from your Apple Watch.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
@@ -511,9 +542,11 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = SensingApp/SensingApp.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
-				CODE_SIGN_STYLE = Automatic;
+				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Developer";
+				CODE_SIGN_STYLE = Manual;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = LSQ6QQCJZ2;
+				DEVELOPMENT_TEAM = "";
+				"DEVELOPMENT_TEAM[sdk=iphoneos*]" = LSQ6QQCJZ2;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
@@ -526,8 +559,10 @@
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "This app writes health data to Apple Health.";
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "This app sends reminders to complete your recovery survey.";
 				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "App needs location for background tasks.";
-				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = YES;
-				INFOPLIST_KEY_NSMotionUsageDescription = "This app needs to be able to access your motion use";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "App needs location to record sensor context during your recovery study.";
+				INFOPLIST_KEY_NSMotionUsageDescription = "This study collects accelerometer data to analyze recovery patterns.";
+				INFOPLIST_KEY_NSSensorKitPrivacyPolicyURL = "https://my-site.example.com/privacy-policy/";
+				INFOPLIST_KEY_NSSensorKitUsageDescription = "This research study collects motion data from your Apple Watch.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
@@ -551,6 +586,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = edu.uiuc.cs.hcesc.SensingApp.v3;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
+				"PROVISIONING_PROFILE_SPECIFIER[sdk=iphoneos*]" = Journey_Prov_Profile_SK_HRBG;
 				REGISTER_APP_GROUPS = YES;
 				SDKROOT = iphoneos;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -732,6 +768,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = FA9BC0412F96C5BB0087759F /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
 			productName = FirebaseCrashlytics;
+		};
+		AE19A8C82FBE125E00AF02A4 /* FirebaseAnalytics */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = FA9BC0412F96C5BB0087759F /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAnalytics;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

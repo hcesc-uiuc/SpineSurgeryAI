@@ -5,6 +5,7 @@
 //sed -i '' '4s/^/\/\/ Test change\n/' /Users/samirkurudi/Documents/SpineSurgeryAI/ios/SensingApp/SensingApp/Survey/SurgerySurveyView.swift
 
 import SwiftUI
+import FirebaseAnalytics
 
 // MARK: - Models
 
@@ -779,6 +780,7 @@ struct SurgerySurveyView: View {
             let surveyJSON = buildSurveyJSON()
 
             do {
+                CrashReporter.log("survey submit started")
                 try await SurveyUploader.shared.uploadSurvey(surveyJSON)
 
                 let validMeds: [MedicationEntry] = {
@@ -790,12 +792,20 @@ struct SurgerySurveyView: View {
                 SurveyLocalStore.shared.markSurveyCompleted(on: Date(), for: currentUserID)
                 completedSurveyDates = SurveyLocalStore.shared.completedSurveyDates(for: currentUserID)
 
+                // Custom Analytics event — visible in Firebase DebugView
+                // (and the Xcode console with -FIRDebugEnabled).
+                Analytics.logEvent("survey_submitted", parameters: [
+                    "pain_score": painNRS ?? -1,
+                    "took_medication": (tookPainMedicationToday == true)
+                ])
+
                 appState.markCompletedToday()
                 isSubmitting = false
                 dismiss()
             } catch {
                 isSubmitting = false
                 submitError = "Upload failed: \(error.localizedDescription)"
+                CrashReporter.record(error, context: "SurgerySurveyView.submitSurvey")
             }
         }
     }

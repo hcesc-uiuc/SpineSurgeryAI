@@ -34,12 +34,13 @@ struct Uploader {
         //let file_prefixes = ["accelerometer_"] //, "log_"] //add more extension in future
         //let file_prefixes = ["log_"] //add more extension in future
         let todaysDateString = getTodaysDateString()
-        let file_prefixes = ["locations_", "accelerometer_", "healthkit_"]
+        let file_prefixes = ["locations_", "accelerometer_", "healthkit_", "gyroscope_"]
         //let kinds = ["location", "accelerometer", "healthkit"]
         let kinds = [
             "locations_": "loc",
             "accelerometer_": "accel",
-            "healthkit_": "hk"
+            "healthkit_": "hk",
+            "gyroscope_": "gyro"
         ]
         
         for file_prefix in file_prefixes {
@@ -186,6 +187,10 @@ struct Uploader {
                 print("     Upload failed!")
                 print("     \(response)")
                 print("     \(responseData)")
+                CrashReporter.recordFailure(
+                    "multipart upload returned HTTP \(status)",
+                    context: "Uploader.uploadFile"
+                )
                 return false
             }else{
                 print("     Upload success!")
@@ -201,9 +206,10 @@ struct Uploader {
             }
         } catch {
             print("Upload failed: \(error)")
+            CrashReporter.record(error, context: "Uploader.uploadFile")
             return false
         }
-        
+
     }
     
     
@@ -227,6 +233,7 @@ struct Uploader {
             print("Upload success: \(response)")
         } catch {
             print("Upload error: \(error.localizedDescription)")
+            CrashReporter.record(error, context: "Uploader.uploadSurveyResults")
         }
     }
     
