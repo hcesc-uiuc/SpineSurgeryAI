@@ -121,7 +121,7 @@ struct MainAppView: View {
         }()
         let icon = state == .completed ? "checkmark" : "list.clipboard.fill"
 
-        return Button(action: { isSurveyPresented = true }) {
+        return Button(action: { if surveyFABState == .due { isSurveyPresented = true } }) {
             Image(systemName: icon)
                 .font(.system(size: 22, weight: .semibold))
                 .foregroundStyle(ringColor)                                  // tinted icon, legible on glass

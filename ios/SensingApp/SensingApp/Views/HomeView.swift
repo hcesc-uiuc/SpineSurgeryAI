@@ -211,15 +211,26 @@ struct HomeView: View {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd"
 
-        // Fetch every month the visible week touches (it can straddle a boundary).
         let months = Set(days.map { $0.startOfMonth() })
         var result: [Date: Bool] = [:]
+
+        // Load from SQLite if available
         for month in months {
             for record in SQLiteSaver.shared.fetchSurveys(forMonth: month) {
                 guard let date = formatter.date(from: record.dateString) else { continue }
                 result[calendar.startOfDay(for: date)] = record.completed
             }
         }
+
+        // Fall back to UserDefaults if SQLite returned nothing
+        if result.isEmpty {
+            let completedDates = UserDefaults.standard.stringArray(forKey: "completedSurveyDates_default_user") ?? []
+            for dateString in completedDates {
+                guard let date = formatter.date(from: dateString) else { continue }
+                result[calendar.startOfDay(for: date)] = true
+            }
+        }
+
         weeklyProgress = result
     }
 
