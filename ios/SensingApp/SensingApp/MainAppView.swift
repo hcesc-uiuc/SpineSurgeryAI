@@ -30,6 +30,7 @@ struct MainAppView: View {
     @Environment(\.scenePhase) var scenePhase
     
     @State private var selectedTab: JourneyTab = .home
+    @State private var lastNonSurveyTab: JourneyTab = .home
     @State private var hasStartedCollection = false
     
     // MARK: - Body
@@ -49,12 +50,32 @@ struct MainAppView: View {
                 DebugTabView(onLogout: { authManager.logout() })
             }
 #endif
+            // Apple Health-style separated "search" slot, repurposed as the daily
+            // check-in button. role: .search makes iOS shift the main tab capsule
+            // left and render this as a detached button on the trailing side. It
+            // only triggers the survey sheet (see .onChange / .sheet below); the
+            // placeholder view is never really shown. Icon swaps to a checkmark
+            // once today's check-in is done.
+            Tab("Check-in",
+                systemImage: surveyTabIcon,
+                value: JourneyTab.survey,
+                role: .search) {
+                Color.clear
+            }
         }
         .tint(selectedTab.accentColor)
-        .overlay(alignment: .bottomTrailing) {
-            if showSurveyButton { surveyButton }
+        .onChange(of: selectedTab) { _, newValue in
+            // Tapping the separated check-in slot opens the survey instead of
+            // navigating; remember the previous tab so we can restore it on dismiss.
+            if newValue == .survey {
+                isSurveyPresented = true
+            } else {
+                lastNonSurveyTab = newValue
+            }
         }
-        .sheet(isPresented: $isSurveyPresented) {
+        .sheet(isPresented: $isSurveyPresented, onDismiss: {
+            if selectedTab == .survey { selectedTab = lastNonSurveyTab }
+        }) {
             SurgerySurveyView(appState: appState, authManager: authManager)
         }
         .onAppear {
@@ -98,58 +119,17 @@ struct MainAppView: View {
         }
     }
     
-    // ============================================================
-    // MARK: - Survey FAB
-    // ============================================================
-    
-    // Three-state status of the daily check-in, surfaced as the FAB's ring color.
-    private enum SurveyFABState { case unavailable, due, completed }
-
-    private var surveyFABState: SurveyFABState {
-        guard appState.isSurveyScheduledToday else { return .unavailable }
-        return appState.isCompletedToday ? .completed : .due
+    // Icon for the daily check-in slot. The system tab bar owns the color, so
+    // state is conveyed by SHAPE alone:
+    //   completed today        -> filled checkmark (clearly "done")
+    //   scheduled & still due   -> filled clipboard (weighted, draws the eye)
+    //   nothing scheduled today -> outline clipboard (quiet/inactive)
+    private var surveyTabIcon: String {
+        if appState.isCompletedToday { return "checkmark.circle.fill" }
+        if appState.isSurveyScheduledToday { return "list.clipboard.fill" }
+        return "list.clipboard"
     }
 
-    private var surveyButton: some View {
-        let state = surveyFABState
-        let ringColor: Color = {
-            switch state {
-            case .due:         return Color(red: 0.85, green: 0.35, blue: 0.19) // amber red — needs completing today
-            case .completed:   return Color(red: 0.22, green: 0.60, blue: 0.45) // green — done (matches weekly strip)
-            case .unavailable: return Color(red: 0.62, green: 0.58, blue: 0.55) // gray — none scheduled today
-            }
-        }()
-        let icon = state == .completed ? "checkmark" : "list.clipboard.fill"
-
-        return Button(action: { isSurveyPresented = true }) {
-            Image(systemName: icon)
-                .font(.system(size: 22, weight: .semibold))
-                .foregroundStyle(ringColor)                                  // tinted icon, legible on glass
-                .frame(width: 60, height: 60)
-                // Apple Liquid Glass; interactive only when actionable.
-                .glassEffect(state == .due ? .regular.interactive() : .regular, in: .circle)
-                .overlay { Circle().strokeBorder(ringColor, lineWidth: 3) }   // status ring
-        }
-        .buttonStyle(.plain)
-        .allowsHitTesting(state == .due)              // only the "due" state is tappable
-        .opacity(state == .unavailable ? 0.5 : 1)     // visibly dimmed when none scheduled
-        .padding(.trailing, 20)
-        .padding(.bottom, 24)
-        .accessibilityLabel(
-            state == .completed ? "Daily check-in complete"
-            : state == .due     ? "Start daily check-in"
-            :                     "No check-in scheduled today"
-        )
-    }
-    
-    private var showSurveyButton: Bool {
-#if DEBUG
-        return selectedTab != .debug
-#else
-        return true
-#endif
-    }
-    
     // ============================================================
     // MARK: - Foreground Permission Audit
     // ============================================================
