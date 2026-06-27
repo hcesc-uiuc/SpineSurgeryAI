@@ -8,7 +8,7 @@
 import SwiftUI
 
 enum JourneyTab: CaseIterable {
-    case home, sensors, progress
+    case home, sensors, progress, survey
 #if DEBUG
     case debug
 #endif
@@ -18,6 +18,7 @@ enum JourneyTab: CaseIterable {
         case .home:     return "house.fill"
         case .sensors:  return "waveform"
         case .progress: return "calendar"
+        case .survey:   return "list.clipboard.fill"
 #if DEBUG
         case .debug:    return "ant.fill"
 #endif
@@ -29,6 +30,7 @@ enum JourneyTab: CaseIterable {
         case .home:     return "Home"
         case .sensors:  return "Sensors"
         case .progress: return "Calendar"
+        case .survey:   return "Check-in"
 #if DEBUG
         case .debug:    return "Debug"
 #endif
@@ -40,6 +42,7 @@ enum JourneyTab: CaseIterable {
         case .home:     return Color(red: 0.42, green: 0.62, blue: 0.55) // sage green
         case .sensors:  return Color(red: 0.38, green: 0.55, blue: 0.75) // warm blue
         case .progress: return Color(red: 0.38, green: 0.55, blue: 0.75) // warm blue
+        case .survey:   return Color(red: 0.80, green: 0.42, blue: 0.30) // terracotta — daily check-in
 #if DEBUG
         case .debug:    return Color(red: 0.55, green: 0.47, blue: 0.44) // muted brown
 #endif
