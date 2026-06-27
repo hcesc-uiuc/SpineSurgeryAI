@@ -100,6 +100,8 @@ struct MonthlyCalendarView: View {
         formatter.dateFormat = "yyyy-MM-dd"
 
         var result: [Date: DayProgress] = [:]
+
+        // Load from SQLite if available
         for record in records {
             guard let date = formatter.date(from: record.dateString) else { continue }
             let normalised = calendar.startOfDay(for: date)
@@ -109,6 +111,24 @@ struct MonthlyCalendarView: View {
                 painScore: record.painScore
             )
         }
+
+        // Fall back to UserDefaults if SQLite returned nothing
+        if result.isEmpty {
+            let completedDates = UserDefaults.standard.stringArray(forKey: "completedSurveyDates_default_user") ?? []
+            for dateString in completedDates {
+                guard let date = formatter.date(from: dateString) else { continue }
+                let normalised = calendar.startOfDay(for: date)
+                // Only include dates in the displayed month
+                if calendar.isDate(normalised, equalTo: displayedMonth, toGranularity: .month) {
+                    result[normalised] = DayProgress(
+                        date: normalised,
+                        surveyCompleted: true,
+                        painScore: nil
+                    )
+                }
+            }
+        }
+
         progressData = result
     }
 

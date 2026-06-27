@@ -46,8 +46,7 @@ struct SensingAppApp: App {
                 .environmentObject(locationManager)
                 .environmentObject(authManager)
                 .onAppear {
-                    // SensorKit auth is owned by PermissionsFlowView.
-                    // sensorKitManager.requestAuthorization()
+                    SurveyUploader.shared.configure(authManager: authManager)  // ← ADD THIS
                     SurveyNotificationManager.shared
                         .scheduleDailyReminder(
                             hour: 20,
