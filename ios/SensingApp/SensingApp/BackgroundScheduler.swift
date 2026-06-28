@@ -104,9 +104,9 @@ class BackgroundScheduler {
             do {
                 try BGTaskScheduler.shared.submit(request)
                 Logger.shared.append("SensingApp: BGAppRefreshTask scheduled")
-                print("🕒 BGAppRefreshTask scheduled")
+                print("BGAppRefreshTask scheduled")
             } catch {
-                print("❌ Could not schedule BGAppRefreshTask: \(error)")
+                print("Could not schedule BGAppRefreshTask: \(error)")
             }
         }
     }
@@ -117,7 +117,7 @@ class BackgroundScheduler {
          Handle app grabs data if 60 minutes has passed since last recording.
          
          */
-        print("🔄 ==BGAppRefreshTask== started")
+        print("==BGAppRefreshTask== started")
         Logger.shared.append("==BGAppRefreshTask== started")
         
         // Reschedule next task
@@ -127,13 +127,13 @@ class BackgroundScheduler {
         
         // Expiration handler
         task.expirationHandler = {
-            print("⏰ ==BGAppRefreshTask== expired")
+            print("==BGAppRefreshTask== expired")
             Logger.shared.append("==BGAppRefreshTask== expired before completion.")
         }
 
         // Execute work asynchronously
         Task {
-            print("📡 Performing background fetch")
+            print("Performing background fetch")
             // Do my tak here
             
             //We will do a recording of motion and reschedule a background task
@@ -145,15 +145,15 @@ class BackgroundScheduler {
                 let differenceInMinutes = now.timeIntervalSince(lastSensorDateSaveTime) / 60  // seconds → minutes
 
                 if differenceInMinutes >= 65 {
-                    print("⏰ More than 60 minutes have passed.")
+                    print("More than 60 minutes have passed.")
                     Logger.shared.append("More than 60 minutes have passed since last recording")
                     BackgroundScheduler.shared.startSensorRecordingAndScheduleNextTask()
                 } else {
-                    print("🕒 Only \(Int(differenceInMinutes)) minutes have passed.")
+                    print("Only \(Int(differenceInMinutes)) minutes have passed.")
                     Logger.shared.append("Only \(Int(differenceInMinutes)) minutes since last recording")
                 }
             } else {
-                print("⚠️ No saved date found in UserDefaults.")
+                print("No saved date found in UserDefaults.")
                 Logger.shared.append("No lastSensorDateSaveTime. Recording...")
                 //Note the following function will also create "lastSensorDateSaveTime"
                 BackgroundScheduler.shared.startSensorRecordingAndScheduleNextTask()
@@ -161,7 +161,7 @@ class BackgroundScheduler {
             
             
             task.setTaskCompleted(success: true)
-            print("✅ BGAppRefreshTask completed")
+            print("BGAppRefreshTask completed")
             Logger.shared.append("==BGAppRefreshTask== sucessfully completed")
         }
     }
@@ -481,7 +481,7 @@ class BackgroundScheduler {
          We try to schedule Sensorkit fetch.
          
          */
-        print("🔄 ==BGSensorkitFetchTask== started")
+        print("==BGSensorkitFetchTask== started")
         Logger.shared.append("==BGSensorkitFetchTask== started")
         
         // Reschedule next task
@@ -491,7 +491,7 @@ class BackgroundScheduler {
         
         // Expiration handler
         task.expirationHandler = {
-            print("⏰ ==BGSensorkitFetchTask== expired")
+            print("==BGSensorkitFetchTask== expired")
             Logger.shared.append("==BGSensorkitFetchTask== expired before completion.")
         }
 
@@ -502,26 +502,48 @@ class BackgroundScheduler {
         }
     }
     
-    // Retains the in-flight SensorKit fetcher. SensorKit delivers its results
-    // through asynchronous delegate callbacks, so the fetcher must stay alive
+    // Retains the in-flight SensorKit fetchers. SensorKit delivers its results
+    // through asynchronous delegate callbacks, so each fetcher must stay alive
     // until those callbacks complete — a local variable would be deallocated
     // immediately and the callbacks would never fire.
-    private var activeSensorKitFetcher: SensorKitAccelerometerFetcher?
+    private var activeSensorKitFetchers: [SensorKitFetcher] = []
+
+    /// Public entry point so a debug button can trigger a fetch on demand
+    /// instead of waiting ~26h for the background task.
+    func triggerSensorKitFetchNow() {
+        performSensorkitFetch { success in
+            print("Manual SensorKit fetch finished, success: \(success)")
+        }
+    }
 
     private func performSensorkitFetch(completion: @escaping (Bool) -> Void) {
         print("Performing sensorkit fetch")
         Logger.shared.append("BGSensorkitFetchTask: Performing sensorkit fetch")
 
-        let fetcher = SensorKitAccelerometerFetcher()
-        self.activeSensorKitFetcher = fetcher   // retain until the fetch finishes
+        // One fetcher per sensor. Add new sensors here (each is its own
+        // SensorKitFetcher subclass).
+        let fetchers: [SensorKitFetcher] = [
+            SensorKitAccelerometerFetcher(),
+            SensorKitRotationRateFetcher()
+        ]
+        self.activeSensorKitFetchers = fetchers   // retain until all finish
 
-        // completion (→ task.setTaskCompleted) is only called once SensorKit
-        // has actually finished delivering data via its delegate callbacks.
-        fetcher.fetchLatestData { [weak self] success in
-            print("SensorKit fetch finished, success: \(success)")
-            Logger.shared.append("BGSensorkitFetchTask: fetch finished, success: \(success)")
-            self?.activeSensorKitFetcher = nil   // release
-            completion(success)
+        // Run all fetchers; only complete the background task once every one
+        // has finished delivering data via its delegate callbacks.
+        let group = DispatchGroup()
+        var allSucceeded = true
+        for fetcher in fetchers {
+            group.enter()
+            fetcher.fetchLatestData { success in
+                if !success { allSucceeded = false }
+                group.leave()
+            }
+        }
+        group.notify(queue: .main) { [weak self] in
+            print("All SensorKit fetches finished, success: \(allSucceeded)")
+            Logger.shared.append("BGSensorkitFetchTask: all fetches finished, success: \(allSucceeded)")
+            self?.activeSensorKitFetchers = []   // release
+            completion(allSucceeded)
         }
     }
     

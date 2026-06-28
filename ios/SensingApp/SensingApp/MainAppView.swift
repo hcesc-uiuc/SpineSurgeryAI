@@ -152,7 +152,7 @@ struct MainAppView: View {
         case .progress:
             MonthlyProgressView()
         case .debug:
-            DebugView
+            ScrollView { MainView }
         case .settings:
             SettingsView(accentColor: tab.accentColor, onLogout: { authManager.logout() })
         }
@@ -212,6 +212,10 @@ struct MainAppView: View {
 
             Button("Print log data") {
                 Task { self.printCurrentLogFile() }
+            }.padding(.top, 30)
+
+            Button("Fetch SensorKit Now") {
+                BackgroundScheduler.shared.triggerSensorKitFetchNow()
             }.padding(.top, 30)
 
             Button("Start Gyro Recording") {
@@ -435,12 +439,12 @@ struct MainAppView: View {
                 let status = CMMotionActivityManager.authorizationStatus()
                 switch status {
                 case .authorized:
-                    print("✅ Motion permission granted")
+                    print("Motion permission granted")
                     AcclerometerRecorder.shared.startRecording()
                 case .denied, .restricted:
-                    print("❌ Motion permission denied/restricted")
+                    print("Motion permission denied/restricted")
                 case .notDetermined:
-                    print("⏳ Motion permission not determined yet")
+                    print("Motion permission not determined yet")
                 @unknown default:
                     print("Default")
                 }
@@ -504,7 +508,7 @@ struct HomeView: View {
                             Text(greetingText)
                                 .font(.system(size: 14, weight: .medium, design: .rounded))
                                 .foregroundStyle(Color(red: 0.55, green: 0.47, blue: 0.44))
-                            Text("Hi, \(patientFirstName) 👋")
+                            Text("Hi, \(patientFirstName)")
                                 .font(.system(size: 28, weight: .bold, design: .rounded))
                                 .foregroundStyle(Color(red: 0.28, green: 0.22, blue: 0.20))
                         }
@@ -661,10 +665,10 @@ struct HomeView: View {
 
     private var currentMilestone: String? {
         switch daysSinceSurgery {
-        case 7:  return "🎉 1 week milestone!"
-        case 14: return "🎉 2 week milestone!"
-        case 30: return "🎉 1 month milestone!"
-        case 90: return "🎉 3 month milestone!"
+        case 7:  return "1 week milestone!"
+        case 14: return "2 week milestone!"
+        case 30: return "1 month milestone!"
+        case 90: return "3 month milestone!"
         default: return nil
         }
     }

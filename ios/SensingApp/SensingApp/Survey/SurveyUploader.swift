@@ -103,7 +103,7 @@ final class SurveyUploader {
     //   (preserves original behaviour during transition).
     func uploadSurvey(_ surveyData: [String: Any]) async throws {
 
-        print("🚀 Preparing survey upload...")
+        print("Preparing survey upload...")
 
         // MARK: Build Metadata
         let now           = Date()
@@ -147,8 +147,8 @@ final class SurveyUploader {
                 body:     wrappedPayload
             )
             let responseString = String(data: responseData, encoding: .utf8) ?? "No response body"
-            print("📡 Server response:", responseString)
-            print("✅ Survey upload successful.")
+            print("Server response:", responseString)
+            print("Survey upload successful.")
             return
         }
 
@@ -156,8 +156,8 @@ final class SurveyUploader {
         //
         // Reached only if configure(authManager:) was never called.
         // Preserves original behaviour so nothing breaks during transition.
-        // ⚠️ Remove this fallback once configure() is wired up at launch.
-        print("⚠️ SurveyUploader: authManager not configured — using unauthenticated fallback.")
+        // Remove this fallback once configure() is wired up at launch.
+        print("SurveyUploader: authManager not configured — using unauthenticated fallback.")
 
         guard let url = URL(string: "http://18.116.67.186/api/uploadjson/survey") else {
             throw UploadError.invalidURL
@@ -176,15 +176,15 @@ final class SurveyUploader {
             throw UploadError.badServerResponse
         }
 
-        print("📡 HTTP Status:", httpResponse.statusCode)
+        print("HTTP Status:", httpResponse.statusCode)
 
         let responseString = String(data: data, encoding: .utf8) ?? "No response body"
-        print("📨 Server Response:", responseString)
+        print("Server Response:", responseString)
 
         guard (200...299).contains(httpResponse.statusCode) else {
             throw UploadError.serverError(httpResponse.statusCode, responseString)
         }
 
-        print("✅ Survey upload successful.")
+        print("Survey upload successful.")
     }
 }

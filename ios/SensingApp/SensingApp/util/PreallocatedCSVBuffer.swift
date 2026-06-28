@@ -73,7 +73,7 @@ final class PreallocatedCSVBuffer {
         //            try? joined.write(to: fileURL, atomically: true, encoding: .utf8)
         //        }
 
-        print("✅ Wrote \(index) rows to \(fileURL.lastPathComponent)")
+        print("Wrote \(index) rows to \(fileURL.lastPathComponent)")
         index = 0  // reuse buffer from start
     }
 

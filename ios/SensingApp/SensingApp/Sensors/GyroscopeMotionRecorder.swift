@@ -39,7 +39,7 @@ final class GyroscopeMotionRecorder {
     /// Each row: `timestamp_unix_ms,x,y,z`  (rotation rate in rad/s).
     func startRecording(hz: Double = 50) {
         guard motion.isGyroAvailable else {
-            print("⚠️ Gyroscope not available on this device")
+            print("Gyroscope not available on this device")
             Logger.shared.append("Gyroscope not available on this device")
             return
         }
@@ -73,7 +73,7 @@ final class GyroscopeMotionRecorder {
             }
         }
 
-        print("🌀 Gyroscope recording started at \(hz)Hz → \(filename)")
+        print("Gyroscope recording started at \(hz)Hz → \(filename)")
         Logger.shared.append("Gyroscope recording started at \(hz)Hz → \(filename)")
         CrashReporter.log("gyro recording started")
     }
@@ -94,7 +94,7 @@ final class GyroscopeMotionRecorder {
             self?.sampleCount = 0
         }
 
-        print("🛑 Gyroscope recording stopped")
+        print("Gyroscope recording stopped")
         Logger.shared.append("Gyroscope recording stopped")
         CrashReporter.log("gyro recording stopped")
     }

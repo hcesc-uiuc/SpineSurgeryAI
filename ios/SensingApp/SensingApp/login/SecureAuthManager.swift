@@ -49,7 +49,7 @@ internal import Combine
 // ============================================================
 
 // ============================================================
-// MARK: - ⚠️ DEMO MODE
+// MARK: - DEMO MODE
 // ============================================================
 // TEMPORARY — for simulator/testing use only while server is not ready.
 //
@@ -168,7 +168,7 @@ class SecureAuthManager: ObservableObject {
         CrashReporter.setParticipant(appleUserID)
         CrashReporter.log("login attempt")
 
-        // ── ⚠️ DEMO MODE BLOCK — DELETE BEFORE SHIPPING ─────────────
+        // ── DEMO MODE BLOCK — DELETE BEFORE SHIPPING ─────────────
         if demoMode {
             isAuthenticated = true
             return
@@ -290,7 +290,7 @@ class SecureAuthManager: ObservableObject {
         body: [String: Any]? = nil
     ) async throws -> Data {
 
-        // ── ⚠️ DEMO MODE: skip auth, send request without Bearer token ──
+        // ── DEMO MODE: skip auth, send request without Bearer token ──
         if demoMode {
             guard let url = URL(string: "\(baseURL)\(endpoint)") else {
                 throw AuthError.networkError("Invalid URL.")
@@ -363,7 +363,7 @@ class SecureAuthManager: ObservableObject {
     // Calls POST /auth/logout to invalidate the refresh token server-side,
     // then clears all tokens from Keychain regardless of server response.
     func logout() {
-        // ── ⚠️ DEMO MODE: skip network call ─────────────────────────
+        // ── DEMO MODE: skip network call ─────────────────────────
         if !demoMode {
         // ── END DEMO MODE GUARD ─────────────────────────────────────
             Task {
@@ -378,7 +378,7 @@ class SecureAuthManager: ObservableObject {
                 request.httpBody = try? JSONEncoder().encode(["refresh_token": refreshToken])
                 _ = try? await session.data(for: request)
             }
-        // ── ⚠️ DEMO MODE closing brace ──────────────────────────────
+        // ── DEMO MODE closing brace ──────────────────────────────
         }
         // ── END DEMO MODE GUARD ─────────────────────────────────────
 

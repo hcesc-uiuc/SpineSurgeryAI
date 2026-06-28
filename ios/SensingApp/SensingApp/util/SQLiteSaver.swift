@@ -24,7 +24,7 @@ final class SQLiteSaver {
     private(set) var db: OpaquePointer?
     private var index = 0
     private var capacity: Int = 10000
-    private let maxFileSizeMB: Double = 5  // 👈 change this threshold
+    private let maxFileSizeMB: Double = 5  // change this threshold
     
     enum DataType: Int {
         case accelerometer = 0
@@ -81,7 +81,7 @@ final class SQLiteSaver {
 
         guard sqlite3_open(path, &db) == SQLITE_OK else {
             let msg = String(cString: sqlite3_errmsg(db))
-            print("❌ Failed to open DB at \(path): \(msg)")
+            print("Failed to open DB at \(path): \(msg)")
             db = nil
             return
         }
@@ -91,14 +91,14 @@ final class SQLiteSaver {
         //        sqlite3_exec(db, "PRAGMA synchronous = NORMAL;", nil, nil, nil)
         //        sqlite3_exec(db, "PRAGMA foreign_keys = ON;",   nil, nil, nil)
 
-        print("✅ Database opened at: \(path)")
+        print("Database opened at: \(path)")
     }
     
     func close() {
         guard let db else { return }
         sqlite3_close(db)
         self.db = nil
-        print("🔒 Database closed")
+        print("Database closed")
         
         //deleteWALFiles()  // then safe to delete
     }
@@ -118,10 +118,10 @@ final class SQLiteSaver {
             do {
                 if FileManager.default.fileExists(atPath: url.path) {
                     try FileManager.default.removeItem(at: url)
-                    print("🗑️ Deleted: \(url.lastPathComponent)")
+                    print("Deleted: \(url.lastPathComponent)")
                 }
             } catch {
-                print("❌ Failed to delete \(url.lastPathComponent): \(error)")
+                print("Failed to delete \(url.lastPathComponent): \(error)")
             }
         }
     }
@@ -175,7 +175,7 @@ final class SQLiteSaver {
         guard sqlite3_exec(db, sql, nil, nil, &errorMsg) == SQLITE_OK else {
             let msg = errorMsg.map { String(cString: $0) } ?? "Unknown error"
             sqlite3_free(errorMsg)
-            print("❌ exec failed: \(msg)\nSQL: \(sql)")
+            print("exec failed: \(msg)\nSQL: \(sql)")
             return false
         }
         return true

@@ -39,6 +39,15 @@ import SensorKit
 import CoreMotion
 import Foundation
 
+// Which device's data to fetch. Per Apple's headers, accelerometer/rotationRate
+// record "the device's" sensor — and SRDevice can be the iPhone OR a paired
+// Apple Watch — so we choose explicitly.
+enum SensorKitDevicePreference {
+    case iPhone   // the phone running the app (SensorKit records it 24/7)
+    case watch    // a paired Apple Watch
+    case any      // first available device
+}
+
 // ============================================================
 // MARK: - SensorKitFetcher (reusable base)
 // ============================================================
@@ -48,6 +57,7 @@ class SensorKitFetcher: NSObject {
     private let reader: SRSensorReader
     private let filePrefix: String     // e.g. "sensorkit_accel_watch"
     private let csvHeader: String      // e.g. "timestamp_unix,x,y,z"
+    private let devicePreference: SensorKitDevicePreference
 
     private let batchSize = 1000
     private let maxFileSize = 50 * 1024 * 1024   // 50 MB per CSV file
@@ -83,14 +93,30 @@ class SensorKitFetcher: NSObject {
     private var fetchCompletion: ((Bool) -> Void)?
     private var didFinish = false
 
-    init(sensor: SRSensor, filePrefix: String, csvHeader: String) {
+    init(sensor: SRSensor,
+         filePrefix: String,
+         csvHeader: String,
+         devicePreference: SensorKitDevicePreference = .iPhone) {
         self.reader = SRSensorReader(sensor: sensor)
         self.filePrefix = filePrefix
         self.csvHeader = csvHeader
+        self.devicePreference = devicePreference
         self.currentFileURL = documentsDir   // placeholder; set in openCurrentFile()
         super.init()
         reader.delegate = self
         openCurrentFile()
+    }
+
+    /// Picks the source device based on `devicePreference`.
+    private func pickDevice(from devices: [SRDevice]) -> SRDevice? {
+        switch devicePreference {
+        case .iPhone:
+            return devices.first { $0.model.lowercased().contains("iphone") } ?? devices.first
+        case .watch:
+            return devices.first { $0.model.lowercased().contains("watch") } ?? devices.first
+        case .any:
+            return devices.first
+        }
     }
 
     // MARK: - Subclass hook
@@ -109,6 +135,22 @@ class SensorKitFetcher: NSObject {
         self.fetchCompletion = completion
         self.didFinish = false
         reader.fetchDevices()
+    }
+
+    /// Tells the OS to begin (and keep) recording this sensor for the app.
+    /// REQUIRED: without this call the system retains NO data and every
+    /// fetch() returns empty — forever. Authorization alone does nothing.
+    /// Safe to call on every launch (it continues an existing recording).
+    func startRecording() {
+        reader.startRecording()
+        print("[\(filePrefix)] startRecording() requested")
+        Logger.shared.append("SensorKit: startRecording requested for \(filePrefix)")
+    }
+
+    /// Stops OS-level recording for this sensor.
+    func stopRecording() {
+        reader.stopRecording()
+        print("[\(filePrefix)] stopRecording() requested")
     }
 
     private func finish(_ success: Bool) {
@@ -224,10 +266,9 @@ class SensorKitFetcher: NSObject {
 extension SensorKitFetcher: SRSensorReaderDelegate {
 
     func sensorReader(_ reader: SRSensorReader, didFetch devices: [SRDevice]) {
-        let watch = devices.first { $0.model.lowercased().contains("watch") } ?? devices.first
-        guard let device = watch else {
+        guard let device = pickDevice(from: devices) else {
             print("[\(filePrefix)] No SensorKit devices found")
-            finish(true)   // no paired device is not an error; nothing to fetch
+            finish(true)   // no matching device is not an error; nothing to fetch
             return
         }
         print("[\(filePrefix)] Using device: \(device.name) (\(device.model))")
@@ -286,8 +327,9 @@ final class SensorKitAccelerometerFetcher: SensorKitFetcher {
     init() {
         super.init(
             sensor: .accelerometer,
-            filePrefix: "sensorkit_accel_watch",
-            csvHeader: "timestamp_unix,x,y,z"
+            filePrefix: "sensorkit_accel_phone",
+            csvHeader: "timestamp_unix,x,y,z",
+            devicePreference: .iPhone   // the phone's own accelerometer, recorded 24/7 by the OS
         )
     }
 

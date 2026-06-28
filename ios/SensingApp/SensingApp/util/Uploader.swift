@@ -34,13 +34,14 @@ struct Uploader {
         //let file_prefixes = ["accelerometer_"] //, "log_"] //add more extension in future
         //let file_prefixes = ["log_"] //add more extension in future
         let todaysDateString = getTodaysDateString()
-        let file_prefixes = ["locations_", "accelerometer_", "healthkit_", "gyroscope_"]
+        let file_prefixes = ["locations_", "accelerometer_", "healthkit_", "gyroscope_", "sensorkit_"]
         //let kinds = ["location", "accelerometer", "healthkit"]
         let kinds = [
             "locations_": "loc",
             "accelerometer_": "accel",
             "healthkit_": "hk",
-            "gyroscope_": "gyro"
+            "gyroscope_": "gyro",
+            "sensorkit_": "sensorkit"   // SensorKit accel + gyro (sensorkit_accel_phone_, sensorkit_gyro_phone_)
         ]
         
         for file_prefix in file_prefixes {

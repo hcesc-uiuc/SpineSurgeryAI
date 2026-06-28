@@ -32,7 +32,7 @@ extension SQLiteSaver {
             );
         """
         if exec(sql) {
-            print("✅ Table ready: data_batches")
+            print("Table ready: data_batches")
         }
     }
     
@@ -41,7 +41,7 @@ extension SQLiteSaver {
     @discardableResult
     func insertData(timestamp: Double, dataType: DataType, blob: Data) -> Bool {
         guard let db else {
-            print("❌ insertData: no database connection")
+            print("insertData: no database connection")
             return false
         }
 
@@ -49,7 +49,7 @@ extension SQLiteSaver {
         var stmt: OpaquePointer?
 
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
-            print("❌ insertData prepare failed: \(lastError())")
+            print("insertData prepare failed: \(lastError())")
             return false
         }
 
@@ -66,7 +66,7 @@ extension SQLiteSaver {
         
         let stepResult = sqlite3_step(stmt)
         guard stepResult == SQLITE_DONE else {
-            print("❌ insertData step failed: \(lastError())")
+            print("insertData step failed: \(lastError())")
             sqlite3_finalize(stmt)
             return false
         }

@@ -227,7 +227,7 @@ class AdaptiveLocationManager: NSObject, ObservableObject, CLLocationManagerDele
         didSet {
             guard oldValue != currentMode else { return }
             applyMode()
-            print("📍 Mode switched to: \(currentMode)")
+            print("Mode switched to: \(currentMode)")
         }
     }
 
@@ -290,7 +290,7 @@ class AdaptiveLocationManager: NSObject, ObservableObject, CLLocationManagerDele
         // From this point, didUpdateLocations will be called automatically
         // by iOS whenever a new fix is available and distanceFilter is met.
         locationManager.startUpdatingLocation()
-        print("✅ Tracking started")
+        print("Tracking started")
     }
 
     func stopTracking() {
@@ -301,7 +301,7 @@ class AdaptiveLocationManager: NSObject, ObservableObject, CLLocationManagerDele
         // Cancel the stationary timer so it does not fire after tracking stops.
         stationaryTimer?.invalidate()
         stationaryTimer = nil
-        print("🛑 Tracking stopped")
+        print("Tracking stopped")
     }
 
     // MARK: - Geofence
@@ -312,7 +312,7 @@ class AdaptiveLocationManager: NSObject, ObservableObject, CLLocationManagerDele
         // Geofence monitoring is available even when the app is killed.
         // iOS wakes the app when the user enters or exits the region.
         guard CLLocationManager.isMonitoringAvailable(for: CLCircularRegion.self) else {
-            print("⚠️ Region monitoring not available on this device")
+            print("Region monitoring not available on this device")
             return
         }
 
@@ -321,7 +321,7 @@ class AdaptiveLocationManager: NSObject, ObservableObject, CLLocationManagerDele
         region.notifyOnExit  = true
 
         locationManager.startMonitoring(for: region)
-        print("📌 Started monitoring region: \(identifier) radius: \(radius)m")
+        print("Started monitoring region: \(identifier) radius: \(radius)m")
     }
 
     func stopMonitoringRegion(identifier: String) {
@@ -330,7 +330,7 @@ class AdaptiveLocationManager: NSObject, ObservableObject, CLLocationManagerDele
         for region in locationManager.monitoredRegions {
             if region.identifier == identifier {
                 locationManager.stopMonitoring(for: region)
-                print("📌 Stopped monitoring region: \(identifier)")
+                print("Stopped monitoring region: \(identifier)")
             }
         }
     }
@@ -412,33 +412,33 @@ class AdaptiveLocationManager: NSObject, ObservableObject, CLLocationManagerDele
         case .authorizedAlways:
             // Full background tracking available.
             // didUpdateLocations fires even when the app is suspended.
-            print("✅ Always Allow granted — full background tracking active")
+            print("Always Allow granted — full background tracking active")
             startTracking()
 
         case .authorizedWhenInUse:
             // Foreground tracking only.
             // didUpdateLocations fires while app is in the foreground.
             // iOS will show the Always Allow upgrade prompt on its own schedule.
-            print("⚠️ When In Use only — background tracking limited")
+            print("When In Use only — background tracking limited")
             startTracking()
 
         case .denied:
             // User explicitly denied permission.
             // requestAlwaysAuthorization() is silently ignored from now on.
             // The only recovery path is the Settings deep link.
-            print("❌ Permission denied — direct user to Settings")
+            print("Permission denied — direct user to Settings")
             stopTracking()
 
         case .restricted:
             // Device policy (parental controls, MDM) prevents location access.
             // Nothing you can do programmatically — inform the user.
-            print("❌ Permission restricted by device policy")
+            print("Permission restricted by device policy")
             stopTracking()
 
         case .notDetermined:
             // The dialog has not been shown yet.
             // Wait — do not call startTracking() here.
-            print("⏳ Permission not yet determined")
+            print("Permission not yet determined")
             //locationManager.requestAlwaysAuthorization()
             
         @unknown default:
@@ -471,7 +471,7 @@ class AdaptiveLocationManager: NSObject, ObservableObject, CLLocationManagerDele
             let timeString = formatter.string(from: location.timestamp)
             
             print("""
-            📍 [\(timestamp)]
+            [\(timestamp)]
                lat:      \(location.coordinate.latitude)
                lng:      \(location.coordinate.longitude)
                accuracy: \(Int(location.horizontalAccuracy))m
@@ -495,9 +495,9 @@ class AdaptiveLocationManager: NSObject, ObservableObject, CLLocationManagerDele
                     // User has moved more than 10m — they are actively moving.
                     // Update the reference point and timestamp to this new position.
                     // Reset the clock — start measuring from here.
-                    print("🏃 Moved \(Int(distanceMoved))m — user is moving")
+                    print("Moved \(Int(distanceMoved))m — user is moving")
                     let unixTime = Int64(Date().timeIntervalSince1970 * 1000)
-                    let entry = "\(unixTime)], 🏃 Moved \(Int(distanceMoved))m — user is moving"
+                    let entry = "\(unixTime)], Moved \(Int(distanceMoved))m — user is moving"
                     Logger.shared.append(entry)
                     
                     
@@ -507,10 +507,10 @@ class AdaptiveLocationManager: NSObject, ObservableObject, CLLocationManagerDele
                     // If we were in low power mode, upgrade back to high accuracy
                     // now that movement has been confirmed.
                     if currentMode == .lowPower {
-                        print("⬆️ Upgrading to high accuracy")
+                        print("Upgrading to high accuracy")
                         currentMode = .highAccuracy
                         let unixTime = Int64(Date().timeIntervalSince1970 * 1000)
-                        let entry = "\(unixTime)], ⬆️ Upgrading to high accuracy"
+                        let entry = "\(unixTime)], Upgrading to high accuracy"
                         Logger.shared.append(entry)
                     }
 
@@ -526,16 +526,16 @@ class AdaptiveLocationManager: NSObject, ObservableObject, CLLocationManagerDele
                         // Switch to low power — GPS chip turns off.
                         
                         let unixTime = Int64(Date().timeIntervalSince1970 * 1000)
-                        let entry = "\(unixTime), 🧍 Within \(Int(distanceMoved))m for \(Int(timeElapsed))s — switching to low power"
+                        let entry = "\(unixTime), Within \(Int(distanceMoved))m for \(Int(timeElapsed))s — switching to low power"
                         Logger.shared.append(entry)
                         
                         currentMode = .lowPower
                     } else {
                         // Still within the time window — log how long they have been still
-                        print("⏱️ Within \(Int(distanceMoved))m for \(Int(timeElapsed))s — still watching")
+                        print("Within \(Int(distanceMoved))m for \(Int(timeElapsed))s — still watching")
                         
                         let unixTime = Int64(Date().timeIntervalSince1970 * 1000)
-                        let entry = "\(unixTime), ⏱️ Within \(Int(distanceMoved))m for \(Int(timeElapsed))s — still watching"
+                        let entry = "\(unixTime), Within \(Int(distanceMoved))m for \(Int(timeElapsed))s — still watching"
                         Logger.shared.append(entry)
                     }
                 }
@@ -543,10 +543,10 @@ class AdaptiveLocationManager: NSObject, ObservableObject, CLLocationManagerDele
             } else {
                 // This is the very first location we have ever received.
                 // Set it as the initial reference point and start the clock.
-                print("📍 First location received — starting stationary watch")
+                print("First location received — starting stationary watch")
                 
                 let unixTime = Int64(Date().timeIntervalSince1970 * 1000)
-                let entry = "\(unixTime), 📍 First location received — starting stationary watch"
+                let entry = "\(unixTime), First location received — starting stationary watch"
                 Logger.shared.append(entry)
                 
                 lastLocation = location
@@ -562,7 +562,7 @@ class AdaptiveLocationManager: NSObject, ObservableObject, CLLocationManagerDele
     // the activityType hint. Runs inside iOS — works even when app is suspended.
     // This is independent of your stationaryTimer — either can fire first.
     func locationManagerDidPauseLocationUpdates(_ manager: CLLocationManager) {
-        print("⏸️ iOS auto-paused location — user is stationary")
+        print("iOS auto-paused location — user is stationary")
         
         let unixTime = Int64(Date().timeIntervalSince1970 * 1000)
         let entry = "\(unixTime), iOS auto-paused location — user is stationary"
@@ -576,7 +576,7 @@ class AdaptiveLocationManager: NSObject, ObservableObject, CLLocationManagerDele
     // after an auto-pause. This is your signal to upgrade back to high accuracy
     // so you do not miss movement detail in the first moments of activity.
     func locationManagerDidResumeLocationUpdates(_ manager: CLLocationManager) {
-        print("▶️ iOS resumed location — user is moving again")
+        print("iOS resumed location — user is moving again")
         
         let unixTime = Int64(Date().timeIntervalSince1970 * 1000)
         let entry = "\(unixTime), iOS resumed location — user is moving again"
@@ -591,7 +591,7 @@ class AdaptiveLocationManager: NSObject, ObservableObject, CLLocationManagerDele
     // You never call this yourself.
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
         guard let clError = error as? CLError else {
-            print("❌ Unknown location error: \(error.localizedDescription)")
+            print("Unknown location error: \(error.localizedDescription)")
             return
         }
 
@@ -601,21 +601,21 @@ class AdaptiveLocationManager: NSObject, ObservableObject, CLLocationManagerDele
             // User revoked permission while the app was running.
             // Stop tracking — didChangeAuthorization will also fire
             // and handle the UI update via the @Published property.
-            print("❌ Permission revoked mid-session — stopping tracking")
+            print("Permission revoked mid-session — stopping tracking")
             stopTracking()
 
         case .locationUnknown:
             // Temporary inability to get a fix — indoors, tunnel, poor signal.
             // CLLocationManager keeps trying automatically. Just wait.
-            print("⏳ Location temporarily unknown — waiting for signal")
+            print("Location temporarily unknown — waiting for signal")
 
         case .network:
             // Network-based location (cell/WiFi) is unavailable.
             // GPS may still work — CLLocationManager will fall back automatically.
-            print("⚠️ Network location unavailable — falling back to GPS only")
+            print("Network location unavailable — falling back to GPS only")
 
         default:
-            print("❌ Location error (\(clError.code.rawValue)): \(clError.localizedDescription)")
+            print("Location error (\(clError.code.rawValue)): \(clError.localizedDescription)")
         }
     }
 
@@ -624,7 +624,7 @@ class AdaptiveLocationManager: NSObject, ObservableObject, CLLocationManagerDele
     // to deliver this event. The app gets a short window to handle it.
     // You never call this yourself.
     func locationManager(_ manager: CLLocationManager, didEnterRegion region: CLRegion) {
-        print("🟢 Entered region: \(region.identifier)")
+        print("Entered region: \(region.identifier)")
 
         // Upgrade to high accuracy when entering a region —
         // the user is likely at a point of interest and precise tracking matters.
@@ -639,7 +639,7 @@ class AdaptiveLocationManager: NSObject, ObservableObject, CLLocationManagerDele
     // Same background relaunch behaviour as didEnterRegion.
     // You never call this yourself.
     func locationManager(_ manager: CLLocationManager, didExitRegion region: CLRegion) {
-        print("🔴 Exited region: \(region.identifier)")
+        print("Exited region: \(region.identifier)")
         //postRegionNotification(title: "Departed", body: "You left: \(region.identifier)")
     }
 
@@ -647,7 +647,7 @@ class AdaptiveLocationManager: NSObject, ObservableObject, CLLocationManagerDele
     // Common cause: the app has reached the 20-region monitoring limit.
     func locationManager(_ manager: CLLocationManager, monitoringDidFailFor region: CLRegion?,
                          withError error: Error) {
-        print("❌ Region monitoring failed for \(region?.identifier ?? "unknown"): \(error.localizedDescription)")
+        print("Region monitoring failed for \(region?.identifier ?? "unknown"): \(error.localizedDescription)")
     }
     
     
@@ -670,7 +670,7 @@ class AdaptiveLocationManager: NSObject, ObservableObject, CLLocationManagerDele
     //
     //        UNUserNotificationCenter.current().add(request) { error in
     //            if let error {
-    //                print("❌ Notification error: \(error.localizedDescription)")
+    //                print("Notification error: \(error.localizedDescription)")
     //            }
     //        }
     //    }

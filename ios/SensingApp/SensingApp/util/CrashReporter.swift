@@ -20,7 +20,7 @@ enum CrashReporter {
     /// of events leading up to a problem. Keep them free of personal data.
     static func log(_ message: String) {
         Crashlytics.crashlytics().log(message)
-        print("📝 [Crashlytics] \(message)")
+        print("[Crashlytics] \(message)")
     }
 
     /// Records a non-fatal error to Crashlytics with optional context.
@@ -44,7 +44,7 @@ enum CrashReporter {
             ]) { current, _ in current }
         )
         Crashlytics.crashlytics().record(error: nsError)
-        print("⚠️ [Crashlytics] recorded non-fatal: \(context ?? "")  \(error.localizedDescription)")
+        print("[Crashlytics] recorded non-fatal: \(context ?? "")  \(error.localizedDescription)")
     }
 
     /// Records a non-fatal "soft" failure that isn't an Error value
@@ -58,7 +58,7 @@ enum CrashReporter {
         userInfo[NSLocalizedDescriptionKey] = message
         let nsError = NSError(domain: "SensingApp", code: -1, userInfo: userInfo)
         Crashlytics.crashlytics().record(error: nsError)
-        print("⚠️ [Crashlytics] recorded failure: \(context)  \(message)")
+        print("[Crashlytics] recorded failure: \(context)  \(message)")
     }
 
     /// Associates subsequent reports with a stable participant/user identifier.
