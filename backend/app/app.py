@@ -27,6 +27,12 @@ def create_app():
     # Register blueprints
     app.register_blueprint(upload_bp, url_prefix="/api")
 
+    # TODO(profile-sync): the iOS app (branch akarsh-issue-55) expects the
+    # user-profile endpoints described in PROFILE_API.md. Implement
+    # routes/profile.py (currently a stub) and register it here:
+    # from routes.profile import profile_bp
+    # app.register_blueprint(profile_bp, url_prefix="/api")
+
     app.register_blueprint(dashboard_api)
     app.register_blueprint(dashboard_page)
     

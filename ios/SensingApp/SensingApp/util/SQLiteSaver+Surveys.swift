@@ -77,6 +77,70 @@ extension SQLiteSaver {
         return true
     }
 
+    // MARK: - Restore insert (profile sync)
+    //
+    // Insert a survey record for a PAST day — used by ProfileStore when
+    // hydrating history downloaded from the study server onto a new device.
+    // timestamp_unix is set to noon local time of the given day so month
+    // range queries bucket it correctly.
+
+    @discardableResult
+    func insertSurvey(dateString: String, painScore: Int?, completed: Bool = true) -> Bool {
+        guard let db else {
+            print("❌ insertSurvey(dateString:): no database connection")
+            return false
+        }
+
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        guard let day = formatter.date(from: dateString) else {
+            print("❌ insertSurvey(dateString:): bad date \(dateString)")
+            return false
+        }
+        let noon = Calendar.current.date(bySettingHour: 12, minute: 0, second: 0, of: day) ?? day
+
+        let sql = "INSERT INTO surveys (timestamp_unix, date_string, pain_score, completed) VALUES (?, ?, ?, ?);"
+        var stmt: OpaquePointer?
+
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+            print("❌ insertSurvey(dateString:) prepare failed: \(lastError())")
+            return false
+        }
+        defer { sqlite3_finalize(stmt) }
+
+        sqlite3_bind_double(stmt, 1, noon.timeIntervalSince1970)
+        dateString.withCString { sqlite3_bind_text(stmt, 2, $0, -1, SQLITE_TRANSIENT_S) }
+        if let score = painScore {
+            sqlite3_bind_int(stmt, 3, Int32(score))
+        } else {
+            sqlite3_bind_null(stmt, 3)
+        }
+        sqlite3_bind_int(stmt, 4, completed ? 1 : 0)
+
+        guard sqlite3_step(stmt) == SQLITE_DONE else {
+            print("❌ insertSurvey(dateString:) step failed: \(lastError())")
+            return false
+        }
+        return true
+    }
+
+    /// True when a survey row already exists for the given "yyyy-MM-dd" day.
+    /// Keeps profile-restore hydration idempotent.
+    func surveyExists(dateString: String) -> Bool {
+        guard let db else { return false }
+
+        let sql = "SELECT 1 FROM surveys WHERE date_string = ? LIMIT 1;"
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+            print("❌ surveyExists prepare failed: \(lastError())")
+            return false
+        }
+        defer { sqlite3_finalize(stmt) }
+
+        dateString.withCString { sqlite3_bind_text(stmt, 1, $0, -1, SQLITE_TRANSIENT_S) }
+        return sqlite3_step(stmt) == SQLITE_ROW
+    }
+
     // MARK: - Fetch for a given month
 
     struct SurveyRecord {

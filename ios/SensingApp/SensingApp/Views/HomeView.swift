@@ -120,6 +120,9 @@ struct HomeView: View {
         .onAppear {
             appeared = true
             if firstOpenTimestamp == 0 { firstOpenTimestamp = Date().timeIntervalSince1970 }
+            // Mirror the Day-N anchor into the synced profile (no-op if the
+            // profile already carries one, e.g. restored from the server).
+            ProfileStore.shared.recordFirstOpen(firstOpenTimestamp)
             loadTodayHealthStats()
             loadWeeklyProgress()
         }

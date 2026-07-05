@@ -13,6 +13,12 @@ struct SettingsView: View {
     @State private var showingLogoutAlert = false
     @State private var showingPrivacySheet = false
     @State private var showingHelpSheet = false
+
+    // Synced user profile — drives the Study Profile card so participants
+    // (and coordinators troubleshooting with them) can verify their account
+    // and see whether their progress is backed up to the study server.
+    @ObservedObject private var profileStore = ProfileStore.shared
+    @AppStorage("journey_first_open_date") private var firstOpenTimestamp: Double = 0
     var body: some View {
         NavigationStack {
             ZStack {
@@ -26,6 +32,7 @@ struct SettingsView: View {
                 )
                 .ignoresSafeArea()
 
+                ScrollView {
                 VStack(spacing: 16) {
                     HStack(spacing: 16) {
                         ZStack {
@@ -52,6 +59,8 @@ struct SettingsView: View {
                             .fill(Color(red: 0.99, green: 0.97, blue: 0.95))
                             .shadow(color: Color(red: 0.60, green: 0.45, blue: 0.40).opacity(0.10), radius: 12, y: 4)
                     )
+
+                    studyProfileCard
 
                     VStack(spacing: 0) {
                         Button {
@@ -97,6 +106,7 @@ struct SettingsView: View {
                     Spacer()
                 }
                 .padding(24)
+                }
             }
             .navigationTitle("Settings")
             .alert("Log Out", isPresented: $showingLogoutAlert) {
@@ -112,6 +122,102 @@ struct SettingsView: View {
                 helpSheet
             }
         }
+    }
+
+    // MARK: - Study Profile card
+    //
+    // Read-only account summary backed by the synced UserProfile: lets a
+    // participant confirm their enrollment restored correctly on any device,
+    // and gives coordinators something concrete to check when troubleshooting.
+    private var studyProfileCard: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("Study Profile")
+                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                .foregroundStyle(Color(red: 0.55, green: 0.47, blue: 0.44))
+                .padding(.horizontal, 16)
+                .padding(.top, 14)
+                .padding(.bottom, 6)
+
+            infoRow(icon: "number", label: "Participant code", value: participantCodeText,
+                    color: Color(red: 0.80, green: 0.55, blue: 0.45))
+            Divider().padding(.leading, 56)
+            infoRow(icon: "calendar", label: "Joined study", value: joinedDateText,
+                    color: Color(red: 0.42, green: 0.62, blue: 0.55))
+            Divider().padding(.leading, 56)
+            infoRow(icon: "figure.walk", label: "Recovery day", value: recoveryDayText,
+                    color: Color(red: 0.55, green: 0.48, blue: 0.75))
+            Divider().padding(.leading, 56)
+            infoRow(icon: "checkmark.circle", label: "Check-ins completed", value: "\(checkInsCompleted)",
+                    color: Color(red: 0.38, green: 0.55, blue: 0.75))
+            Divider().padding(.leading, 56)
+            infoRow(icon: "icloud", label: "Backup", value: syncStatusText,
+                    color: Color(red: 0.60, green: 0.55, blue: 0.50))
+                .padding(.bottom, 4)
+        }
+        .background(
+            RoundedRectangle(cornerRadius: 20)
+                .fill(Color(red: 0.99, green: 0.97, blue: 0.95))
+                .shadow(color: Color(red: 0.60, green: 0.45, blue: 0.40).opacity(0.10), radius: 12, y: 4)
+        )
+    }
+
+    /// Short, human-readable slice of the anonymous participant hash —
+    /// enough for a coordinator to match against the dashboard.
+    private var participantCodeText: String {
+        let pid = ParticipantID.current
+        guard pid != "unidentified" else { return "—" }
+        return pid.prefix(8).uppercased()
+    }
+
+    private var joinedDateText: String {
+        let timestamp = profileStore.profile?.enrolledAt
+            ?? profileStore.profile?.firstOpenDate
+            ?? (firstOpenTimestamp != 0 ? firstOpenTimestamp : nil)
+        guard let timestamp else { return "—" }
+        return Date(timeIntervalSince1970: timestamp)
+            .formatted(.dateTime.month(.abbreviated).day().year())
+    }
+
+    private var recoveryDayText: String {
+        guard firstOpenTimestamp != 0 else { return "Day 1" }
+        let cal = Calendar.current
+        let start = cal.startOfDay(for: Date(timeIntervalSince1970: firstOpenTimestamp))
+        let today = cal.startOfDay(for: Date())
+        let day = max(1, (cal.dateComponents([.day], from: start, to: today).day ?? 0) + 1)
+        return "Day \(day)"
+    }
+
+    private var checkInsCompleted: Int {
+        profileStore.profile?.surveyHistory.filter(\.completed).count ?? 0
+    }
+
+    private var syncStatusText: String {
+        if let synced = profileStore.lastSyncedAt {
+            return "Backed up \(synced.formatted(.relative(presentation: .named)))"
+        }
+        return "Saved on this device"
+    }
+
+    private func infoRow(icon: String, label: String, value: String, color: Color) -> some View {
+        HStack(spacing: 14) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(color.opacity(0.15))
+                    .frame(width: 34, height: 34)
+                Image(systemName: icon)
+                    .font(.system(size: 16))
+                    .foregroundStyle(color)
+            }
+            Text(label)
+                .font(.system(size: 16, design: .rounded))
+                .foregroundStyle(Color(red: 0.28, green: 0.22, blue: 0.20))
+            Spacer()
+            Text(value)
+                .font(.system(size: 14, weight: .medium, design: .rounded))
+                .foregroundStyle(Color(red: 0.55, green: 0.47, blue: 0.44))
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 11)
     }
 
     private var privacySheet: some View {

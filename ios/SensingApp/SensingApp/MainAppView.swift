@@ -81,6 +81,10 @@ struct MainAppView: View {
         .onAppear {
             guard !hasStartedCollection else { return }
             hasStartedCollection = true
+            // Load the synced user profile — or restore it from the study
+            // server on a fresh device (day count, calendar history,
+            // check-in state). Local copy wins when one exists.
+            Task { await ProfileStore.shared.bootstrap(authManager: authManager, appState: appState) }
             // All permissions have been granted — begin data collection.
             AcclerometerRecorder.shared.startRecording()
             // HealthkitRecorder.shared.getHealthKitData()

@@ -73,6 +73,24 @@ struct AuthLoginView: View {
     // MARK: - Error State
     @State private var errorMessage: String?
 
+    // MARK: - Enrollment Code State
+    //
+    // First sign-in on a device requires a coordinator-issued 6-digit study
+    // code (EnrollmentGate) so random App Store users can't join the study.
+    // Apple Sign In completes first; if no enrolled profile exists for that
+    // Apple ID we hold the credential here and ask for the code before
+    // finishing login. Returning users on this device skip the prompt.
+    private struct PendingAppleCredential {
+        let identityToken: String
+        let fullName: String?
+        let appleUserID: String
+    }
+    @State private var pendingCredential: PendingAppleCredential?
+    @State private var showEnrollmentSheet = false
+    @State private var enrollmentCodeInput = ""
+    @State private var enrollmentError: String?
+    @State private var isJoining = false
+
     // MARK: - Permissions State
     @AppStorage("permissionsComplete") private var permissionsComplete = false
 
@@ -268,6 +286,156 @@ struct AuthLoginView: View {
             auditPermissions()
         }
         .animation(.default, value: errorMessage)
+        .sheet(isPresented: $showEnrollmentSheet, onDismiss: {
+            // Cancelled without joining — drop the held credential.
+            if !authManager.isAuthenticated { pendingCredential = nil }
+            enrollmentCodeInput = ""
+            enrollmentError = nil
+        }) {
+            enrollmentCodeSheet
+        }
+    }
+
+    // MARK: - Enrollment Code Sheet
+    private var enrollmentCodeSheet: some View {
+        ZStack {
+            LinearGradient(
+                colors: [
+                    Color(red: 0.98, green: 0.95, blue: 0.91),
+                    Color(red: 0.95, green: 0.91, blue: 0.88)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .ignoresSafeArea()
+
+            VStack(spacing: 20) {
+                ZStack {
+                    Circle()
+                        .fill(Color(red: 0.80, green: 0.55, blue: 0.45).opacity(0.15))
+                        .frame(width: 64, height: 64)
+                    Image(systemName: "key.fill")
+                        .font(.system(size: 26))
+                        .foregroundStyle(Color(red: 0.80, green: 0.55, blue: 0.45))
+                }
+                .padding(.top, 32)
+
+                VStack(spacing: 8) {
+                    Text("Enter Your Study Code")
+                        .font(.system(size: 22, weight: .bold, design: .rounded))
+                        .foregroundStyle(Color(red: 0.28, green: 0.22, blue: 0.20))
+                    Text("To join the study, enter the 6-digit code given to you by your study coordinator.")
+                        .font(.system(size: 14, design: .rounded))
+                        .foregroundStyle(Color(red: 0.50, green: 0.42, blue: 0.39))
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 24)
+                }
+
+                TextField("6-digit code", text: $enrollmentCodeInput)
+                    .keyboardType(.numberPad)
+                    .textContentType(.oneTimeCode)
+                    .font(.system(size: 26, weight: .semibold, design: .rounded))
+                    .multilineTextAlignment(.center)
+                    .padding(.vertical, 14)
+                    .background(
+                        RoundedRectangle(cornerRadius: 14)
+                            .fill(Color.white)
+                            .shadow(color: Color(red: 0.60, green: 0.45, blue: 0.40).opacity(0.10), radius: 8, y: 3)
+                    )
+                    .padding(.horizontal, 40)
+                    .onChange(of: enrollmentCodeInput) { _, newValue in
+                        // Digits only, max 6
+                        let filtered = String(newValue.filter(\.isNumber).prefix(6))
+                        if filtered != newValue { enrollmentCodeInput = filtered }
+                        enrollmentError = nil
+                    }
+
+                if let enrollmentError {
+                    HStack(spacing: 6) {
+                        Image(systemName: "exclamationmark.circle.fill")
+                            .font(.system(size: 13))
+                        Text(enrollmentError)
+                            .font(.system(size: 13, design: .rounded))
+                    }
+                    .foregroundStyle(Color(red: 0.75, green: 0.25, blue: 0.22))
+                    .padding(.horizontal, 32)
+                }
+
+                Button {
+                    Task { await completeEnrollment() }
+                } label: {
+                    HStack {
+                        Spacer()
+                        if isJoining {
+                            ProgressView().tint(.white)
+                        } else {
+                            Text("Join Study")
+                                .font(.system(size: 16, weight: .semibold, design: .rounded))
+                                .foregroundStyle(.white)
+                        }
+                        Spacer()
+                    }
+                    .frame(height: 52)
+                    .background(
+                        RoundedRectangle(cornerRadius: 16)
+                            .fill(Color(red: 0.80, green: 0.55, blue: 0.45))
+                            .opacity(enrollmentCodeInput.count == 6 ? 1.0 : 0.4)
+                    )
+                }
+                .buttonStyle(.plain)
+                .disabled(enrollmentCodeInput.count != 6 || isJoining)
+                .padding(.horizontal, 40)
+
+                Button("Cancel") {
+                    showEnrollmentSheet = false
+                }
+                .font(.system(size: 15, design: .rounded))
+                .foregroundStyle(Color(red: 0.55, green: 0.47, blue: 0.44))
+                .disabled(isJoining)
+
+                Spacer()
+            }
+        }
+        .presentationDetents([.medium])
+        .interactiveDismissDisabled(isJoining)
+        .preferredColorScheme(.light)
+    }
+
+    // Validate the code, then finish the login that was held pending it.
+    private func completeEnrollment() async {
+        guard let credential = pendingCredential else {
+            showEnrollmentSheet = false
+            return
+        }
+
+        guard EnrollmentGate.validate(enrollmentCodeInput) else {
+            enrollmentError = "That code wasn't recognized. Please check with your study coordinator."
+            return
+        }
+
+        isJoining = true
+        defer { isJoining = false }
+
+        do {
+            try await authManager.login(
+                identityToken:  credential.identityToken,
+                fullName:       credential.fullName,
+                appleUserID:    credential.appleUserID,
+                enrollmentCode: enrollmentCodeInput
+            )
+            // Park the accepted code; ProfileStore.bootstrap folds it into
+            // the profile (after attempting a server restore) on first launch.
+            ProfileStore.shared.recordEnrollment(
+                code: enrollmentCodeInput,
+                participantId: ParticipantID.hash(credential.appleUserID)
+            )
+            pendingCredential = nil
+            showEnrollmentSheet = false
+        } catch let error as AuthError {
+            enrollmentError = error.errorDescription
+        } catch {
+            enrollmentError = "Something went wrong. Please try again."
+        }
     }
 
     // MARK: - Reinstall Detection
@@ -370,6 +538,20 @@ struct AuthLoginView: View {
             let fullName: String? = fullNameString.isEmpty ? nil : fullNameString
 
             let appleUserID = credential.user
+
+            // First sign-in on this device → ask for the coordinator-issued
+            // study code before completing login (EnrollmentGate). Returning
+            // users already have an enrolled profile and go straight through.
+            let participantId = ParticipantID.hash(appleUserID)
+            guard ProfileStore.shared.isEnrolled(participantId: participantId) else {
+                pendingCredential = PendingAppleCredential(
+                    identityToken: identityToken,
+                    fullName:      fullName,
+                    appleUserID:   appleUserID
+                )
+                showEnrollmentSheet = true
+                return
+            }
 
             do {
                 try await authManager.login(
