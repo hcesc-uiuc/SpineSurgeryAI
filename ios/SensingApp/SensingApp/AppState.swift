@@ -1,17 +1,16 @@
-//
-//  AppState.swift
-//  SensingApp
-//
-//  Created by Samir Kurudi on 11/20/25.
-//
-
 import Foundation
 internal import Combine
 
 
 class AppState: ObservableObject {
-    @Published var lastCompletedDate: String? = nil
+    @Published var lastCompletedDate: String? {
+        didSet { UserDefaults.standard.set(lastCompletedDate, forKey: "lastCompletedDate") }
+    }
     @Published var missedDays: [String] = []
+
+    init() {
+        self.lastCompletedDate = UserDefaults.standard.string(forKey: "lastCompletedDate")
+    }
 
     var todayString: String {
         let f = DateFormatter()
@@ -22,6 +21,8 @@ class AppState: ObservableObject {
     var isCompletedToday: Bool {
         lastCompletedDate == todayString
     }
+
+    var isSurveyScheduledToday: Bool { true }
 
     func markCompletedToday() { lastCompletedDate = todayString }
     func clearMissedDays() { missedDays.removeAll() }
