@@ -57,7 +57,7 @@ struct HomeView: View {
                             Text(greetingText)
                                 .font(.system(size: 14, weight: .medium, design: .rounded))
                                 .foregroundStyle(Color(red: 0.55, green: 0.47, blue: 0.44))
-                            Text("Hi there 👋")
+                            Text("Hi there ")
                                 .font(.system(size: 28, weight: .bold, design: .rounded))
                                 .foregroundStyle(Color(red: 0.28, green: 0.22, blue: 0.20))
                         }
@@ -481,10 +481,10 @@ struct HomeView: View {
 
     private var currentMilestone: String? {
         switch currentDay {
-        case 7:  return "🎉 1 week milestone!"
-        case 14: return "🎉 2 week milestone!"
-        case 30: return "🎉 1 month milestone!"
-        case 90: return "🎉 3 month milestone!"
+        case 7:  return "1 week milestone!"
+        case 14: return "2 week milestone!"
+        case 30: return "1 month milestone!"
+        case 90: return "3 month milestone!"
         default: return nil
         }
     }

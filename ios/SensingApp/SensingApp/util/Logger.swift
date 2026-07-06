@@ -36,7 +36,7 @@ final class Logger {
                 try data.write(to: logFileURL)
             }
         } catch {
-            print("❌ Logger error:", error)
+            print("Logger error:", error)
         }
     }
     

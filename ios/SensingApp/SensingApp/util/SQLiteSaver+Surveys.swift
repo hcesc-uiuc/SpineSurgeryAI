@@ -34,7 +34,7 @@ extension SQLiteSaver {
             );
         """
         if exec(sql) {
-            print("✅ Table ready: surveys")
+            print("Table ready: surveys")
         }
     }
 
@@ -43,7 +43,7 @@ extension SQLiteSaver {
     @discardableResult
     func insertSurvey(painScore: Int?) -> Bool {
         guard let db else {
-            print("❌ insertSurvey: no database connection")
+            print("insertSurvey: no database connection")
             return false
         }
 
@@ -57,7 +57,7 @@ extension SQLiteSaver {
         var stmt: OpaquePointer?
 
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
-            print("❌ insertSurvey prepare failed: \(lastError())")
+            print("insertSurvey prepare failed: \(lastError())")
             return false
         }
         defer { sqlite3_finalize(stmt) }
@@ -71,7 +71,7 @@ extension SQLiteSaver {
         }
 
         guard sqlite3_step(stmt) == SQLITE_DONE else {
-            print("❌ insertSurvey step failed: \(lastError())")
+            print("insertSurvey step failed: \(lastError())")
             return false
         }
         return true
@@ -105,7 +105,7 @@ extension SQLiteSaver {
         """
         var stmt: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
-            print("❌ fetchSurveys prepare failed: \(lastError())")
+            print("fetchSurveys prepare failed: \(lastError())")
             return []
         }
         defer { sqlite3_finalize(stmt) }

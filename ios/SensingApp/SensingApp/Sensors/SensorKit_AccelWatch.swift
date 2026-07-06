@@ -310,13 +310,13 @@ class SensorKitAccelerometerFetcher: NSObject {
 extension SensorKitAccelerometerFetcher: SRSensorReaderDelegate {
     
     func sensorReaderWillStartRecording(_ reader: SRSensorReader) {
-        print("✅ SK: SensorKit recording successfully started")
-        Logger.shared.append("✅ SK: SensorKit recording successfully started")
+        print("SK: SensorKit recording successfully started")
+        Logger.shared.append("SK: SensorKit recording successfully started")
     }
 
     func sensorReader(_ reader: SRSensorReader, startRecordingFailedWithError error: Error) {
-        print("❌ SensorKit recording failed: \(error)")
-        Logger.shared.append("❌ SensorKit recording failed: \(error)")
+        print("SensorKit recording failed: \(error)")
+        Logger.shared.append("SensorKit recording failed: \(error)")
     }
     
     func sensorReader(_ reader: SRSensorReader, didFetch devices: [SRDevice]) {

@@ -133,7 +133,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
     ) {
         let tokenParts = deviceToken.map { String(format: "%02.2hhx", $0) }
         let token = tokenParts.joined()
-        print("✅ Device Token: \(token)")
+        print("Device Token: \(token)")
 
         Task { @MainActor in
             let responseText = await UploadToServer.shared.uploadDeviceTokenToServer(deviceToken: token)
@@ -147,7 +147,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         _ application: UIApplication,
         didFailToRegisterForRemoteNotificationsWithError error: Error
     ) {
-        print("❌ Failed to register: \(error.localizedDescription)")
+        print("Failed to register: \(error.localizedDescription)")
     }
     
     

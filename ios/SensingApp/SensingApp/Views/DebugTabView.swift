@@ -170,7 +170,7 @@ struct DebugTabView: View {
         //let metricsRequested: Set<SupportedMetric> = [.steps] // Empty = All
         let metricsRequested: Set<SupportedMetric> = [] // Empty = All
         
-        print("🚀 Requesting \(daysRequested)-day historical refresh...")
+        print("Requesting \(daysRequested)-day historical refresh...")
         
         HKManager.refreshWithNewRange(days: 1, types:metricsRequested) { data in
             
@@ -264,12 +264,12 @@ struct DebugTabView: View {
                 let status = CMMotionActivityManager.authorizationStatus()
                 switch status {
                 case .authorized:
-                    print("✅ Motion permission granted")
+                    print("Motion permission granted")
                     AcclerometerRecorder.shared.startRecording()
                 case .denied, .restricted:
-                    print("❌ Motion permission denied/restricted")
+                    print("Motion permission denied/restricted")
                 case .notDetermined:
-                    print("⏳ Motion permission not determined yet")
+                    print("Motion permission not determined yet")
                 @unknown default:
                     print("Default")
                 }
