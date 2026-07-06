@@ -47,6 +47,7 @@ struct DebugTabView: View {
                 Task {
                     print("SensorKit fetcher is called")
                     SensorKitAccelerometerFetcher.shared.fetchLatestData()
+                    SensorKitGyroscopeFetcher.shared.fetchLatestData()
                 }
             }.padding(.top, 20)
             

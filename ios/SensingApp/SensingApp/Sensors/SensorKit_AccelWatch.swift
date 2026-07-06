@@ -223,7 +223,7 @@ class SensorKitAccelerometerFetcher: NSObject {
     // MARK: - CSV File Management
     
     private func csvFileName(index: Int) -> String {
-        return "sensorkit_accel_watch_\(String(format: "%05d", index)).csv"
+        return "sensorkit_accel_phone_\(String(format: "%05d", index)).csv"
     }
     
     private func openCurrentFile() {
@@ -330,10 +330,11 @@ extension SensorKitAccelerometerFetcher: SRSensorReaderDelegate {
             Logger.shared.append("SK: Device: \(device.name) — model: \(device.model)")
         }
         
-        let watchDevice = devices.first { $0.model.lowercased().contains("watch") }
+        // The iPhone's own accelerometer (not a paired Watch).
+        let phoneDevice = devices.first { $0.model.lowercased().contains("iphone") }
             ?? devices.first
-        
-        guard let device = watchDevice else {
+
+        guard let device = phoneDevice else {
             print("No SensorKit devices found")
             return
         }

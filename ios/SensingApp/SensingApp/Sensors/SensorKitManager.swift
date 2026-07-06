@@ -35,10 +35,11 @@ class SensorKitManager: NSObject, ObservableObject {
         guard authorizationStatus != .authorized else {
             print("Sensorkit Already authorized, skipping")
             SensorKitAccelerometerFetcher.shared.startRecording()
+            SensorKitGyroscopeFetcher.shared.startRecording()
             return
         }
-        
-        SRSensorReader.requestAuthorization(sensors: [.accelerometer]) { [weak self] error in
+
+        SRSensorReader.requestAuthorization(sensors: [.accelerometer, .rotationRate]) { [weak self] error in
             if let error = error {
                 print("SensorKit auth error: \(error)")
                 self?.saveAuthorizationStatus(.denied)
@@ -47,6 +48,7 @@ class SensorKitManager: NSObject, ObservableObject {
             self?.saveAuthorizationStatus(.authorized)
             print("SensorKit authorization granted")
             SensorKitAccelerometerFetcher.shared.startRecording()
+            SensorKitGyroscopeFetcher.shared.startRecording()
         }
     }
     

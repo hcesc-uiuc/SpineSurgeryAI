@@ -562,8 +562,9 @@ class BackgroundScheduler {
         // Fetcher will call setTaskCompleted in didCompleteFetch
         // accelFetcher.fetchLatestData()
         SensorKitAccelerometerFetcher.shared.fetchLatestData()
-        
-        
+        SensorKitGyroscopeFetcher.shared.fetchLatestData()
+
+
     }
     
     //=============================================================
