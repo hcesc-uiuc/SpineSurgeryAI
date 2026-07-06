@@ -70,6 +70,15 @@ class AppDelegate: NSObject, UIApplicationDelegate {
     ) -> Bool {
         print("App launched")
 
+        // If iOS relaunched us in the background to deliver a location event
+        // (geofence exit / significant change), resume location tracking. Sensor
+        // recording is started unconditionally below, so it resumes regardless.
+        if launchOptions?[.location] != nil {
+            print("Relaunched by location event — resuming tracking")
+            Logger.shared.append("Relaunched by location event — resuming tracking")
+            AdaptiveLocationManager.shared.startTracking()
+        }
+
         if let folderURL = createFolder(named: "logs") {
             print("Ready to use: \(folderURL)")
         }
@@ -95,6 +104,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         //authorization is already available
         #if !targetEnvironment(simulator)
         SensorKitAccelerometerFetcher.shared.startRecordingWithAuthorizationCheck()
+        SensorKitGyroscopeFetcher.shared.startRecordingWithAuthorizationCheck()
         #endif
         
         registerForPushNotifications()

@@ -208,6 +208,15 @@ class AdaptiveLocationManager: NSObject, ObservableObject, CLLocationManagerDele
     // Restarted on every incoming location update.
     // Only fires if no location arrives for stationaryThreshold seconds.
     private var stationaryTimer: Timer?
+
+    // MARK: - Geofence relaunch
+    // A self-re-arming stationary geofence that relaunches the app after iOS
+    // terminates it. Exiting the region wakes the app (works even when killed),
+    // at which point we re-arm the fence around the new location and resume.
+    private let geofenceIdentifier = "edu.uiuc.cs.hcesc.SensingApp.stationaryGeofence"
+    private let geofenceRadius: CLLocationDistance = 200
+    private let geofenceLastLatKey = "geofence_last_lat"
+    private let geofenceLastLngKey = "geofence_last_lng"
     
     //private let locationLogger = LocationFileLogger()
 
@@ -290,6 +299,13 @@ class AdaptiveLocationManager: NSObject, ObservableObject, CLLocationManagerDele
         // From this point, didUpdateLocations will be called automatically
         // by iOS whenever a new fix is available and distanceFilter is met.
         locationManager.startUpdatingLocation()
+
+        // Significant location changes + the stationary geofence are the two
+        // mechanisms that relaunch the app after iOS has terminated it.
+        locationManager.startMonitoringSignificantLocationChanges()
+        if let location = locationManager.location {
+            armStationaryGeofence(at: location.coordinate)
+        }
         print("✅ Tracking started")
     }
 
@@ -332,6 +348,47 @@ class AdaptiveLocationManager: NSObject, ObservableObject, CLLocationManagerDele
                 locationManager.stopMonitoring(for: region)
                 print("📌 Stopped monitoring region: \(identifier)")
             }
+        }
+    }
+
+    // MARK: - Stationary Geofence (relaunch)
+
+    // Centers the stationary geofence on the given coordinate, replacing any
+    // existing one, and persists the center so we can tell how far the user
+    // has drifted on the next update. Exit-only — entry is irrelevant here.
+    private func armStationaryGeofence(at coordinate: CLLocationCoordinate2D) {
+        guard CLLocationManager.isMonitoringAvailable(for: CLCircularRegion.self) else {
+            print("⚠️ Region monitoring not available — cannot arm stationary geofence")
+            return
+        }
+
+        stopMonitoringRegion(identifier: geofenceIdentifier)
+
+        let region = CLCircularRegion(center: coordinate,
+                                      radius: geofenceRadius,
+                                      identifier: geofenceIdentifier)
+        region.notifyOnEntry = false
+        region.notifyOnExit  = true
+        locationManager.startMonitoring(for: region)
+
+        UserDefaults.standard.set(coordinate.latitude, forKey: geofenceLastLatKey)
+        UserDefaults.standard.set(coordinate.longitude, forKey: geofenceLastLngKey)
+        print("📌 Stationary geofence armed at (\(coordinate.latitude), \(coordinate.longitude)) r=\(geofenceRadius)m")
+    }
+
+    // Re-centers the geofence once the user has drifted past half its radius,
+    // so the fence follows the user as they move between resting spots.
+    private func updateStationaryGeofence(to location: CLLocation) {
+        let lastLat = UserDefaults.standard.double(forKey: geofenceLastLatKey)
+        let lastLng = UserDefaults.standard.double(forKey: geofenceLastLngKey)
+
+        if lastLat != 0 && lastLng != 0 {
+            let last = CLLocation(latitude: lastLat, longitude: lastLng)
+            if location.distance(from: last) > geofenceRadius / 2 {
+                armStationaryGeofence(at: location.coordinate)
+            }
+        } else {
+            armStationaryGeofence(at: location.coordinate)
         }
     }
 
@@ -552,8 +609,13 @@ class AdaptiveLocationManager: NSObject, ObservableObject, CLLocationManagerDele
                 lastLocation = location
                 lastLocationTime = now
             }
-            
-            
+
+
+        }
+
+        // Keep the stationary geofence following the user as they move.
+        if let latest = locations.last {
+            updateStationaryGeofence(to: latest)
         }
     }
 
@@ -641,6 +703,14 @@ class AdaptiveLocationManager: NSObject, ObservableObject, CLLocationManagerDele
     func locationManager(_ manager: CLLocationManager, didExitRegion region: CLRegion) {
         print("🔴 Exited region: \(region.identifier)")
         //postRegionNotification(title: "Departed", body: "You left: \(region.identifier)")
+
+        // Exiting the stationary geofence means the user moved (possibly after
+        // the app was killed and relaunched to deliver this event). Resume
+        // tracking — startTracking() re-arms the geofence around the new spot.
+        guard region.identifier == geofenceIdentifier else { return }
+        print("🔴 Exited stationary geofence — resuming tracking")
+        Logger.shared.append("Exited stationary geofence — resuming tracking")
+        startTracking()
     }
 
     // Called automatically by iOS if region monitoring fails for a specific region.
