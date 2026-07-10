@@ -26,10 +26,16 @@ struct DebugTabView: View {
                 .font(.title2)
                 .padding()
             
-            Button("Fetch Recorded Data") {
-                Task { await fetchRecordedData() }
+            Button("Ask for sensorkit permissions") {
+                let sk = SensorKitManager()
+                sk.askForAuthorization()
             }
             .padding(.top, 10)
+
+            //            Button("Fetch Recorded Data") {
+            //                Task { await fetchRecordedData() }
+            //            }
+            //            .padding(.top, 10)
             
             //            Button("Start Survey") {
             //                isSurveyPresented = true

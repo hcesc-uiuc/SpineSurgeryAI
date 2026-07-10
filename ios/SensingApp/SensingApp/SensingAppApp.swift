@@ -105,6 +105,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         #if !targetEnvironment(simulator)
         SensorKitAccelerometerFetcher.shared.startRecordingWithAuthorizationCheck()
         SensorKitGyroscopeFetcher.shared.startRecordingWithAuthorizationCheck()
+        SensorKitWristDetectionFetcher.shared.startRecordingWithAuthorizationCheck()
         #endif
         
         registerForPushNotifications()
