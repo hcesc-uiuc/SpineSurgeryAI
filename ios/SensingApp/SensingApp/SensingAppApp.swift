@@ -106,6 +106,11 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         SensorKitAccelerometerFetcher.shared.startRecordingWithAuthorizationCheck()
         SensorKitGyroscopeFetcher.shared.startRecordingWithAuthorizationCheck()
         SensorKitWristDetectionFetcher.shared.startRecordingWithAuthorizationCheck()
+        SensorKitPPGFetcher.shared.startRecordingWithAuthorizationCheck()
+        SensorKitAmbientLightFetcher.shared.startRecordingWithAuthorizationCheck()
+        SensorKitDeviceUsageFetcher.shared.startRecordingWithAuthorizationCheck()
+        SensorKitWristTemperatureFetcher.shared.startRecordingWithAuthorizationCheck()
+        SensorKitHeartRateFetcher.shared.startRecordingWithAuthorizationCheck()
         #endif
         
         registerForPushNotifications()
