@@ -852,6 +852,106 @@ class DB:
             cur.execute(sql_text)
             return [row[0] for row in cur.fetchall()]
 
+    # ---------------------------
+    # Profile sync (see PROFILE_API.md and routes/profile.py)
+    # ---------------------------
+    def create_profiles_table(self) -> None:
+        """Create the profiles table if it doesn't exist.
+
+        One raw JSON document per participant, stored verbatim (local-wins,
+        no normalization). updated_at is unix seconds; DOUBLE PRECISION
+        because REAL (float4) can't hold current unix timestamps exactly.
+        """
+        sql_text = """
+        CREATE TABLE IF NOT EXISTS profiles (
+            participant_id TEXT PRIMARY KEY,
+            profile_json   TEXT NOT NULL,
+            updated_at     DOUBLE PRECISION NOT NULL
+        );
+        """
+        with self.temporary_database_connection() as conn, conn.cursor() as cur:
+            cur.execute(sql_text)
+
+    def get_profile_json(self, participant_id: str) -> Optional[str]:
+        """Return the stored raw profile JSON string, or None if absent."""
+        sql_text = "SELECT profile_json FROM profiles WHERE participant_id = %s"
+        with self.temporary_database_connection() as conn, conn.cursor() as cur:
+            cur.execute(sql_text, (participant_id,))
+            row = cur.fetchone()
+            return row[0] if row else None
+
+    def upsert_profile_json(
+        self, participant_id: str, profile_json: str, updated_at: float
+    ) -> None:
+        """Replace the whole stored profile document (local-wins: no merge)."""
+        sql_text = """
+        INSERT INTO profiles (participant_id, profile_json, updated_at)
+        VALUES (%s, %s, %s)
+        ON CONFLICT (participant_id)
+        DO UPDATE SET profile_json = EXCLUDED.profile_json, updated_at = EXCLUDED.updated_at;
+        """
+        with self.temporary_database_connection() as conn, conn.cursor() as cur:
+            cur.execute(sql_text, (participant_id, profile_json, updated_at))
+
+    # ---------------------------
+    # Enrollment codes (gate account creation in /auth/login — PROFILE_API.md)
+    # ---------------------------
+    def create_enrollment_codes_table(self) -> None:
+        """Create the enrollment_codes table if it doesn't exist.
+
+        Coordinator-managed via manage_enrollment_codes.py. Codes are
+        reusable (pilot policy — one code may enroll many participants);
+        used_by/used_at record the most recent use only.
+        """
+        sql_text = """
+        CREATE TABLE IF NOT EXISTS enrollment_codes (
+            code        TEXT PRIMARY KEY,
+            active      BOOLEAN NOT NULL DEFAULT TRUE,
+            used_by     INTEGER REFERENCES users(id),
+            used_at     TIMESTAMP WITH TIME ZONE
+        );
+        """
+        with self.temporary_database_connection() as conn, conn.cursor() as cur:
+            cur.execute(sql_text)
+
+    def get_enrollment_code(self, code: str) -> Optional[Dict[str, Any]]:
+        """Return enrollment code record dict (code, active, used_by, used_at) or None."""
+        sql_text = "SELECT code, active, used_by, used_at FROM enrollment_codes WHERE code = %s"
+        with self.temporary_database_connection() as conn, conn.cursor(cursor_factory=DictCursor) as cur:
+            cur.execute(sql_text, (code,))
+            row = cur.fetchone()
+            return dict(row) if row else None
+
+    def mark_enrollment_code_used(self, code: str, user_id: int) -> None:
+        """Record the most recent use of a code. Does NOT deactivate it —
+        coordinators revoke codes explicitly via set_enrollment_code_active."""
+        sql_text = "UPDATE enrollment_codes SET used_by = %s, used_at = NOW() WHERE code = %s"
+        with self.temporary_database_connection() as conn, conn.cursor() as cur:
+            cur.execute(sql_text, (user_id, code))
+
+    def add_enrollment_code(self, code: str) -> None:
+        """Insert a code, or re-activate it if it already exists."""
+        sql_text = """
+        INSERT INTO enrollment_codes (code, active) VALUES (%s, TRUE)
+        ON CONFLICT (code) DO UPDATE SET active = TRUE;
+        """
+        with self.temporary_database_connection() as conn, conn.cursor() as cur:
+            cur.execute(sql_text, (code,))
+
+    def set_enrollment_code_active(self, code: str, active: bool) -> int:
+        """Activate/deactivate a code. Returns number of rows changed (0/1)."""
+        sql_text = "UPDATE enrollment_codes SET active = %s WHERE code = %s"
+        with self.temporary_database_connection() as conn, conn.cursor() as cur:
+            cur.execute(sql_text, (active, code))
+            return cur.rowcount or 0
+
+    def list_enrollment_codes(self) -> List[Dict[str, Any]]:
+        """Return all enrollment code records ordered by code."""
+        sql_text = "SELECT code, active, used_by, used_at FROM enrollment_codes ORDER BY code"
+        with self.temporary_database_connection() as conn, conn.cursor(cursor_factory=DictCursor) as cur:
+            cur.execute(sql_text)
+            return [dict(row) for row in cur.fetchall()]
+
 # db = DB()
 
 # # Create or ensure a participant exists

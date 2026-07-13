@@ -32,7 +32,6 @@ def _make_refresh_token() -> tuple[str, str]:
 def login():
     body = request.get_json(silent=True) or {}
     identity_token = body.get('identity_token')
-    full_name      = body.get('full_name')
 
     if not identity_token:
         return jsonify({'error': 'missing_identity_token'}), 400
@@ -43,14 +42,27 @@ def login():
         return jsonify({'error': 'invalid_identity_token'}), 401
 
     apple_user_id = apple_payload['sub']
-    email         = apple_payload.get('email')
 
     db = current_app.config['DB']
 
-    # Upsert user — save name/email on first login because Apple won't send again
     user = db.get_user_by_apple_id(apple_user_id)
     if not user:
-        user = db.create_user(apple_user_id, email, full_name)
+        # Account creation is gated on a coordinator-issued enrollment code
+        # (PROFILE_API.md). Returning users never reach this branch, so they
+        # are never re-prompted; the iOS app maps this 403 to its
+        # "code not recognized" sheet.
+        code = body.get('enrollment_code')
+        code_record = (
+            db.get_enrollment_code(code.strip()) if isinstance(code, str) else None
+        )
+        if not code_record or not code_record['active']:
+            return jsonify({'error': 'invalid_enrollment_code'}), 403
+
+        # Anonymization: email/full_name are deliberately NOT stored — the
+        # study links data by a one-way participant hash only (PROFILE_API.md
+        # "Identity"; the shipped app never sends full_name).
+        user = db.create_user(apple_user_id, None, None)
+        db.mark_enrollment_code_used(code_record['code'], user['id'])
 
     raw_refresh, hashed_refresh = _make_refresh_token()
     expires_at = datetime.now(timezone.utc) + REFRESH_TOKEN_TTL

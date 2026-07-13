@@ -8,6 +8,7 @@ from database.database import DB
 from flask import current_app
 from routes.dashboard_api import dashboard_api
 from routes.dashboard_page import dashboard_page
+from routes.profile import profile_bp
 from heatmap import generate_compliance_report, generate_participant_heatmap
 from auth.routes import auth_bp
 
@@ -28,6 +29,8 @@ def create_app():
         app.config["DB"].create_refresh_tokens_table()
         app.config["DB"].create_device_tokens_table()
         app.config["DB"].create_pending_uploads_table()
+        app.config["DB"].create_profiles_table()
+        app.config["DB"].create_enrollment_codes_table()
 
     except Exception as e:
         app.logger.error("\033[91m" + "Cannot connect to database" + "\033[0m" + str(e))
@@ -36,6 +39,8 @@ def create_app():
     app.register_blueprint(upload_bp, url_prefix="/api")
     app.register_blueprint(upload_noauth_bp, url_prefix="/api")  # TEMPORARY: remove when iOS auth is ready
     app.register_blueprint(device_token_bp, url_prefix="/api")
+
+    app.register_blueprint(profile_bp, url_prefix="/api")  # profile sync (PROFILE_API.md)
 
     app.register_blueprint(dashboard_api)
     app.register_blueprint(dashboard_page)
