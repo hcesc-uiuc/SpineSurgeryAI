@@ -15,6 +15,7 @@ struct HomeView: View {
     @Binding var isSurveyPresented: Bool
 
     @AppStorage("journey_first_open_date") private var firstOpenTimestamp: Double = 0
+    @Environment(\.scenePhase) private var scenePhase
 
     private var currentDay: Int {
         guard firstOpenTimestamp != 0 else { return 1 }
@@ -122,6 +123,14 @@ struct HomeView: View {
             if firstOpenTimestamp == 0 { firstOpenTimestamp = Date().timeIntervalSince1970 }
             loadTodayHealthStats()
             loadWeeklyProgress()
+        }
+        // onAppear does not fire on background→foreground, so stats went stale
+        // when the app was reopened. Reload whenever the scene becomes active.
+        .onChange(of: scenePhase) { _, newPhase in
+            if newPhase == .active {
+                loadTodayHealthStats()
+                loadWeeklyProgress()
+            }
         }
     }
 

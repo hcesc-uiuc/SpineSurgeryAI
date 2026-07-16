@@ -839,6 +839,8 @@ struct SurgerySurveyView: View {
                 // (both read SQLiteSaver.fetchSurveys) reflect this completion.
                 _ = SQLiteSaver.shared.insertSurvey(painScore: painNRS)
 
+                SensorStatusStore.shared.record(.survey)
+
                 appState.markCompletedToday()
                 isSubmitting = false
                 dismiss()

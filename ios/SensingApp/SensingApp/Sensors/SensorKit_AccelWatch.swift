@@ -382,13 +382,20 @@ extension SensorKitAccelerometerFetcher: SRSensorReaderDelegate {
         for accelSample in samples {
             let unixTime = accelSample.startDate.timeIntervalSince1970
             let accel = accelSample.acceleration
-            
+
             bufferSample(
                 timestamp: unixTime,
                 x: Float(accel.x),
                 y: Float(accel.y),
                 z: Float(accel.z)
             )
+        }
+
+        // Sensors-tab freshness: stamp with the newest sample time in this batch.
+        // (SensorKit data is ~24h embargoed, so this reflects when the watch
+        // recorded it, not when we fetched it.)
+        if let newest = samples.map(\.startDate).max() {
+            SensorStatusStore.shared.record(.watchAccelerometer, at: newest)
         }
         return true
     }

@@ -568,6 +568,8 @@ struct PermissionsFlowView: View {
             HKObjectType.quantityType(forIdentifier: .distanceWalkingRunning)!,
             HKObjectType.quantityType(forIdentifier: .activeEnergyBurned)!,
             HKObjectType.quantityType(forIdentifier: .flightsClimbed)!,
+            HKObjectType.quantityType(forIdentifier: .heartRateVariabilitySDNN)!,
+            HKObjectType.quantityType(forIdentifier: .oxygenSaturation)!,
             HKObjectType.categoryType(forIdentifier: .sleepAnalysis)!
         ]
 

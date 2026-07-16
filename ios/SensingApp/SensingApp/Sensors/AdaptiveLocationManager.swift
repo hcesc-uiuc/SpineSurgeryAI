@@ -192,6 +192,10 @@ class AdaptiveLocationManager: NSObject, ObservableObject, CLLocationManagerDele
     // does not freeze when the app is suspended.
     private var lastLocationTime: TimeInterval = 0
 
+    // Last time we stamped SensorStatusStore (Sensors-tab freshness line).
+    // Throttled so frequent fixes don't hammer UserDefaults.
+    private var lastFreshnessStampTime: TimeInterval = 0
+
     // If the user moves more than this many meters between two consecutive
     // location updates while in low power mode, we upgrade to high accuracy.
     private let movementThreshold: CLLocationDistance = 10
@@ -552,8 +556,14 @@ class AdaptiveLocationManager: NSObject, ObservableObject, CLLocationManagerDele
                 lastLocation = location
                 lastLocationTime = now
             }
-            
-            
+
+
+        }
+
+        // Stamp the Sensors-tab "last recorded" line (throttled to once a minute).
+        if let newest = locations.last, Date().timeIntervalSince1970 - lastFreshnessStampTime > 60 {
+            lastFreshnessStampTime = Date().timeIntervalSince1970
+            SensorStatusStore.shared.record(.location, at: newest.timestamp)
         }
     }
 
