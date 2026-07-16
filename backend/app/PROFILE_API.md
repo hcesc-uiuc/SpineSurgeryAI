@@ -110,3 +110,48 @@ See `ios/.../login/SecureAuthManager.swift` header for the full flow:
 `POST /auth/login` → `{access_token (15 min), refresh_token (365 d)}`,
 `POST /auth/refresh`, `POST /auth/logout`, 401 body
 `{ "error": "token_expired" | "invalid_grant" | "invalid_token" }`.
+
+---
+
+## Implementation notes (July 2026, branch akarsh-issue-55-backend-fixes)
+
+Everything above is now implemented on this branch, on top of the existing
+auth stack from branch 17/18 (`auth/` package). What changed and why:
+
+### Profile sync — new
+- `routes/profile.py` — GET/PUT `/api/profile/<participant_id>` exactly per
+  this doc. PUT stores the raw request bytes so GET returns the document
+  verbatim; replies exactly `{"status": "ok"}` (the app string-matches it).
+  Validates participant_id-vs-URL, `schema_version` (known: 1), 256 KB cap.
+- `profiles` table (participant_id TEXT PK, profile_json TEXT, updated_at
+  DOUBLE PRECISION — not REAL: float4 can't hold unix seconds exactly).
+  Auto-created at startup like the other tables.
+- **Tokenless on purpose**: the shipped app is in demo mode and sends no
+  Bearer token. When demo mode is removed, wrap both routes with
+  `auth.middleware.require_auth` + a user→participant check.
+
+### Enrollment gate — added inside the existing `auth/routes.py login()`
+- New accounts only: missing/unknown/inactive code → **403**
+  `{"error": "invalid_enrollment_code"}`. Existing accounts skip the check
+  entirely (that's what stops re-prompting on new devices).
+- `enrollment_codes` table (code PK, active, used_by → users.id, used_at).
+  Codes are **reusable** (pilot policy, matches the old in-app hash list);
+  `used_by`/`used_at` record the most recent use only. Coordinators manage
+  codes with `manage_enrollment_codes.py` (add / deactivate / activate /
+  list) — deactivation revokes a code without an app update.
+- **PII removal**: `login()` no longer stores `email` (from the Apple token)
+  or `full_name` (the app never sends it). The columns remain in `users`
+  (no migration needed) but are always NULL for new accounts. Decided
+  2026-07-10 per the anonymization requirements in "Identity" above.
+
+### Tests
+`tests/test_auth.py` extended (gate cases; the two new-user tests now send a
+code) and `tests/test_profile.py` added — 29 tests total, all mocked-DB, no
+network or Postgres needed: `python -m pytest tests/`.
+
+### Deployment checklist
+1. `JWT_SECRET` env var — config defaults to `""`; MUST be set in production.
+2. `APPLE_BUNDLE_ID` env var — `edu.uiuc.cs.hcesc.SensingApp.v3`.
+3. Load real codes: `python manage_enrollment_codes.py add <code> ...`.
+4. After this is live: delete the hash list in `EnrollmentCode.swift`
+   (iOS-side, separate change).
