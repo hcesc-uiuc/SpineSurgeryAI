@@ -54,7 +54,34 @@
             <key>Required</key>
             <true/>
         </dict>
-        
+        <key>SRSensorUsageAmbientPressure</key>
+        <dict>
+            <key>Description</key>
+            <string>Ambient pressure is used to derive altitude and activity context during recovery.</string>
+            <key>Required</key>
+            <true/>
+        </dict>
+        <key>SRSensorUsagePhoneUsage</key>
+        <dict>
+            <key>Description</key>
+            <string>Aggregate phone-call activity counts (never call content) are used as an engagement and recovery signal.</string>
+            <key>Required</key>
+            <true/>
+        </dict>
+        <key>SRSensorUsageMessageUsage</key>
+        <dict>
+            <key>Description</key>
+            <string>Aggregate messaging activity counts (never message content) are used as an engagement and recovery signal.</string>
+            <key>Required</key>
+            <true/>
+        </dict>
+        <key>SRSensorUsageKeyboardMetrics</key>
+        <dict>
+            <key>Description</key>
+            <string>Aggregate keyboard usage metrics (never typed content) are used to assess fine motor recovery.</string>
+            <key>Required</key>
+            <true/>
+        </dict>
 	</dict>
 	<key>UIBackgroundModes</key>
 	<array>

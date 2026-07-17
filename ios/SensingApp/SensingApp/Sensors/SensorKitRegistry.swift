@@ -17,6 +17,11 @@ enum SensorKitRegistry {
         SensorKitAccelerometerFetcher.shared,
         SensorKitGyroscopeFetcher.shared,
         SensorKitWristDetectionFetcher.shared,
+        // Issue #57 - iPhone usage/environment sensors
+        SensorKitAmbientPressureFetcher.shared,
+        SensorKitPhoneUsageFetcher.shared,
+        SensorKitMessagesUsageFetcher.shared,
+        SensorKitKeyboardMetricsFetcher.shared,
     ]
 
     /// The authorization set, derived from `all`.
