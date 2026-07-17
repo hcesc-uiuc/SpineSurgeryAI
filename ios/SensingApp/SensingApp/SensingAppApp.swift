@@ -103,9 +103,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         //This will start recording the sensor data if
         //authorization is already available
         #if !targetEnvironment(simulator)
-        SensorKitAccelerometerFetcher.shared.startRecordingWithAuthorizationCheck()
-        SensorKitGyroscopeFetcher.shared.startRecordingWithAuthorizationCheck()
-        SensorKitWristDetectionFetcher.shared.startRecordingWithAuthorizationCheck()
+        SensorKitRegistry.all.forEach { $0.startRecordingWithAuthorizationCheck() }
         #endif
         
         registerForPushNotifications()
