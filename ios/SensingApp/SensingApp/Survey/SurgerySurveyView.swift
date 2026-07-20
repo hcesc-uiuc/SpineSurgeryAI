@@ -195,6 +195,10 @@ struct SurgerySurveyView: View {
     @State private var selectedCalendarDate = Date()
     @State private var completedSurveyDates: Set<String> = []
 
+    // Blocks re-submission when the survey has already been completed today,
+    // regardless of which button/entry point presented this view.
+    @State private var showAlreadyCompletedAlert = false
+
     var body: some View {
         NavigationStack {
             ZStack {
@@ -338,7 +342,17 @@ struct SurgerySurveyView: View {
             }
             .navigationTitle("Progress Survey")
             .navigationBarTitleDisplayMode(.inline)
-            .onAppear { loadPersistedSurveyData() }
+            .onAppear {
+                loadPersistedSurveyData()
+                if appState.isCompletedToday {
+                    showAlreadyCompletedAlert = true
+                }
+            }
+            .alert("Already Completed", isPresented: $showAlreadyCompletedAlert) {
+                Button("OK") { dismiss() }
+            } message: {
+                Text("You have already completed the survey for today. Come back tomorrow!")
+            }
             .preferredColorScheme(.light)
         }
     }
@@ -816,6 +830,13 @@ struct SurgerySurveyView: View {
     }
 
     private func submitSurvey() {
+        // Guard against double-submission even if this view was somehow
+        // presented after the survey was already completed today.
+        guard !appState.isCompletedToday else {
+            showAlreadyCompletedAlert = true
+            return
+        }
+
         submitError  = nil
         isSubmitting = true
 

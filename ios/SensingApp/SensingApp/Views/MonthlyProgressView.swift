@@ -72,7 +72,6 @@ struct MonthlyCalendarView: View {
             ScrollView {
                 VStack(spacing: 20) {
                     monthNavigationHeader
-                    surveysCompletedCard
                     legendRow
                     dayOfWeekHeader
                     calendarGrid
@@ -159,37 +158,11 @@ struct MonthlyCalendarView: View {
         }
     }
 
-    // ── Surveys completed count card ─────────
-    private var surveysCompletedCard: some View {
-        let surveysCompleted = progressData.values.filter(\.surveyCompleted).count
-        let pastDays         = pastDaysCount()
-
-        return HStack(spacing: 6) {
-            Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 20))
-                .foregroundStyle(Color(red: 0.22, green: 0.48, blue: 0.40))
-            Text("\(surveysCompleted) of \(pastDays) surveys completed this month")
-                .font(.system(size: 15, weight: .semibold, design: .rounded))
-                .foregroundStyle(Color(red: 0.28, green: 0.22, blue: 0.20))
-            Spacer()
-        }
-        .padding(.vertical, 14)
-        .padding(.horizontal, 18)
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color(red: 0.99, green: 0.97, blue: 0.95).opacity(0.95))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16)
-                        .stroke(Color(red: 0.80, green: 0.65, blue: 0.58).opacity(0.25), lineWidth: 1)
-                )
-        )
-    }
-
     // ── Legend ───────────────────────────────
     private var legendRow: some View {
         HStack(spacing: 14) {
             legendItem(color: Color(red: 0.22, green: 0.60, blue: 0.45), label: "Completed")
-            legendItem(color: Color(red: 0.80, green: 0.75, blue: 0.72), label: "Not completed")
+            legendItem(color: Color(red: 0.55, green: 0.48, blue: 0.44), label: "Not completed")
             Spacer()
         }
     }
@@ -271,14 +244,6 @@ struct MonthlyCalendarView: View {
         calendar.range(of: .day, in: .month, for: date)?.count ?? 30
     }
 
-    private func pastDaysCount() -> Int {
-        let today = calendar.startOfDay(for: Date())
-        guard calendar.isDate(today, equalTo: displayedMonth, toGranularity: .month) else {
-            return daysInMonth(displayedMonth)
-        }
-        return calendar.component(.day, from: today)
-    }
-
     private func goToPreviousMonth() {
         displayedMonth = calendar.date(byAdding: .month, value: -1, to: displayedMonth) ?? displayedMonth
     }
@@ -298,20 +263,21 @@ struct CalendarDayCell: View {
     let isToday: Bool
     let isFuture: Bool
 
+    // Future days get a very light, faint gray — clearly lighter than "Not completed".
     private var fillColor: Color {
-        if isFuture { return Color.clear }
+        if isFuture {
+            return Color(red: 0.90, green: 0.87, blue: 0.84) // very light gray
+        }
         return day.surveyCompleted
             ? Color(red: 0.22, green: 0.60, blue: 0.45)          // solid green
-            : Color(red: 0.80, green: 0.75, blue: 0.72).opacity(0.45) // soft gray
+            : Color(red: 0.55, green: 0.48, blue: 0.44).opacity(0.85) // "Not completed" gray-brown
     }
 
     private var textColor: Color {
         if isFuture {
-            return Color(red: 0.70, green: 0.65, blue: 0.62).opacity(0.4)
+            return Color(red: 0.60, green: 0.55, blue: 0.51) // muted, readable on light fill
         }
-        return day.surveyCompleted
-            ? .white
-            : Color(red: 0.40, green: 0.32, blue: 0.29)
+        return .white
     }
 
     var body: some View {
@@ -322,11 +288,10 @@ struct CalendarDayCell: View {
                 Circle().strokeBorder(Color(red: 0.42, green: 0.62, blue: 0.55), lineWidth: 2)
             }
             Text("\(dayNum)")
-                .font(.system(size: 14, weight: isToday ? .bold : .regular, design: .rounded))
+                .font(.system(size: 14, weight: .semibold, design: .rounded))
                 .foregroundStyle(textColor)
         }
         .aspectRatio(1, contentMode: .fit)
-        .opacity(isFuture ? 0.35 : 1.0)
     }
 }
 
