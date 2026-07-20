@@ -141,11 +141,13 @@ struct HomeView: View {
                     let dayNum     = calendar.component(.day, from: date)
 
                     VStack(spacing: 6) {
-                        Text(dayLetter)
+                        Text(isToday ? "Today" : dayLetter)
                             .font(.system(size: 11, weight: .medium, design: .rounded))
                             .foregroundStyle(isToday
                                 ? Color(red: 0.22, green: 0.48, blue: 0.40)
                                 : Color(red: 0.55, green: 0.47, blue: 0.44))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
 
                         ZStack {
                             Circle()
@@ -153,7 +155,7 @@ struct HomeView: View {
                                     ? Color.clear
                                     : completed
                                         ? Color(red: 0.22, green: 0.60, blue: 0.45)
-                                        : Color(red: 0.80, green: 0.75, blue: 0.72).opacity(0.5))
+                                        : Color(red: 0.55, green: 0.48, blue: 0.44).opacity(0.85))
                                 .frame(width: 34, height: 34)
 
                             if isToday && !completed {
@@ -170,7 +172,7 @@ struct HomeView: View {
                                 } else {
                                     Text("\(dayNum)")
                                         .font(.system(size: 13, weight: isToday ? .bold : .regular, design: .rounded))
-                                        .foregroundStyle(Color(red: 0.40, green: 0.32, blue: 0.29))
+                                        .foregroundStyle(.white)
                                 }
                             } else {
                                 Text("\(dayNum)")
@@ -193,15 +195,17 @@ struct HomeView: View {
         .padding(.horizontal, 24)
     }
 
+    /// Rolling 7-day window ending today, so today is always the last
+    /// (rightmost) entry and the whole strip shifts left as new days arrive.
     private func currentWeekDays() -> [Date] {
-        let today       = calendar.startOfDay(for: Date())
-        let weekday     = calendar.component(.weekday, from: today) // 1=Sun
-        let startOfWeek = calendar.date(byAdding: .day, value: -(weekday - 1), to: today)!
-        return (0..<7).compactMap { calendar.date(byAdding: .day, value: $0, to: startOfWeek) }
+        let today = calendar.startOfDay(for: Date())
+        return (0..<7).compactMap { offset in
+            calendar.date(byAdding: .day, value: -(6 - offset), to: today)
+        }
     }
 
     private func shortDayLetter(for date: Date) -> String {
-        let symbols = ["S", "M", "T", "W", "T", "F", "S"]
+        let symbols = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"]
         let weekday = calendar.component(.weekday, from: date) - 1
         return symbols[weekday]
     }
