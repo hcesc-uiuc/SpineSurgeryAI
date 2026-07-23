@@ -24,6 +24,10 @@ struct MainAppView: View {
     
     @StateObject private var appState         = AppState()
     @StateObject private var sensorKitManager = SensorKitManager()
+
+    // Server-authoritative survey schedule + study id live here; observed so
+    // the check-in tab icon updates once the schedule is pulled on login.
+    @ObservedObject private var profileStore  = ProfileStore.shared
     
     @State private var isSurveyPresented = false
     
@@ -130,7 +134,7 @@ struct MainAppView: View {
     //   nothing scheduled today -> outline clipboard (quiet/inactive)
     private var surveyTabIcon: String {
         if appState.isCompletedToday { return "checkmark.circle.fill" }
-        if appState.isSurveyScheduledToday { return "list.clipboard.fill" }
+        if profileStore.isCheckInDueToday() { return "list.clipboard.fill" }
         return "list.clipboard"
     }
 

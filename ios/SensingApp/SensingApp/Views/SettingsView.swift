@@ -138,6 +138,9 @@ struct SettingsView: View {
                 .padding(.top, 14)
                 .padding(.bottom, 6)
 
+            infoRow(icon: "person.text.rectangle", label: "Study ID", value: studyIdText,
+                    color: Color(red: 0.80, green: 0.42, blue: 0.30))
+            Divider().padding(.leading, 56)
             infoRow(icon: "number", label: "Participant code", value: participantCodeText,
                     color: Color(red: 0.80, green: 0.55, blue: 0.45))
             Divider().padding(.leading, 56)
@@ -146,6 +149,9 @@ struct SettingsView: View {
             Divider().padding(.leading, 56)
             infoRow(icon: "figure.walk", label: "Recovery day", value: recoveryDayText,
                     color: Color(red: 0.55, green: 0.48, blue: 0.75))
+            Divider().padding(.leading, 56)
+            infoRow(icon: "clock.arrow.circlepath", label: "Check-in schedule", value: scheduleText,
+                    color: Color(red: 0.50, green: 0.60, blue: 0.45))
             Divider().padding(.leading, 56)
             infoRow(icon: "checkmark.circle", label: "Check-ins completed", value: "\(checkInsCompleted)",
                     color: Color(red: 0.38, green: 0.55, blue: 0.75))
@@ -167,6 +173,17 @@ struct SettingsView: View {
         let pid = ParticipantID.current
         guard pid != "unidentified" else { return "—" }
         return pid.prefix(8).uppercased()
+    }
+
+    /// Server-assigned study id (e.g. "P01"), or a dash until the server
+    /// has answered getstudyid.
+    private var studyIdText: String {
+        profileStore.profile?.studyId ?? "—"
+    }
+
+    /// Coordinator-set check-in cadence (Daily / Weekly / Paused / Study complete).
+    private var scheduleText: String {
+        (profileStore.profile?.surveySchedule ?? SurveySchedule()).displayText
     }
 
     private var joinedDateText: String {
