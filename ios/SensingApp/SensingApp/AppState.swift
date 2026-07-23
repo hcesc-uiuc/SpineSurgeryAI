@@ -22,7 +22,10 @@ class AppState: ObservableObject {
         lastCompletedDate == todayString
     }
 
-    var isSurveyScheduledToday: Bool { true }
+    // Whether a check-in is scheduled today now comes from the
+    // server-authoritative survey schedule — read ProfileStore.shared
+    // .isCheckInDueToday() from the (MainActor) views instead of a
+    // hardcoded flag here.
 
     func markCompletedToday() { lastCompletedDate = todayString }
     func clearMissedDays() { missedDays.removeAll() }

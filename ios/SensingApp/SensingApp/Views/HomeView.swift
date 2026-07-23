@@ -16,6 +16,10 @@ struct HomeView: View {
 
     @AppStorage("journey_first_open_date") private var firstOpenTimestamp: Double = 0
 
+    // Server-authoritative survey schedule; observed so the check-in card
+    // reflects a coordinator pausing/rescheduling the study on the web.
+    @ObservedObject private var profileStore = ProfileStore.shared
+
     private var currentDay: Int {
         guard firstOpenTimestamp != 0 else { return 1 }
         let cal = Calendar.current
@@ -25,6 +29,11 @@ struct HomeView: View {
     }
 
     private var checkInComplete: Bool { appState.isCompletedToday }
+
+    /// Whether a check-in is actually scheduled for today (from the
+    /// server-authoritative survey schedule). Paused/ended or an off day for a
+    /// weekly schedule → false.
+    private var checkInDueToday: Bool { profileStore.isCheckInDueToday() }
 
     @State private var appeared = false
     @State private var showSettings = false
@@ -83,7 +92,7 @@ struct HomeView: View {
                             dailyCheckInCard
                         }
                         .buttonStyle(.plain)
-                        .disabled(checkInComplete)
+                        .disabled(checkInComplete || !checkInDueToday)
                         .opacity(appeared ? 1 : 0)
                         .offset(y: appeared ? 0 : 16)
                         .animation(.easeOut(duration: 0.45).delay(0.25), value: appeared)
@@ -120,6 +129,9 @@ struct HomeView: View {
         .onAppear {
             appeared = true
             if firstOpenTimestamp == 0 { firstOpenTimestamp = Date().timeIntervalSince1970 }
+            // Mirror the Day-N anchor into the synced profile (no-op if the
+            // profile already carries one, e.g. restored from the server).
+            ProfileStore.shared.recordFirstOpen(firstOpenTimestamp)
             loadTodayHealthStats()
             loadWeeklyProgress()
         }
@@ -385,35 +397,48 @@ struct HomeView: View {
         .padding(.horizontal, 24)
     }
 
+    // Three visual states, driven by completion + the server survey schedule:
+    //   complete      — done today (green checkmark)
+    //   due           — a check-in is scheduled today and not yet done (terracotta)
+    //   not scheduled — paused / ended / a weekly off-day (muted, no chevron)
     private var dailyCheckInCard: some View {
-        HStack(spacing: 16) {
+        let sage       = Color(red: 0.42, green: 0.62, blue: 0.55)
+        let terracotta = Color(red: 0.80, green: 0.55, blue: 0.45)
+        let muted      = Color(red: 0.60, green: 0.55, blue: 0.50)
+
+        let accent: Color = checkInComplete ? sage : (checkInDueToday ? terracotta : muted)
+        let icon: String = checkInComplete
+            ? "checkmark.circle.fill"
+            : (checkInDueToday ? "pencil.and.list.clipboard" : "calendar")
+        let title: String = checkInComplete
+            ? "Check-in complete!"
+            : (checkInDueToday ? "Daily check-in due" : "No check-in today")
+        let subtitle: String = checkInComplete
+            ? "Great work today. See you next time."
+            : (checkInDueToday ? "Takes about 2 minutes to complete." : notScheduledSubtitle)
+
+        return HStack(spacing: 16) {
             ZStack {
                 Circle()
-                    .fill(checkInComplete
-                          ? Color(red: 0.42, green: 0.62, blue: 0.55).opacity(0.15)
-                          : Color(red: 0.80, green: 0.55, blue: 0.45).opacity(0.15))
+                    .fill(accent.opacity(0.15))
                     .frame(width: 52, height: 52)
-                Image(systemName: checkInComplete ? "checkmark.circle.fill" : "pencil.and.list.clipboard")
+                Image(systemName: icon)
                     .font(.system(size: 24))
-                    .foregroundStyle(checkInComplete
-                                     ? Color(red: 0.42, green: 0.62, blue: 0.55)
-                                     : Color(red: 0.80, green: 0.55, blue: 0.45))
+                    .foregroundStyle(accent)
             }
             VStack(alignment: .leading, spacing: 3) {
-                Text(checkInComplete ? "Check-in complete!" : "Daily check-in due")
+                Text(title)
                     .font(.system(size: 16, weight: .semibold, design: .rounded))
                     .foregroundStyle(Color(red: 0.28, green: 0.22, blue: 0.20))
-                Text(checkInComplete
-                     ? "Great work today. See you tomorrow."
-                     : "Takes about 2 minutes to complete.")
+                Text(subtitle)
                     .font(.system(size: 13, design: .rounded))
                     .foregroundStyle(Color(red: 0.50, green: 0.42, blue: 0.39))
             }
             Spacer()
-            if !checkInComplete {
+            if !checkInComplete && checkInDueToday {
                 Image(systemName: "chevron.right")
                     .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(Color(red: 0.80, green: 0.55, blue: 0.45))
+                    .foregroundStyle(terracotta)
             }
         }
         .padding(20)
@@ -423,6 +448,16 @@ struct HomeView: View {
                 .shadow(color: Color(red: 0.60, green: 0.45, blue: 0.40).opacity(0.10), radius: 12, y: 4)
         )
         .padding(.horizontal, 24)
+    }
+
+    /// Subtitle for the "no check-in today" state, tailored to why.
+    private var notScheduledSubtitle: String {
+        switch profileStore.surveySchedule.cadence {
+        case .paused: return "Your check-ins are paused."
+        case .ended:  return "Your study is complete. Thank you!"
+        case .weekly: return "Your next check-in is later this week."
+        case .daily:  return "No check-in scheduled today."
+        }
     }
 
     private let statColumns = [GridItem(.flexible(), spacing: 10),

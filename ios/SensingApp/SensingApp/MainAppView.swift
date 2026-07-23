@@ -24,6 +24,10 @@ struct MainAppView: View {
     
     @StateObject private var appState         = AppState()
     @StateObject private var sensorKitManager = SensorKitManager()
+
+    // Server-authoritative survey schedule + study id live here; observed so
+    // the check-in tab icon updates once the schedule is pulled on login.
+    @ObservedObject private var profileStore  = ProfileStore.shared
     
     @State private var isSurveyPresented = false
     
@@ -81,6 +85,10 @@ struct MainAppView: View {
         .onAppear {
             guard !hasStartedCollection else { return }
             hasStartedCollection = true
+            // Load the synced user profile — or restore it from the study
+            // server on a fresh device (day count, calendar history,
+            // check-in state). Local copy wins when one exists.
+            Task { await ProfileStore.shared.bootstrap(authManager: authManager, appState: appState) }
             // All permissions have been granted — begin data collection.
             AcclerometerRecorder.shared.startRecording()
             // HealthkitRecorder.shared.getHealthKitData()
@@ -126,7 +134,7 @@ struct MainAppView: View {
     //   nothing scheduled today -> outline clipboard (quiet/inactive)
     private var surveyTabIcon: String {
         if appState.isCompletedToday { return "checkmark.circle.fill" }
-        if appState.isSurveyScheduledToday { return "list.clipboard.fill" }
+        if profileStore.isCheckInDueToday() { return "list.clipboard.fill" }
         return "list.clipboard"
     }
 

@@ -62,7 +62,7 @@ internal import Combine
 //   1. Delete the three lines below (demoMode declaration)
 //   2. Delete the demo block inside login(identityToken:fullName:appleUserID:)
 //   3. Delete the demo guard inside logout()
-private let demoMode = false
+private let demoMode = true
 // ============================================================
 
 // MARK: - Backend Error Response
@@ -97,6 +97,7 @@ private struct RefreshTokenResponse: Decodable {
 
 enum AuthError: LocalizedError {
     case invalidToken            // Apple identity token rejected by backend (400/401)
+    case invalidEnrollmentCode   // Study enrollment code rejected by backend (403)
     case networkError(String)    // URLSession failure — no connection etc.
     case tokenExpired            // Access token expired and refresh failed
     case noRefreshToken          // No stored session — must log in fresh
@@ -107,6 +108,8 @@ enum AuthError: LocalizedError {
         switch self {
         case .invalidToken:
             return "Sign in failed. Please try again."
+        case .invalidEnrollmentCode:
+            return "That study code wasn't recognized. Please check with your study coordinator."
         case .networkError(let msg):
             return "Network error: \(msg)"
         case .tokenExpired:
@@ -162,13 +165,23 @@ class SecureAuthManager: ObservableObject {
     // Called after a successful Apple Sign In authorization.
     //
     // Parameters:
-    //   identityToken — one-time JWT from Apple (credential.identityToken)
-    //   fullName      — user's name; only present on very first Apple login.
-    //                   Pass nil when empty — backend only needs it once.
-    //   appleUserID   — Apple's stable per-user identifier (credential.user)
+    //   identityToken  — one-time JWT from Apple (credential.identityToken)
+    //   fullName       — user's name; only present on very first Apple login.
+    //                    Pass nil when empty — backend only needs it once.
+    //   appleUserID    — Apple's stable per-user identifier (credential.user)
+    //   enrollmentCode — coordinator-issued study code; non-nil only on a
+    //                    first sign-in (see EnrollmentGate). Sent to the
+    //                    backend so account creation can be gated server-side
+    //                    once PROFILE_API.md is implemented; a rejected code
+    //                    comes back as 403 → AuthError.invalidEnrollmentCode.
     //
     // Throws: AuthError
-    func login(identityToken: String, fullName: String?, appleUserID: String) async throws {
+    func login(
+        identityToken: String,
+        fullName: String?,
+        appleUserID: String,
+        enrollmentCode: String? = nil
+    ) async throws {
 
         // Derive and persist the anonymous participant hash for both demo and
         // real paths — runs before any branch so demo sessions get one too.
@@ -191,7 +204,10 @@ class SecureAuthManager: ObservableObject {
 
         // Identity is conveyed solely by the Apple identity token; the
         // patient's name is never transmitted.
-        let body: [String: String] = ["identity_token": identityToken]
+        var body: [String: String] = ["identity_token": identityToken]
+        if let enrollmentCode {
+            body["enrollment_code"] = enrollmentCode
+        }
         request.httpBody = try JSONEncoder().encode(body)
 
         let (data, response) = try await session.data(for: request)
@@ -213,6 +229,10 @@ class SecureAuthManager: ObservableObject {
 
         case 400, 401:
             throw AuthError.invalidToken
+
+        case 403:
+            // New account with a missing/unknown enrollment code
+            throw AuthError.invalidEnrollmentCode
 
         default:
             throw AuthError.serverError(http.statusCode)
