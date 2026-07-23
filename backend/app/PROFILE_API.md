@@ -155,3 +155,101 @@ network or Postgres needed: `python -m pytest tests/`.
 3. Load real codes: `python manage_enrollment_codes.py add <code> ...`.
 4. After this is live: delete the hash list in `EnrollmentCode.swift`
    (iOS-side, separate change).
+
+---
+
+## v2 (July 2026) — 4-endpoint split-authority contract
+
+The current iOS app (`ios/.../util/UserProfile.swift`, `schema_version: 2`)
+splits the profile into two owners of truth and syncs them over four
+endpoints instead of the single v1 GET/PUT. Implemented on `routes/profile.py`;
+the v1 `/api/profile` routes stay as internal helpers (the app no longer calls
+them). All four are **tokenless** for now, same as v1 — TODO: wrap them (and
+v1) in `require_auth` + a user↔participant check when demo mode is removed.
+
+**Split authority.** Two owners, reconciled on every login:
+- **Server-owned**: `study_id` (P01…) and `survey_schedule`
+  (daily/weekly/paused/ended). Coordinators set these; the phone pulls them on
+  every login and overwrites its local copy — it never edits them.
+- **Phone-owned**: `first_open_date` (the Day-N anchor) and `survey_history`
+  (the calendar of *completed* check-ins — completion state only, never the
+  survey answers). The phone owns these and pushes them up on every mutation.
+
+### Endpoints
+
+- **`GET /api/getstudyid/<participant_id>` → `{"study_id": "P01"}`.**
+  Assign-or-return: the first time the server sees a hash it hands out the next
+  id; later calls return the same one (idempotent). Numbers come from a Postgres
+  `SEQUENCE` (race-safe); a SELECT-first fast path means repeat calls never burn
+  a value. Assigns to *any* hash on request (matches the iOS bootstrap, which
+  calls this on every login) — locking that down is part of the auth TODO.
+- **`GET /api/getuserprofile/<participant_id>` → profile JSON | 404.**
+  The v1 GET, renamed. Returns the stored document verbatim; the app calls it
+  only when it has no local copy (fresh install / new device).
+- **`GET /api/getsurveystatus/<participant_id>` → schedule JSON | 404.**
+  `{cadence, weekly_day, note, updated_at}` (snake_case, decoded straight into
+  iOS `SurveySchedule`). `weekly_day` is 1=Sunday…7=Saturday, non-null only for
+  `weekly`. **404** = no schedule on file; the app keeps its daily default.
+- **`POST /api/uploaduserprofile/<participant_id>` → `{"status": "ok"}`.**
+  Upsert of the full document (same validation as v1 PUT: pid-match,
+  `schema_version` ∈ {1, 2}, 256 KB cap). Stores phone-owned fields as sent, but
+  **overwrites `study_id` and `survey_schedule` with the server's stored values**
+  so a stale phone can't revert a coordinator change (when the server has no
+  stored value yet, the sent value is kept). Because it rewrites those fields,
+  the stored bytes are a re-serialization, not verbatim (unlike the v1 PUT).
+
+### Storage — two new tables (auto-created in `app.py`, alongside `profiles`)
+- `study_ids` (participant_id PK, study_id UNIQUE, assigned_at DOUBLE PRECISION)
+  + a `study_id_seq` SEQUENCE. The participant→study_id map is the
+  account↔participant kind of link the "Identity" section says to keep **siloed**
+  from the research dataset — its own table, never joined into sensor/survey data.
+- `survey_schedule` (participant_id PK, cadence, weekly_day INT, note,
+  updated_at DOUBLE PRECISION) — one row per participant, coordinator-managed.
+
+### Coordinators — `manage_survey_schedule.py` (mirrors `manage_enrollment_codes.py`)
+```
+python manage_survey_schedule.py daily  <participant_id> [--note "..."]
+python manage_survey_schedule.py weekly <participant_id> --day <1-7> [--note "..."]
+python manage_survey_schedule.py paused <participant_id> [--note "..."]
+python manage_survey_schedule.py ended  <participant_id> [--note "..."]
+python manage_survey_schedule.py show   <participant_id>
+python manage_survey_schedule.py list
+```
+
+### Auth — off in demo, ready for production (the `REQUIRE_PROFILE_AUTH` switch)
+All six profile routes carry the `require_profile_access` guard, gated by the
+`REQUIRE_PROFILE_AUTH` config flag (env var, default **false**):
+
+- **false (shipped default)** — tokenless passthrough, matching the iOS app's
+  `demoMode = true` (it sends no Bearer token). Deploying this code changes
+  nothing until the flag is set, so the live demo is never broken.
+- **true (production)** — each route requires a valid access token AND that the
+  token's account **owns** the `<participant_id>` in the URL; otherwise the
+  app's structured 401 (`missing_token`/`token_expired`/`invalid_token`) or
+  **403** `{"error":"forbidden"}`. Without this, anyone knowing a participant
+  hash could read/write that participant's profile.
+
+The ownership check uses a new **`account_participants`** map (user_id PK →
+participant_id), populated at `/auth/login`: the server hashes the verified
+Apple `sub` with SHA-256 — byte-for-byte what iOS `ParticipantID.hash` produces
+— so it never trusts a client-sent id. Kept siloed from the research dataset
+per "Identity". Token validation is shared with `require_auth` via
+`auth.middleware.authenticate_bearer`.
+
+**Going to production is a coordinated flip:**
+1. iOS: set `demoMode = false` (deletes the three demo blocks in
+   `SecureAuthManager.swift`) so the app sends Bearer tokens.
+2. Server: `REQUIRE_PROFILE_AUTH=true`, and load real enrollment codes
+   (`manage_enrollment_codes.py add …`) — in demo mode codes are checked
+   client-side, but real `/auth/login` requires them in the DB or every new
+   user gets 403.
+3. Put the API behind **HTTPS** — the iOS `baseURL` is currently plaintext
+   `http://`; tokens and hashes must not travel in the clear.
+
+### Tests
+`tests/test_survey_profile_v2.py` — all four endpoints (assign/idempotency,
+404s, the server-authority overwrite, phone-owned passthrough, schema_version 2,
+the v1 validation cases) plus the `REQUIRE_PROFILE_AUTH` enforcement path
+(missing/expired token, ownership match/mismatch). `tests/test_auth.py` covers
+the login→participant link. Mocked-DB like `test_profile.py`.
+Full suite: `python -m pytest tests/` (55 tests).

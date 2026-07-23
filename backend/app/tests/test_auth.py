@@ -62,6 +62,21 @@ class TestLogin:
         assert resp.status_code == 400
         assert resp.get_json()['error'] == 'missing_identity_token'
 
+    def test_login_links_participant_hash(self, client, mock_db):
+        """Login records the account↔participant map (SHA-256 of the Apple sub,
+        exactly what iOS ParticipantID.hash computes) so profile endpoints can
+        authorize by participant hash when REQUIRE_PROFILE_AUTH is on."""
+        mock_db.get_user_by_apple_id.return_value = {'id': 5, 'apple_id': APPLE_SUB}
+
+        with patch('auth.routes.verify_apple_token', return_value={'sub': APPLE_SUB}):
+            resp = client.post('/auth/login', json={'identity_token': 'fake.apple.jwt'})
+
+        assert resp.status_code == 200
+        expected_pid = hashlib.sha256(APPLE_SUB.encode()).hexdigest()
+        args = mock_db.link_account_participant.call_args[0]
+        assert args[0] == 5
+        assert args[1] == expected_pid
+
     def test_login_twice_same_sub_no_duplicate_user(self, client, mock_db):
         """Two logins with the same Apple sub must not create two user rows."""
         # First login: user does not exist yet (needs an enrollment code)

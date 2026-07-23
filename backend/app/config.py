@@ -11,3 +11,11 @@ class Config:
     DEBUG_MODE = False
     JWT_SECRET = os.getenv("JWT_SECRET", "")
     APPLE_BUNDLE_ID = os.getenv("APPLE_BUNDLE_ID", "")
+
+    # When true, the profile endpoints (routes/profile.py) require a valid
+    # Bearer token whose account owns the requested participant hash. Leave
+    # FALSE while the iOS app is in demo mode (it sends no token); flip to TRUE
+    # in production together with iOS demoMode=false. See PROFILE_API.md v2.
+    REQUIRE_PROFILE_AUTH = os.getenv("REQUIRE_PROFILE_AUTH", "false").strip().lower() in (
+        "1", "true", "yes", "on",
+    )
