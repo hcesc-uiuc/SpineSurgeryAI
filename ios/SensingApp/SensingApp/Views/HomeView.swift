@@ -289,28 +289,28 @@ struct HomeView: View {
                     )
                 )
                 .shadow(color: accentColor.opacity(0.35), radius: 16, y: 8)
-            VStack(spacing: 6) {
+            VStack(spacing: 2) {
                 Text("Day")
-                    .font(.system(size: 16, weight: .medium, design: .rounded))
+                    .font(.system(size: 13, weight: .medium, design: .rounded))
                     .foregroundStyle(.white.opacity(0.85))
                 Text("\(currentDay)")
-                    .font(.system(size: 72, weight: .bold, design: .rounded))
+                    .font(.system(size: 40, weight: .bold, design: .rounded))
                     .foregroundStyle(.white)
                 Text(currentDay == 1 ? "Welcome to your recovery journey!" : "of your recovery journey")
-                    .font(.system(size: 14, weight: .medium, design: .rounded))
+                    .font(.system(size: 12, weight: .medium, design: .rounded))
                     .foregroundStyle(.white.opacity(0.85))
                 if let milestone = currentMilestone {
                     Text(milestone)
-                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .font(.system(size: 11, weight: .semibold, design: .rounded))
                         .foregroundStyle(accentColor)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 5)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
                         .background(.white.opacity(0.9))
                         .clipShape(Capsule())
-                        .padding(.top, 6)
+                        .padding(.top, 4)
                 }
             }
-            .padding(.vertical, 32)
+            .padding(.vertical, 16)
         }
         .padding(.horizontal, 24)
     }
