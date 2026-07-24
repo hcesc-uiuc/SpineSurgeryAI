@@ -183,8 +183,14 @@ struct SensorsTabView: View {
             }
             .navigationTitle("What We Collect")
             .onAppear {
-                locationManager.start()
+                locationManager.resumeIfEnabled()
                 healthManager.refreshWithNewRange(days: 1) { _ in }
+            }
+            // The live coordinate is only visible on this tab. Without this the
+            // GPS keeps streaming after the patient navigates away, for the rest
+            // of the app's lifetime.
+            .onDisappear {
+                locationManager.stop()
             }
         }
     }
