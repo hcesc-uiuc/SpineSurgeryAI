@@ -31,6 +31,9 @@ struct ImportDataView: View {
     @State private var status: String?
     @State private var busy = false
     @State private var showClearConfirm = false
+    // Set while the "send to database" confirmation is up. Uploading writes into
+    // the live study pipeline, so it asks first.
+    @State private var pendingSend: SensorImportRecord?
 
     private let cream = Color(red: 0.99, green: 0.97, blue: 0.95)
     private let ink = Color(red: 0.28, green: 0.22, blue: 0.20)
@@ -88,6 +91,25 @@ struct ImportDataView: View {
         } message: {
             Text("Every imported series is deleted and the app goes back to live HealthKit and recorder data.")
         }
+        // Sending is not a preview step — it puts this file into the same queue
+        // the recorders use, tagged with the real participant ID, so it asks first.
+        .alert("Send to the live study database?",
+               isPresented: Binding(get: { pendingSend != nil },
+                                    set: { if !$0 { pendingSend = nil } }),
+               presenting: pendingSend) { record in
+            Button("Send", role: .destructive) {
+                let target = record
+                pendingSend = nil
+                send(target)
+            }
+            Button("Cancel", role: .cancel) { pendingSend = nil }
+        } message: { record in
+            Text("""
+                 \(record.filename) (\(record.rowCount) rows) will be uploaded to the real study pipeline, tagged with this device's participant ID — the same path recorder data takes. It is identifiable server-side only by its "healthkit_import_" filename prefix.
+
+                 This also flushes everything else waiting in the upload queue.
+                 """)
+        }
         .onAppear(perform: reload)
     }
 
@@ -105,11 +127,13 @@ struct ImportDataView: View {
             Button {
                 scannedFiles = SensorFileImporter.scanDocumentsFolder()
                 didScan = true
-                status = scannedFiles.isEmpty ? "No CSV files in the Documents folder." : nil
+                status = scannedFiles.isEmpty
+                    ? "No .csv or .txt files found in Documents, to-be-processed/ or processed/."
+                    : nil
             } label: {
-                actionLabel("Scan Documents folder", icon: "folder")
+                actionLabel("Scan on-device files", icon: "folder")
             }
-            Text("Scan picks up anything dropped in over Finder.")
+            Text("Scans Documents, to-be-processed/ and processed/ for .csv and .txt — so it finds both files dropped in over Finder and the app's own recordings. Importing one only reads it; nothing is moved or consumed.")
                 .font(.system(size: 11, design: .rounded))
                 .foregroundStyle(muted.opacity(0.8))
 
@@ -169,7 +193,7 @@ struct ImportDataView: View {
                             .foregroundStyle(muted.opacity(0.85))
 
                         HStack(spacing: 8) {
-                            smallButton("Send to database") { send(record) }
+                            smallButton("Send to database") { pendingSend = record }
                             if let prev = SensorDataStore.shared.previousImports(for: record.kind).first {
                                 smallButton("Restore previous") {
                                     SensorDataStore.shared.activate(importID: prev.id, kind: prev.kind)
@@ -245,6 +269,15 @@ struct ImportDataView: View {
                 Section("Columns detected") {
                     LabeledContent("Timestamp", value: "column \(p.timestampColumn + 1)")
                     LabeledContent("Value", value: p.valueColumn.map { "column \($0 + 1)" } ?? "none found")
+                    // "None found" is fine for a timestamp-only sensor and a
+                    // silent disaster for a numeric one — every reading would
+                    // import with no number at all. Say so plainly.
+                    if p.valueColumn == nil && chosenKind.isNumeric {
+                        Label("No numeric column was found after the timestamp. \(chosenKind.displayName) needs one — importing now would store timestamps with no readings.",
+                              systemImage: "exclamationmark.triangle.fill")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                    }
                 }
                 Section("Sensor") {
                     Picker("Detected", selection: $chosenKind) {

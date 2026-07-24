@@ -79,6 +79,25 @@ nonisolated extension SensorKind {
     /// True when the sensor carries a numeric reading worth displaying.
     var isNumeric: Bool { unit != nil }
 
+    /// True when the reading accumulates over a day, so the meaningful figure is
+    /// a DAILY TOTAL rather than the most recent single measurement.
+    ///
+    /// This is what keeps the two sources honest. For the live path,
+    /// SensorStatusStore.stampDailyTotal already stores a day total. An imported
+    /// CSV holding one row per hour would otherwise contribute only its LAST row,
+    /// so the same "Steps" label would silently mean "today so far" from Apple
+    /// Health and "the last hour" from a file. Imported cumulative series are
+    /// therefore summed over the day of their newest row — which also leaves a
+    /// file that already holds daily totals correct, since that day has one row.
+    ///
+    /// Sleep is NOT cumulative: it is already stored as a per-night aggregate.
+    var isCumulative: Bool {
+        switch self {
+        case .steps, .distance, .activeEnergy, .flights: return true
+        default: return false
+        }
+    }
+
     /// Where a non-imported reading for this sensor genuinely comes from.
     var realSource: SensorSource {
         switch self {
@@ -398,7 +417,13 @@ nonisolated final class SensorDataStore: @unchecked Sendable {
 
     var hasImports: Bool { !activeImports().isEmpty }
 
-    /// Newest reading of the active imported series, with its filename.
+    /// The reading of the active imported series that should be displayed.
+    ///
+    /// For most sensors that is simply the newest row. For CUMULATIVE sensors
+    /// (see SensorKind.isCumulative) it is the TOTAL of every row falling on the
+    /// newest row's local day, stamped at the newest row's time — matching what
+    /// SensorStatusStore stores for the same metric from HealthKit, so a tile
+    /// means the same thing whichever source it came from.
     func latestImported(for kind: SensorKind) -> (reading: SensorReading, filename: String)? {
         queue.sync {
             guard let db else { return nil }
@@ -415,16 +440,49 @@ nonisolated final class SensorDataStore: @unchecked Sendable {
             _ = kind.rawValue.withCString { sqlite3_bind_text(stmt, 1, $0, -1, SQL.transient) }
 
             guard sqlite3_step(stmt) == SQLITE_ROW, let nameText = sqlite3_column_text(stmt, 2) else { return nil }
-            let reading = SensorReading(
-                date: Date(timeIntervalSince1970: sqlite3_column_double(stmt, 0)),
-                value: sqlite3_column_type(stmt, 1) == SQLITE_NULL ? nil : sqlite3_column_double(stmt, 1)
-            )
-            return (reading, String(cString: nameText))
+            let date = Date(timeIntervalSince1970: sqlite3_column_double(stmt, 0))
+            var value: Double? = sqlite3_column_type(stmt, 1) == SQLITE_NULL ? nil : sqlite3_column_double(stmt, 1)
+
+            if kind.isCumulative, value != nil {
+                value = dayTotalLocked(for: kind, containing: date) ?? value
+            }
+            return (SensorReading(date: date, value: value), String(cString: nameText))
         }
+    }
+
+    /// Sum of the active import's readings over the local day containing `date`.
+    /// MUST be called from inside `queue` — it does not take the lock itself.
+    private func dayTotalLocked(for kind: SensorKind, containing date: Date) -> Double? {
+        guard let db else { return nil }
+        let calendar = Calendar.current
+        let dayStart = calendar.startOfDay(for: date)
+        guard let dayEnd = calendar.date(byAdding: .day, value: 1, to: dayStart) else { return nil }
+
+        let sql = """
+            SELECT SUM(r.value)
+            FROM sensor_readings r
+            JOIN sensor_imports i ON i.id = r.import_id
+            WHERE i.active = 1 AND i.kind = ? AND r.ts >= ? AND r.ts < ?;
+        """
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return nil }
+        defer { sqlite3_finalize(stmt) }
+        _ = kind.rawValue.withCString { sqlite3_bind_text(stmt, 1, $0, -1, SQL.transient) }
+        sqlite3_bind_double(stmt, 2, dayStart.timeIntervalSince1970)
+        sqlite3_bind_double(stmt, 3, dayEnd.timeIntervalSince1970)
+
+        guard sqlite3_step(stmt) == SQLITE_ROW,
+              sqlite3_column_type(stmt, 0) != SQLITE_NULL else { return nil }
+        return sqlite3_column_double(stmt, 0)
     }
 
     /// Streams an import's readings oldest-first without loading them all at once.
     /// Used to write the CSV for "Send to database".
+    ///
+    /// WARNING: `body` runs while the store's serial queue is HELD. It must not
+    /// call back into SensorDataStore (that deadlocks), and it should stay cheap
+    /// — every other caller, including main-thread display lookups, blocks for
+    /// the duration of the whole walk.
     func forEachReading(importID: Int64, _ body: (SensorReading) -> Void) {
         queue.sync {
             guard let db else { return }
@@ -450,7 +508,10 @@ nonisolated final class SensorDataStore: @unchecked Sendable {
             return (reading, .imported(filename))
         }
         guard let entry = SensorStatusStore.shared.entry(for: kind) else { return nil }
-        let value = entry.value.flatMap(Self.numericValue(from:))
+        // Prefer the stored number. The string parse is only a fallback for
+        // stamps written by builds before `numeric` existed, and for the DEBUG
+        // sample table — see numericValue's note about locales.
+        let value = entry.numeric ?? entry.value.flatMap(Self.numericValue(from:))
         return (SensorReading(date: entry.date, value: value),
                 entry.isSample ? .sample : kind.realSource)
     }
@@ -503,7 +564,13 @@ nonisolated final class SensorDataStore: @unchecked Sendable {
     }
 
     /// Pulls the number back out of a SensorStatusStore display string
-    /// ("72 bpm" → 72, "8,420 steps" → 8420) so Home tiles can use real stamps.
+    /// ("72 bpm" → 72, "8,420 steps" → 8420).
+    ///
+    /// LEGACY FALLBACK ONLY — `SensorStatusEntry.numeric` is the real path.
+    /// This assumes "," grouping and "." decimals, so it is wrong on a device
+    /// whose locale reverses them (de_DE renders 8420 as "8.420", which lands
+    /// here as 8.42). It survives only to read stamps written by builds that
+    /// predate `numeric`, and to give the DEBUG sample table a value.
     nonisolated private static func numericValue(from text: String) -> Double? {
         let cleaned = text.replacingOccurrences(of: ",", with: "")
         var digits = ""

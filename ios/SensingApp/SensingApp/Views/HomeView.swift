@@ -35,7 +35,8 @@ struct HomeView: View {
     @State private var lastNightSleepHours: Double? = nil
     @State private var todayActiveEnergy: Int? = nil
     @State private var todayFlights: Int? = nil
-    // Per-tile provenance note ("heartrate · Jul 22", "sample"), set by applySensorStore().
+    // Per-tile provenance note ("heartrate", "heartrate · Jul 22"), set by
+    // applySensorStore(). Absent when the reading is live and from today.
     @State private var statCaptions: [SensorKind: String] = [:]
     @State private var weeklyProgress: [Date: Bool] = [:]
 
@@ -257,22 +258,28 @@ struct HomeView: View {
     }
 
     /// Pull each tile's value and caption out of the store. A caption appears
-    /// only when the reading is noteworthy — imported, sample, or not from today.
+    /// only when the reading is noteworthy — imported, or not from today. (The
+    /// DEBUG sample table is never surfaced on Home; see SensorDataStore.homeTile.)
+    ///
+    /// Every tile is assigned on every pass, INCLUDING the nil case. Skipping the
+    /// nil case left the last known value on screen forever: deleting an import,
+    /// or clearing them all, kept showing the imported number because nothing
+    /// ever wrote over it.
     private func applySensorStore() {
         let store = SensorDataStore.shared
         var captions: [SensorKind: String] = [:]
 
-        func tile(_ kind: SensorKind, _ assign: (Double) -> Void) {
-            guard let t = store.homeTile(for: kind) else { return }
-            assign(t.value)
-            captions[kind] = t.caption
+        func tile(_ kind: SensorKind, _ assign: (Double?) -> Void) {
+            let resolved = store.homeTile(for: kind)
+            assign(resolved?.value)
+            captions[kind] = resolved?.caption
         }
 
-        tile(.steps)        { todaySteps = Int($0) }
-        tile(.distance)     { todayDistanceMeters = $0 * 1000 }   // series is stored in km
-        tile(.heartRate)    { latestHeartRate = Int($0) }
-        tile(.activeEnergy) { todayActiveEnergy = Int($0) }
-        tile(.flights)      { todayFlights = Int($0) }
+        tile(.steps)        { todaySteps = $0.map { Int($0) } }
+        tile(.distance)     { todayDistanceMeters = $0.map { $0 * 1000 } }   // series is stored in km
+        tile(.heartRate)    { latestHeartRate = $0.map { Int($0) } }
+        tile(.activeEnergy) { todayActiveEnergy = $0.map { Int($0) } }
+        tile(.flights)      { todayFlights = $0.map { Int($0) } }
         tile(.sleep)        { lastNightSleepHours = $0 }
 
         statCaptions = captions
@@ -394,8 +401,8 @@ struct HomeView: View {
                 .font(.system(size: 10, weight: .medium, design: .rounded))
                 .foregroundStyle(Color(red: 0.55, green: 0.47, blue: 0.44))
                 .multilineTextAlignment(.center)
-            // Only present when the reading is imported, sample, or not from
-            // today — so a stale value can't pass for a fresh one.
+            // Only present when the reading is imported or not from today — so a
+            // stale value can't pass for a fresh one.
             if let caption {
                 Text(caption)
                     .font(.system(size: 9, weight: .medium, design: .rounded))

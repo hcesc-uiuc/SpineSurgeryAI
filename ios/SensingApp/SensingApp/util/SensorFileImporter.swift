@@ -178,6 +178,10 @@ nonisolated enum SensorFileImporter {
 
     enum ImportError: LocalizedError {
         case unreadable
+        /// The on-device store could not accept the import. Kept distinct from
+        /// `.unreadable` so a database problem never sends someone off to debug
+        /// a CSV that was fine.
+        case storageUnavailable
         /// Nothing importable was found. Carries what we DID see so the message
         /// can tell "this file is just a header" apart from "these timestamps
         /// are in a format I don't read" — those need very different fixes.
@@ -187,6 +191,8 @@ nonisolated enum SensorFileImporter {
             switch self {
             case .unreadable:
                 return "Could not read that file."
+            case .storageUnavailable:
+                return "The file was fine, but the on-device store would not accept it. The sensor database may be unavailable — check the console for a SensorDataStore error."
             case .noValidRows(let linesSeen, let sample):
                 switch linesSeen {
                 case 0:
@@ -247,12 +253,12 @@ nonisolated enum SensorFileImporter {
             let fields = splitFields(line)
 
             if tsCol == nil {
-                // Probe each column until one reads as a timestamp. The parser
-                // locks onto that format, so later rows cost one attempt.
-                for (i, field) in fields.enumerated() where parser.parse(field) != nil {
+                // Probe each column until one reads as a timestamp. Doing so
+                // also locks the parser onto that format, so later rows cost a
+                // single attempt.
+                for (i, field) in fields.enumerated() {
+                    guard parser.parse(field) != nil else { continue }
                     tsCol = i
-                    // Value = the first numeric column AFTER the timestamp.
-                    valCol = fields.indices.first { $0 > i && Double(fields[$0]) != nil }
                     break
                 }
                 guard tsCol != nil else { continue }   // header or unreadable line
@@ -263,6 +269,16 @@ nonisolated enum SensorFileImporter {
                 skipped += 1
                 continue
             }
+
+            // Value = the first numeric column AFTER the timestamp. Keep looking
+            // on subsequent rows while it is still unknown, rather than settling
+            // it from the first data row alone: a file whose first reading
+            // happened to be blank or non-numeric used to resolve to the wrong
+            // column (or to none), silently dropping every value in the file.
+            if valCol == nil, rows < valueProbeLimit {
+                valCol = fields.indices.first { $0 > column && Double(fields[$0]) != nil }
+            }
+
             rows += 1
             if minDate == nil || date < minDate! { minDate = date }
             if maxDate == nil || date > maxDate! { maxDate = date }
@@ -312,7 +328,7 @@ nonisolated enum SensorFileImporter {
         let filename = url.lastPathComponent
 
         guard let importID = store.beginImport(kind: kind, filename: filename) else {
-            throw ImportError.unreadable
+            throw ImportError.storageUnavailable
         }
 
         var batch: [SensorReading] = []
@@ -342,6 +358,12 @@ nonisolated enum SensorFileImporter {
     }
 
     private static let batchSize = 5_000
+
+    /// How many data rows to keep probing for a value column before giving up
+    /// and treating the file as timestamp-only. Bounded so a genuinely
+    /// timestamp-only file (location, watch streams) does not pay the check on
+    /// every one of its rows.
+    private static let valueProbeLimit = 50
 
     /// Minimal CSV field split — good enough for the `timestamp,value` shape,
     /// tolerating quotes and stray spaces.
@@ -405,7 +427,14 @@ nonisolated enum SensorDataExporter {
         return "healthkit_import_\(record.kind.rawValue)_\(f.string(from: Date())).csv"
     }
 
-    /// Streams the stored series out to a CSV in the upload queue.
+    /// Writes the stored series out to a CSV in the upload queue.
+    ///
+    /// NOT streaming, despite reading the store row by row: the CSV is assembled
+    /// whole in memory, and `forEachReading` holds the store's serial queue for
+    /// the entire walk — so main-thread display lookups block until this returns.
+    /// Fine for the file sizes a dev tool sees; if imports of hundreds of
+    /// thousands of rows become routine, write to a FileHandle inside the walk
+    /// instead of accumulating a String.
     static func writeToUploadQueue(_ record: SensorImportRecord) throws -> URL {
         let fm = FileManager.default
         let docs = fm.urls(for: .documentDirectory, in: .userDomainMask).first!

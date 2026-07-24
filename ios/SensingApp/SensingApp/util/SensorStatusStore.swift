@@ -12,12 +12,25 @@
 //    2. refreshHealthKitSamples() queries HealthKit for the genuine latest sample
 //       of each Apple Health row and stamps the result.
 //  When no real stamp exists for a sensor yet (fresh install, simulator, no watch),
-//  the row falls back to the SAMPLE DATA table below, always suffixed "(sample)"
-//  so it can never be mistaken for real data.
+//  DEBUG builds fall back to the SAMPLE DATA table below, always suffixed
+//  "(sample)". RELEASE builds have no fallback at all — the row reads "No data
+//  recorded yet". The Sensors tab is NOT behind #if DEBUG, so it ships to
+//  patients; a patient without an Apple Watch must never be shown an invented
+//  "999 bpm", however it is labelled.
 //
-//  Storage is UserDefaults: two keys per sensor —
-//    sensorLast_<kind>_value  (String, optional — e.g. "72 bpm")
-//    sensorLast_<kind>_date   (Date)
+//  Storage is UserDefaults: three keys per sensor —
+//    sensorLast_<kind>_value    (String, optional — the rendered line, "72 bpm")
+//    sensorLast_<kind>_numeric  (Double, optional — the same reading as a number)
+//    sensorLast_<kind>_date     (Date)
+//
+//  `numeric` exists because Home tiles need a NUMBER. Recovering one by parsing
+//  the display string back apart is locale-dependent — NumberFormatter renders
+//  8420 as "8.420" in de_DE, which parses back as 8.42 — so the raw value is
+//  stored alongside the text rather than reconstructed from it.
+//
+//  CONTRACT: `numeric` is always expressed in the sensor's own unit
+//  (SensorKind.unit) — km for distance, percent for blood oxygen, hours for
+//  sleep — so it is directly comparable with an imported series.
 //
 
 import Foundation
@@ -53,6 +66,9 @@ nonisolated enum SensorKind: String, CaseIterable {
 
 nonisolated struct SensorStatusEntry {
     let value: String?      // nil = timestamp-only sensor (motion, location, watch)
+    /// The same reading as a number, in SensorKind.unit. nil for timestamp-only
+    /// sensors and for stamps written by builds before this field existed.
+    let numeric: Double?
     let date: Date
     let isSample: Bool
 }
@@ -63,14 +79,20 @@ nonisolated final class SensorStatusStore: @unchecked Sendable {
 
     private let defaults = UserDefaults.standard
 
+#if DEBUG
     // ══════════════════════════════════════════════════════════════════
     //  SAMPLE DATA — EDIT THIS TABLE TO TEST HOW THE SENSORS TAB LOOKS.
     //
-    //  Shown only when a sensor has no real recorded stamp yet, and always
-    //  rendered with a "(sample)" suffix. `value` is the reading shown
+    //  DEBUG ONLY. Shown when a sensor has no real recorded stamp yet, and
+    //  always rendered with a "(sample)" suffix. `value` is the reading shown
     //  (nil = timestamp-only); `minutesAgo` positions the fake timestamp
     //  relative to now. Values are deliberately absurd (999 bpm) so real
     //  and sample data can never be confused.
+    //
+    //  Deliberately compiled out of Release: the Sensors tab ships to patients,
+    //  and five of these rows (gyroscope, watch PPG, ECG, wrist temperature,
+    //  ambient light) have no fetcher at all, so in Release they would have
+    //  shown sample data permanently, to everyone.
     // ══════════════════════════════════════════════════════════════════
     static let sampleData: [SensorKind: (value: String?, minutesAgo: Double)] = [
         .accelerometer:        (nil,            45),
@@ -91,14 +113,20 @@ nonisolated final class SensorStatusStore: @unchecked Sendable {
         .ambientLight:         (nil,           300),
         .survey:               (nil,          1440),
     ]
+#endif
 
     private func valueKey(_ kind: SensorKind) -> String { "sensorLast_\(kind.rawValue)_value" }
+    private func numericKey(_ kind: SensorKind) -> String { "sensorLast_\(kind.rawValue)_numeric" }
     private func dateKey(_ kind: SensorKind)  -> String { "sensorLast_\(kind.rawValue)_date" }
 
     /// Stamp a sensor as recorded. Safe to call from any thread (UserDefaults
     /// is thread-safe). Keeps only the newest stamp — older dates are ignored,
     /// so out-of-order batches (e.g. SensorKit) can stamp freely.
-    func record(_ kind: SensorKind, value: String? = nil, at date: Date = Date()) {
+    ///
+    /// `numeric` is the same reading as a plain number, in SensorKind.unit. Pass
+    /// it whenever a number is available; Home tiles read it directly instead of
+    /// parsing `value` back apart, which is locale-dependent.
+    func record(_ kind: SensorKind, value: String? = nil, numeric: Double? = nil, at date: Date = Date()) {
         if let existing = defaults.object(forKey: dateKey(kind)) as? Date, existing > date { return }
         defaults.set(date, forKey: dateKey(kind))
         if let value {
@@ -106,18 +134,30 @@ nonisolated final class SensorStatusStore: @unchecked Sendable {
         } else {
             defaults.removeObject(forKey: valueKey(kind))
         }
+        if let numeric {
+            defaults.set(numeric, forKey: numericKey(kind))
+        } else {
+            defaults.removeObject(forKey: numericKey(kind))
+        }
     }
 
-    /// Real stamp if one exists, else the sample-table fallback, else nil.
+    /// Real stamp if one exists, else (DEBUG only) the sample-table fallback,
+    /// else nil. Release has no fallback — see the file header.
     func entry(for kind: SensorKind) -> SensorStatusEntry? {
         if let date = defaults.object(forKey: dateKey(kind)) as? Date {
-            return SensorStatusEntry(value: defaults.string(forKey: valueKey(kind)), date: date, isSample: false)
+            return SensorStatusEntry(value: defaults.string(forKey: valueKey(kind)),
+                                     numeric: defaults.object(forKey: numericKey(kind)) as? Double,
+                                     date: date,
+                                     isSample: false)
         }
+#if DEBUG
         if let sample = Self.sampleData[kind] {
             return SensorStatusEntry(value: sample.value,
+                                     numeric: nil,
                                      date: Date().addingTimeInterval(-sample.minutesAgo * 60),
                                      isSample: true)
         }
+#endif
         return nil
     }
 
@@ -161,10 +201,17 @@ extension SensorStatusStore {
         let store = HKHealthStore()
         let group = DispatchGroup()
 
-        /// Latest single sample of a quantity type → stamp with a formatted value.
+        // Both helpers below reduce a sample to ONE number expressed in
+        // SensorKind.unit — `reading = doubleValue(for: unit) * scale` — and use
+        // that same number for the stored numeric and for the display text, so
+        // the two can never disagree.
+
+        /// Latest single sample of a quantity type → stamp value + number.
         func stampLatestSample(_ identifier: HKQuantityTypeIdentifier,
                                kind: SensorKind,
-                               format: @escaping (HKQuantitySample) -> String) {
+                               unit: HKUnit,
+                               scale: Double = 1,
+                               format: @escaping (Double) -> String) {
             guard let type = HKQuantityType.quantityType(forIdentifier: identifier) else { return }
             group.enter()
             let query = HKSampleQuery(
@@ -174,7 +221,8 @@ extension SensorStatusStore {
                 sortDescriptors: [NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: false)]
             ) { _, samples, _ in
                 if let sample = samples?.first as? HKQuantitySample {
-                    self.record(kind, value: format(sample), at: sample.endDate)
+                    let reading = sample.quantity.doubleValue(for: unit) * scale
+                    self.record(kind, value: format(reading), numeric: reading, at: sample.endDate)
                 }
                 group.leave()
             }
@@ -186,6 +234,7 @@ extension SensorStatusStore {
         func stampDailyTotal(_ identifier: HKQuantityTypeIdentifier,
                              kind: SensorKind,
                              unit: HKUnit,
+                             scale: Double = 1,
                              format: @escaping (Double) -> String) {
             guard let type = HKQuantityType.quantityType(forIdentifier: identifier) else { return }
             group.enter()
@@ -207,8 +256,9 @@ extension SensorStatusStore {
                     quantitySamplePredicate: predicate,
                     options: .cumulativeSum
                 ) { _, result, _ in
-                    if let total = result?.sumQuantity()?.doubleValue(for: unit) {
-                        self.record(kind, value: format(total), at: latest.endDate)
+                    if let raw = result?.sumQuantity()?.doubleValue(for: unit) {
+                        let total = raw * scale
+                        self.record(kind, value: format(total), numeric: total, at: latest.endDate)
                     }
                     group.leave()
                 }
@@ -217,15 +267,13 @@ extension SensorStatusStore {
             store.execute(latestQuery)
         }
 
-        stampLatestSample(.heartRate, kind: .heartRate) { sample in
-            "\(Int(sample.quantity.doubleValue(for: .count().unitDivided(by: .minute())))) bpm"
-        }
-        stampLatestSample(.heartRateVariabilitySDNN, kind: .heartRateVariability) { sample in
-            "\(Int(sample.quantity.doubleValue(for: .secondUnit(with: .milli)))) ms"
-        }
-        stampLatestSample(.oxygenSaturation, kind: .bloodOxygen) { sample in
-            "\(Int(sample.quantity.doubleValue(for: .percent()) * 100))%"
-        }
+        stampLatestSample(.heartRate, kind: .heartRate,
+                          unit: .count().unitDivided(by: .minute())) { "\(Int($0)) bpm" }
+        stampLatestSample(.heartRateVariabilitySDNN, kind: .heartRateVariability,
+                          unit: .secondUnit(with: .milli)) { "\(Int($0)) ms" }
+        // HealthKit reports saturation as a 0–1 fraction; the sensor's unit is %.
+        stampLatestSample(.oxygenSaturation, kind: .bloodOxygen,
+                          unit: .percent(), scale: 100) { "\(Int($0))%" }
 
         stampDailyTotal(.stepCount, kind: .steps, unit: .count()) { total in
             let formatter = NumberFormatter()
@@ -233,15 +281,11 @@ extension SensorStatusStore {
             let text = formatter.string(from: NSNumber(value: Int(total))) ?? "\(Int(total))"
             return "\(text) steps"
         }
-        stampDailyTotal(.activeEnergyBurned, kind: .activeEnergy, unit: .kilocalorie()) { total in
-            "\(Int(total)) kcal"
-        }
-        stampDailyTotal(.distanceWalkingRunning, kind: .distance, unit: .meter()) { total in
-            String(format: "%.1f km", total / 1000.0)
-        }
-        stampDailyTotal(.flightsClimbed, kind: .flights, unit: .count()) { total in
-            "\(Int(total)) flights"
-        }
+        stampDailyTotal(.activeEnergyBurned, kind: .activeEnergy, unit: .kilocalorie()) { "\(Int($0)) kcal" }
+        // Queried in metres; the sensor's unit is km.
+        stampDailyTotal(.distanceWalkingRunning, kind: .distance,
+                        unit: .meter(), scale: 1.0 / 1000.0) { String(format: "%.1f km", $0) }
+        stampDailyTotal(.flightsClimbed, kind: .flights, unit: .count()) { "\(Int($0)) flights" }
 
         // Sleep: total asleep-stage time over the last night-and-a-bit (30 h),
         // stamped at the latest sample's end. Older stamps persist unchanged.
@@ -266,7 +310,8 @@ extension SensorStatusStore {
                 let asleep = (samples as? [HKCategorySample])?.filter { asleepValues.contains($0.value) } ?? []
                 let totalSeconds = asleep.reduce(0.0) { $0 + $1.endDate.timeIntervalSince($1.startDate) }
                 guard totalSeconds > 0, let latestEnd = asleep.map(\.endDate).max() else { return }
-                self.record(.sleep, value: String(format: "%.1f hr", totalSeconds / 3600.0), at: latestEnd)
+                let hours = totalSeconds / 3600.0
+                self.record(.sleep, value: String(format: "%.1f hr", hours), numeric: hours, at: latestEnd)
             }
             store.execute(sleepQuery)
         }
