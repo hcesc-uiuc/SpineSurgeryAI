@@ -155,3 +155,110 @@ network or Postgres needed: `python -m pytest tests/`.
 3. Load real codes: `python manage_enrollment_codes.py add <code> ...`.
 4. After this is live: delete the hash list in `EnrollmentCode.swift`
    (iOS-side, separate change).
+
+---
+
+## v2 (July 2026, akarsh-issue-55) — 4-endpoint split-authority contract
+
+Per the study team, the profile sync moved from ONE blob (`GET/PUT
+/api/profile/<pid>`) to FOUR named endpoints, and gained two
+**server-authoritative** concepts the coordinators own: a friendly **study
+id** (P01…) and a **survey schedule** (daily / weekly / paused / ended). The
+iOS app (branch `akarsh-issue-55`, `util/UserProfile.swift`) already speaks
+this v2 contract; implement it here and everything syncs with zero app
+changes. The old `/api/profile/<pid>` routes can stay as internal helpers or
+be retired — the app no longer calls them.
+
+### Authority model (important)
+- **SERVER owns** `study_id` and `survey_schedule`. Coordinators set them on
+  the web; the app PULLS them on every login and never writes them back. Do
+  NOT overwrite them from the uploaded profile body (see upload note below).
+- **PHONE owns** `first_open_date` and `survey_history` (completion calendar).
+  The app pushes the whole profile up on every change; store it verbatim.
+
+### Identity — unchanged
+Still keyed by the anonymous `participant_id` hash (no PII). The study id is a
+SEPARATE, human-friendly label the server assigns; keep the
+`participant_id ↔ study_id` map and the account↔participant map **siloed away
+from the research dataset** so the P01 label can't be used to re-identify
+anyone. Uploaded sensor/survey data is still tagged with the hash only (the
+app does NOT stamp P01 on uploads — decided July 2026, revisit with the team).
+
+### The 4 endpoints
+
+**1. `GET /api/getstudyid/<participant_id>`**
+Assign-or-return. If this hash has no study id yet, allocate the **next
+available** one (e.g. `P01`, `P02`, … — a simple sequence/counter; guard
+against races so two hashes never get the same id) and persist the mapping.
+Reply:
+```json
+{ "study_id": "P01" }
+```
+Called on every login. Must be idempotent — the same hash always gets the
+same id back.
+
+**2. `GET /api/getuserprofile/<participant_id>`**
+The whole profile JSON (schema below), or **404** if none. The app calls this
+only when it has no local copy (fresh install / new device) — this is what
+restores a participant's progress. (Same behavior as the old `GET
+/api/profile`, just renamed.)
+
+**3. `GET /api/getsurveystatus/<participant_id>`**
+The coordinator-set schedule for this participant, or **404** (app then keeps
+its local default of `daily`). Pulled on EVERY login and overwrites the local
+schedule. Shape (snake_case):
+```json
+{
+  "cadence": "daily",        // "daily" | "weekly" | "paused" | "ended"
+  "weekly_day": 2,           // 1=Sun … 7=Sat; only meaningful for "weekly", else null
+  "note": "Study paused — contact your coordinator.",  // optional, nullable
+  "updated_at": 1782000000.0 // optional
+}
+```
+This is the ONLY thing the phone reads to decide daily-reminder scheduling,
+check-in tab availability, and the Home check-in card. Coordinators need a way
+to set it per participant (dashboard row or a `manage_survey_schedule.py` CLI,
+mirroring `manage_enrollment_codes.py`). Suggested storage: one row per
+participant `(participant_id PK, cadence, weekly_day, note, updated_at)`.
+
+**4. `POST /api/uploaduserprofile/<participant_id>`**
+Body = the full profile JSON. Upsert (replace the stored document). MUST reply
+exactly `{"status": "ok"}` (the app string-matches it before showing "Backed
+up"). **Server-authority caveat:** the uploaded body will echo back
+`study_id` and `survey_schedule` (the app carries them in its local copy), but
+those are SERVER-owned — ignore/overwrite them with your stored values rather
+than trusting the client copy, so a stale phone can't revert a coordinator's
+change. Store `first_open_date` and `survey_history` as sent.
+
+### Profile JSON — v2 (snake_case on the wire)
+```json
+{
+  "schema_version": 2,
+  "participant_id": "9f2c…64-hex…",
+  "study_id": "P01",
+  "enrollment_code": "483920",
+  "enrolled_at": 1782000000.0,
+  "first_open_date": 1782000000.0,
+  "survey_schedule": { "cadence": "daily", "weekly_day": null, "note": null, "updated_at": null },
+  "preferences": { "reminder_hour": 20, "reminder_minute": 0 },
+  "survey_history": [
+    { "date": "2026-07-01", "pain_score": 4, "completed": true },
+    { "date": "2026-07-02", "pain_score": null, "completed": true }
+  ],
+  "sensor_status": [],
+  "updated_at": 1782086400.0
+}
+```
+Notes:
+- `schema_version` is now **2**. Keep accepting/storing the raw document so
+  older/newer clients keep working; add `2` to the known-versions set.
+- `study_id`, `enrollment_code`, `enrolled_at`, `first_open_date`,
+  `pain_score`, and every `survey_schedule` sub-field are nullable.
+- `sensor_status` is a display-only mirror of the Sensors-tab "last recorded"
+  lines (`[{ "kind", "value"?, "date" }]`); currently always `[]` from the app
+  (populated later once issue-52 lands). Store verbatim.
+
+### Auth — same as v1
+Tokenless for now (demo mode). When demo mode is removed, protect all four
+routes with `require_auth` and verify the token's account maps to
+`<participant_id>`.
