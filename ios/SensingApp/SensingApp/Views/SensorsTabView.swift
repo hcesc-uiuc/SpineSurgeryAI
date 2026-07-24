@@ -14,8 +14,8 @@ import SwiftUI
 struct SensorsTabView: View {
     @Environment(\.scenePhase) private var scenePhase
 
-    // Display line per sensor, rebuilt by refreshStatus().
-    @State private var statusLines: [SensorKind: String] = [:]
+    // Freshness + source lines per sensor, rebuilt by refreshStatus().
+    @State private var statusLines: [SensorKind: SensorDisplay] = [:]
 
     var body: some View {
         NavigationStack {
@@ -105,9 +105,9 @@ struct SensorsTabView: View {
     }
 
     private func rebuildStatusLines() {
-        var lines: [SensorKind: String] = [:]
+        var lines: [SensorKind: SensorDisplay] = [:]
         for kind in SensorKind.allCases {
-            lines[kind] = SensorStatusStore.shared.displayLine(for: kind)
+            lines[kind] = SensorDataStore.shared.display(for: kind)
         }
         statusLines = lines
     }
@@ -149,10 +149,17 @@ struct SensorsTabView: View {
                     .font(.system(size: 13, design: .rounded))
                     .foregroundStyle(Color(red: 0.50, green: 0.42, blue: 0.39))
                 if let status = statusLines[kind] {
-                    Text(status)
+                    Text(status.valueLine)
                         .font(.system(size: 12, weight: .medium, design: .rounded))
                         .foregroundStyle(color.opacity(0.9))
                         .padding(.top, 1)
+                    // Where the value came from — an imported file, Apple Health,
+                    // or the sample table. Never let a reading go unattributed.
+                    if let source = status.sourceLine {
+                        Text(source)
+                            .font(.system(size: 11, design: .rounded))
+                            .foregroundStyle(Color(red: 0.62, green: 0.55, blue: 0.52))
+                    }
                 }
             }
             Spacer()

@@ -24,7 +24,7 @@ import Foundation
 import HealthKit
 
 /// One case per row on the Sensors tab.
-enum SensorKind: String, CaseIterable {
+nonisolated enum SensorKind: String, CaseIterable {
     // Motion & activity
     case accelerometer
     case gyroscope
@@ -34,6 +34,10 @@ enum SensorKind: String, CaseIterable {
     case heartRate
     case heartRateVariability
     case steps
+    // distance & flights have no Sensors-tab row of their own — they exist so the
+    // Home stat tiles that show them can be driven by the same store.
+    case distance
+    case flights
     case bloodOxygen
     case activeEnergy
     case sleep
@@ -47,13 +51,13 @@ enum SensorKind: String, CaseIterable {
     case survey
 }
 
-struct SensorStatusEntry {
+nonisolated struct SensorStatusEntry {
     let value: String?      // nil = timestamp-only sensor (motion, location, watch)
     let date: Date
     let isSample: Bool
 }
 
-final class SensorStatusStore {
+nonisolated final class SensorStatusStore: @unchecked Sendable {
     static let shared = SensorStatusStore()
     private init() {}
 
@@ -75,6 +79,8 @@ final class SensorStatusStore {
         .heartRate:            ("999 bpm",       5),
         .heartRateVariability: ("999 ms",       60),
         .steps:                ("99,999 steps", 30),
+        .distance:             ("99.9 km",      30),
+        .flights:              ("999 flights",  30),
         .bloodOxygen:          ("99%",          90),
         .activeEnergy:         ("9,999 kcal",   30),
         .sleep:                ("9.9 hr",      600),
@@ -229,6 +235,12 @@ extension SensorStatusStore {
         }
         stampDailyTotal(.activeEnergyBurned, kind: .activeEnergy, unit: .kilocalorie()) { total in
             "\(Int(total)) kcal"
+        }
+        stampDailyTotal(.distanceWalkingRunning, kind: .distance, unit: .meter()) { total in
+            String(format: "%.1f km", total / 1000.0)
+        }
+        stampDailyTotal(.flightsClimbed, kind: .flights, unit: .count()) { total in
+            "\(Int(total)) flights"
         }
 
         // Sleep: total asleep-stage time over the last night-and-a-bit (30 h),

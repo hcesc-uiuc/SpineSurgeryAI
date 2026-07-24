@@ -62,7 +62,7 @@ internal import Combine
 //   1. Delete the three lines below (demoMode declaration)
 //   2. Delete the demo block inside login(identityToken:fullName:appleUserID:)
 //   3. Delete the demo guard inside logout()
-private let demoMode = false
+private let demoMode = true
 // ============================================================
 
 // MARK: - Backend Error Response

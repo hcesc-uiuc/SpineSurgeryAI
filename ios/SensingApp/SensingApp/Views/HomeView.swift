@@ -35,6 +35,8 @@ struct HomeView: View {
     @State private var lastNightSleepHours: Double? = nil
     @State private var todayActiveEnergy: Int? = nil
     @State private var todayFlights: Int? = nil
+    // Per-tile provenance note ("heartrate · Jul 22", "sample"), set by applySensorStore().
+    @State private var statCaptions: [SensorKind: String] = [:]
     @State private var weeklyProgress: [Date: Bool] = [:]
 
     private let calendar = Calendar.current
@@ -243,114 +245,37 @@ struct HomeView: View {
         weeklyProgress = result
     }
 
+    // Home tiles read from SensorDataStore, which resolves every metric in one
+    // place: an imported file wins, else the live HealthKit stamp, else the
+    // sample fallback. The six HealthKit queries that used to live here were a
+    // second, duplicate source of truth for the same six numbers.
     private func loadTodayHealthStats() {
-        guard HKHealthStore.isHealthDataAvailable() else { return }
-        let store = HKHealthStore()
-        let calendar = Calendar.current
-        let startOfDay = calendar.startOfDay(for: Date())
-        let predicate = HKQuery.predicateForSamples(withStart: startOfDay, end: Date(), options: .strictStartDate)
+        applySensorStore()                                   // cached stamps + imports, instantly
+        SensorStatusStore.shared.refreshHealthKitSamples {    // then the live samples
+            applySensorStore()
+        }
+    }
 
-        // Steps query
-        if let stepType = HKQuantityType.quantityType(forIdentifier: .stepCount) {
-            let stepsQuery = HKStatisticsQuery(
-                quantityType: stepType,
-                quantitySamplePredicate: predicate,
-                options: .cumulativeSum
-            ) { _, result, _ in
-                DispatchQueue.main.async {
-                    todaySteps = result?.sumQuantity().map { Int($0.doubleValue(for: .count())) }
-                }
-            }
-            store.execute(stepsQuery)
+    /// Pull each tile's value and caption out of the store. A caption appears
+    /// only when the reading is noteworthy — imported, sample, or not from today.
+    private func applySensorStore() {
+        let store = SensorDataStore.shared
+        var captions: [SensorKind: String] = [:]
+
+        func tile(_ kind: SensorKind, _ assign: (Double) -> Void) {
+            guard let t = store.homeTile(for: kind) else { return }
+            assign(t.value)
+            captions[kind] = t.caption
         }
 
-        // Distance query
-        if let distType = HKQuantityType.quantityType(forIdentifier: .distanceWalkingRunning) {
-            let distQuery = HKStatisticsQuery(
-                quantityType: distType,
-                quantitySamplePredicate: predicate,
-                options: .cumulativeSum
-            ) { _, result, _ in
-                DispatchQueue.main.async {
-                    todayDistanceMeters = result?.sumQuantity().map { $0.doubleValue(for: .meter()) }
-                }
-            }
-            store.execute(distQuery)
-        }
+        tile(.steps)        { todaySteps = Int($0) }
+        tile(.distance)     { todayDistanceMeters = $0 * 1000 }   // series is stored in km
+        tile(.heartRate)    { latestHeartRate = Int($0) }
+        tile(.activeEnergy) { todayActiveEnergy = Int($0) }
+        tile(.flights)      { todayFlights = Int($0) }
+        tile(.sleep)        { lastNightSleepHours = $0 }
 
-        // Active energy query
-        if let energyType = HKQuantityType.quantityType(forIdentifier: .activeEnergyBurned) {
-            let energyQuery = HKStatisticsQuery(
-                quantityType: energyType,
-                quantitySamplePredicate: predicate,
-                options: .cumulativeSum
-            ) { _, result, _ in
-                DispatchQueue.main.async {
-                    todayActiveEnergy = result?.sumQuantity().map { Int($0.doubleValue(for: .kilocalorie())) }
-                }
-            }
-            store.execute(energyQuery)
-        }
-
-        // Flights climbed query
-        if let flightsType = HKQuantityType.quantityType(forIdentifier: .flightsClimbed) {
-            let flightsQuery = HKStatisticsQuery(
-                quantityType: flightsType,
-                quantitySamplePredicate: predicate,
-                options: .cumulativeSum
-            ) { _, result, _ in
-                DispatchQueue.main.async {
-                    todayFlights = result?.sumQuantity().map { Int($0.doubleValue(for: .count())) }
-                }
-            }
-            store.execute(flightsQuery)
-        }
-
-        // Heart rate query — latest sample today
-        if let hrType = HKQuantityType.quantityType(forIdentifier: .heartRate) {
-            let hrQuery = HKSampleQuery(
-                sampleType: hrType,
-                predicate: predicate,
-                limit: 1,
-                sortDescriptors: [NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: false)]
-            ) { _, samples, _ in
-                DispatchQueue.main.async {
-                    if let sample = samples?.first as? HKQuantitySample {
-                        latestHeartRate = Int(sample.quantity.doubleValue(for: HKUnit.count().unitDivided(by: .minute())))
-                    }
-                }
-            }
-            store.execute(hrQuery)
-        }
-
-        // Sleep query — last night (yesterday 18:00 to now)
-        if let sleepType = HKObjectType.categoryType(forIdentifier: .sleepAnalysis) {
-            let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: Date())!
-            let sleepStart = Calendar.current.date(bySettingHour: 18, minute: 0, second: 0, of: yesterday)!
-            let sleepPredicate = HKQuery.predicateForSamples(withStart: sleepStart, end: Date(), options: .strictStartDate)
-            let sleepQuery = HKSampleQuery(
-                sampleType: sleepType,
-                predicate: sleepPredicate,
-                limit: HKObjectQueryNoLimit,
-                sortDescriptors: nil
-            ) { _, samples, _ in
-                DispatchQueue.main.async {
-                    let asleepValues: Set<Int> = [
-                        HKCategoryValueSleepAnalysis.asleep.rawValue,
-                        HKCategoryValueSleepAnalysis.asleepCore.rawValue,
-                        HKCategoryValueSleepAnalysis.asleepDeep.rawValue,
-                        HKCategoryValueSleepAnalysis.asleepREM.rawValue,
-                        HKCategoryValueSleepAnalysis.asleepUnspecified.rawValue
-                    ]
-                    let totalSeconds = (samples as? [HKCategorySample])?.reduce(0.0) { acc, s in
-                        asleepValues.contains(s.value) ? acc + s.endDate.timeIntervalSince(s.startDate) : acc
-                    } ?? 0.0
-                    let hours = totalSeconds / 3600.0
-                    lastNightSleepHours = hours > 0 ? hours : nil
-                }
-            }
-            store.execute(sleepQuery)
-        }
+        statCaptions = captions
     }
 
     private var recoveryDayCard: some View {
@@ -436,12 +361,12 @@ struct HomeView: View {
 
     private var quickStatsRow: some View {
         LazyVGrid(columns: statColumns, spacing: 10) {
-            statCard(icon: "figure.walk",        value: todaySteps.map { formatSteps($0) } ?? "—",                        label: "Steps",       color: Color(red: 0.42, green: 0.62, blue: 0.55))
-            statCard(icon: "figure.walk.motion", value: todayDistanceMeters.map { formatDistance($0) } ?? "—",            label: "Distance",    color: Color(red: 0.38, green: 0.55, blue: 0.75))
-            statCard(icon: "heart.fill",         value: latestHeartRate.map { "\($0)" } ?? "—",                           label: "Heart rate",  color: Color(red: 0.80, green: 0.55, blue: 0.45))
-            statCard(icon: "flame.fill",         value: todayActiveEnergy.map { "\($0)" } ?? "—",                         label: "Active kcal", color: Color(red: 0.85, green: 0.50, blue: 0.35))
-            statCard(icon: "figure.stairs",      value: todayFlights.map { "\($0)" } ?? "—",                              label: "Flights",     color: Color(red: 0.50, green: 0.60, blue: 0.45))
-            statCard(icon: "bed.double.fill",    value: lastNightSleepHours.map { String(format: "%.1f hr", $0) } ?? "—", label: "Sleep",       color: Color(red: 0.58, green: 0.48, blue: 0.72))
+            statCard(icon: "figure.walk",        value: todaySteps.map { formatSteps($0) } ?? "—",                        label: "Steps",       color: Color(red: 0.42, green: 0.62, blue: 0.55), caption: statCaptions[.steps])
+            statCard(icon: "figure.walk.motion", value: todayDistanceMeters.map { formatDistance($0) } ?? "—",            label: "Distance",    color: Color(red: 0.38, green: 0.55, blue: 0.75), caption: statCaptions[.distance])
+            statCard(icon: "heart.fill",         value: latestHeartRate.map { "\($0)" } ?? "—",                           label: "Heart rate",  color: Color(red: 0.80, green: 0.55, blue: 0.45), caption: statCaptions[.heartRate])
+            statCard(icon: "flame.fill",         value: todayActiveEnergy.map { "\($0)" } ?? "—",                         label: "Active kcal", color: Color(red: 0.85, green: 0.50, blue: 0.35), caption: statCaptions[.activeEnergy])
+            statCard(icon: "figure.stairs",      value: todayFlights.map { "\($0)" } ?? "—",                              label: "Flights",     color: Color(red: 0.50, green: 0.60, blue: 0.45), caption: statCaptions[.flights])
+            statCard(icon: "bed.double.fill",    value: lastNightSleepHours.map { String(format: "%.1f hr", $0) } ?? "—", label: "Sleep",       color: Color(red: 0.58, green: 0.48, blue: 0.72), caption: statCaptions[.sleep])
         }
         .padding(.horizontal, 24)
     }
@@ -457,7 +382,7 @@ struct HomeView: View {
         return String(format: "%.1f km", km)
     }
 
-    private func statCard(icon: String, value: String, label: String, color: Color) -> some View {
+    private func statCard(icon: String, value: String, label: String, color: Color, caption: String? = nil) -> some View {
         VStack(spacing: 6) {
             Image(systemName: icon)
                 .font(.system(size: 18))
@@ -469,6 +394,15 @@ struct HomeView: View {
                 .font(.system(size: 10, weight: .medium, design: .rounded))
                 .foregroundStyle(Color(red: 0.55, green: 0.47, blue: 0.44))
                 .multilineTextAlignment(.center)
+            // Only present when the reading is imported, sample, or not from
+            // today — so a stale value can't pass for a fresh one.
+            if let caption {
+                Text(caption)
+                    .font(.system(size: 9, weight: .medium, design: .rounded))
+                    .foregroundStyle(Color(red: 0.68, green: 0.60, blue: 0.57))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 12)
