@@ -853,6 +853,13 @@ struct SurgerySurveyView: View {
                 ProfileStore.shared.recordSurveyCompletion(date: Date(), painScore: painNRS)
 
                 appState.markCompletedToday()
+
+                // Re-arm reminders now that today is done: this drops today's
+                // queued reminder (so no pointless 8pm nag) while leaving the
+                // rest of the window intact. Must run AFTER markCompletedToday
+                // so isCompletedToday is already true.
+                ProfileStore.shared.refreshCheckInReminders(appState: appState)
+
                 isSubmitting = false
                 dismiss()
             } catch {

@@ -31,6 +31,9 @@ def create_app():
         app.config["DB"].create_pending_uploads_table()
         app.config["DB"].create_profiles_table()
         app.config["DB"].create_enrollment_codes_table()
+        app.config["DB"].create_study_ids_table()
+        app.config["DB"].create_survey_schedule_table()
+        app.config["DB"].create_account_participants_table()  # references users(id)
 
     except Exception as e:
         app.logger.error("\033[91m" + "Cannot connect to database" + "\033[0m" + str(e))

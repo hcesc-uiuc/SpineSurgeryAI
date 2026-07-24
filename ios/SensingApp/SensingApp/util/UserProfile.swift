@@ -296,7 +296,7 @@ final class ProfileStore: ObservableObject {
         await pushToServer()
 
         // Reflect the (possibly updated) schedule in local notifications.
-        applyScheduleToNotifications(appState: appState)
+        refreshCheckInReminders(appState: appState)
     }
 
     // MARK: - Mutations (phone-authoritative: save locally, then push)
@@ -360,9 +360,16 @@ final class ProfileStore: ObservableObject {
         profile = current
     }
 
-    /// Reschedule (or cancel) the local check-in reminder to match the current
-    /// schedule. Paused/ended cancel it; weekly moves it to the weekly day.
-    private func applyScheduleToNotifications(appState: AppState) {
+    /// Re-arm the local check-in reminders to match the current schedule.
+    /// Paused/ended queue nothing; weekly moves them to the weekly day.
+    ///
+    /// THE SINGLE OWNER of reminder scheduling — call this and nothing else.
+    /// It is safe to call before any network round-trip: `profile` is loaded
+    /// from the local file in init(), so at launch this already knows the last
+    /// schedule the server gave us, and bootstrap simply re-runs it once the
+    /// fresh schedule lands. Call sites: app launch (SensingAppApp), bootstrap,
+    /// and after a successful survey submit (so today's reminder stops).
+    func refreshCheckInReminders(appState: AppState) {
         let schedule = surveySchedule
         SurveyNotificationManager.shared.applySchedule(
             cadence: schedule.cadence,

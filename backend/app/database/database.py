@@ -952,6 +952,213 @@ class DB:
             cur.execute(sql_text)
             return [dict(row) for row in cur.fetchall()]
 
+    # ---------------------------
+    # Study ids (server-authoritative — see PROFILE_API.md v2, GET /api/getstudyid)
+    #
+    # Maps the anonymous participant_id hash to a friendly, sequential study id
+    # (P01, P02, …). This map is the account↔participant kind of link the
+    # "Identity" section says to keep SILOED from the research dataset — it is
+    # its own table, never joined into the sensor/survey tables.
+    # ---------------------------
+    def create_study_ids_table(self) -> None:
+        """Create the study_ids table (+ its numbering sequence) if absent.
+
+        study_id is derived from a Postgres SEQUENCE so concurrent first-touch
+        requests for different participants can never collide on a number;
+        the participant_id PK + ON CONFLICT makes assignment idempotent per
+        participant (see get_or_assign_study_id). assigned_at is unix seconds
+        (DOUBLE PRECISION, like profiles.updated_at).
+        """
+        sql_text = """
+        CREATE SEQUENCE IF NOT EXISTS study_id_seq;
+        CREATE TABLE IF NOT EXISTS study_ids (
+            participant_id TEXT PRIMARY KEY,
+            study_id       TEXT UNIQUE NOT NULL,
+            assigned_at    DOUBLE PRECISION NOT NULL
+        );
+        """
+        with self.temporary_database_connection() as conn, conn.cursor() as cur:
+            cur.execute(sql_text)
+
+    def get_study_id(self, participant_id: str) -> Optional[str]:
+        """Return this participant's study id, or None if not yet assigned.
+
+        Read-only — never consumes a sequence value. Used by the upload route
+        to overwrite the (server-owned) study_id echoed by the phone.
+        """
+        sql_text = "SELECT study_id FROM study_ids WHERE participant_id = %s"
+        with self.temporary_database_connection() as conn, conn.cursor() as cur:
+            cur.execute(sql_text, (participant_id,))
+            row = cur.fetchone()
+            return row[0] if row else None
+
+    def get_or_assign_study_id(self, participant_id: str, assigned_at: float) -> str:
+        """Return this participant's study id, assigning the next one if new.
+
+        Idempotent and race-safe:
+          * Fast path — an already-assigned participant returns immediately and
+            never burns a sequence value.
+          * A new participant claims 'P' || nextval('study_id_seq'). The
+            ON CONFLICT (participant_id) DO NOTHING settles the rare case of two
+            concurrent requests for the *same* new hash — the loser's INSERT is
+            a no-op and it re-reads the winner's id. Two *different* new hashes
+            get distinct sequence numbers, so study_id never collides.
+        (A concurrent same-hash race can leave a one-off gap in the numbers;
+        harmless — ids stay unique and anonymous, and it essentially never
+        happens because the fast path short-circuits repeat requests.)
+        """
+        with self.temporary_database_connection() as conn, conn.cursor() as cur:
+            cur.execute(
+                "SELECT study_id FROM study_ids WHERE participant_id = %s",
+                (participant_id,),
+            )
+            row = cur.fetchone()
+            if row:
+                return row[0]
+
+            cur.execute(
+                """
+                INSERT INTO study_ids (participant_id, study_id, assigned_at)
+                VALUES (%s, 'P' || lpad(nextval('study_id_seq')::text, 2, '0'), %s)
+                ON CONFLICT (participant_id) DO NOTHING
+                RETURNING study_id;
+                """,
+                (participant_id, assigned_at),
+            )
+            row = cur.fetchone()
+            if row:
+                return row[0]
+
+            # Lost a concurrent race for this same participant — read the
+            # winner's assignment.
+            cur.execute(
+                "SELECT study_id FROM study_ids WHERE participant_id = %s",
+                (participant_id,),
+            )
+            return cur.fetchone()[0]
+
+    def list_study_ids(self) -> List[Dict[str, Any]]:
+        """Return all participant→study_id assignments, ordered by study_id."""
+        sql_text = (
+            "SELECT participant_id, study_id, assigned_at FROM study_ids "
+            "ORDER BY study_id"
+        )
+        with self.temporary_database_connection() as conn, conn.cursor(cursor_factory=DictCursor) as cur:
+            cur.execute(sql_text)
+            return [dict(row) for row in cur.fetchall()]
+
+    # ---------------------------
+    # Survey schedule (server-authoritative — see PROFILE_API.md v2,
+    # GET /api/getsurveystatus). Coordinators set the check-in cadence per
+    # participant via manage_survey_schedule.py; the phone only reads it.
+    # ---------------------------
+    def create_survey_schedule_table(self) -> None:
+        """Create the survey_schedule table if it doesn't exist.
+
+        One row per participant. cadence is one of daily/weekly/paused/ended
+        (matches iOS SurveyCadence). weekly_day is 1=Sunday…7=Saturday
+        (Calendar.component(.weekday)), NULL except for weekly. updated_at is
+        the coordinator's last change time in unix seconds.
+        """
+        sql_text = """
+        CREATE TABLE IF NOT EXISTS survey_schedule (
+            participant_id TEXT PRIMARY KEY,
+            cadence        TEXT NOT NULL,
+            weekly_day     INTEGER,
+            note           TEXT,
+            updated_at     DOUBLE PRECISION NOT NULL
+        );
+        """
+        with self.temporary_database_connection() as conn, conn.cursor() as cur:
+            cur.execute(sql_text)
+
+    def get_survey_schedule(self, participant_id: str) -> Optional[Dict[str, Any]]:
+        """Return {cadence, weekly_day, note, updated_at} or None if unset."""
+        sql_text = (
+            "SELECT cadence, weekly_day, note, updated_at FROM survey_schedule "
+            "WHERE participant_id = %s"
+        )
+        with self.temporary_database_connection() as conn, conn.cursor(cursor_factory=DictCursor) as cur:
+            cur.execute(sql_text, (participant_id,))
+            row = cur.fetchone()
+            return dict(row) if row else None
+
+    def upsert_survey_schedule(
+        self,
+        participant_id: str,
+        cadence: str,
+        weekly_day: Optional[int],
+        note: Optional[str],
+        updated_at: float,
+    ) -> None:
+        """Set (or replace) a participant's coordinator-owned check-in schedule."""
+        sql_text = """
+        INSERT INTO survey_schedule (participant_id, cadence, weekly_day, note, updated_at)
+        VALUES (%s, %s, %s, %s, %s)
+        ON CONFLICT (participant_id)
+        DO UPDATE SET cadence = EXCLUDED.cadence,
+                      weekly_day = EXCLUDED.weekly_day,
+                      note = EXCLUDED.note,
+                      updated_at = EXCLUDED.updated_at;
+        """
+        with self.temporary_database_connection() as conn, conn.cursor() as cur:
+            cur.execute(sql_text, (participant_id, cadence, weekly_day, note, updated_at))
+
+    def list_survey_schedules(self) -> List[Dict[str, Any]]:
+        """Return all survey schedules, ordered by participant_id."""
+        sql_text = (
+            "SELECT participant_id, cadence, weekly_day, note, updated_at "
+            "FROM survey_schedule ORDER BY participant_id"
+        )
+        with self.temporary_database_connection() as conn, conn.cursor(cursor_factory=DictCursor) as cur:
+            cur.execute(sql_text)
+            return [dict(row) for row in cur.fetchall()]
+
+    # ---------------------------
+    # Account ↔ participant map (authorizes profile access when
+    # REQUIRE_PROFILE_AUTH is on — see auth/routes.py login() and
+    # routes/profile.py require_profile_access).
+    #
+    # This is the auth-account ↔ participant_id link the "Identity" section of
+    # PROFILE_API.md says to keep SILOED from the research dataset: its own
+    # table, never joined into the sensor/survey tables. Populated at login by
+    # hashing the Apple sub the same way the phone does (SHA-256 hex), so the
+    # server can verify a token's user owns a given participant hash without the
+    # phone ever sending it.
+    # ---------------------------
+    def create_account_participants_table(self) -> None:
+        """Create the account_participants map if it doesn't exist."""
+        sql_text = """
+        CREATE TABLE IF NOT EXISTS account_participants (
+            user_id        INTEGER PRIMARY KEY REFERENCES users(id),
+            participant_id TEXT UNIQUE NOT NULL,
+            linked_at      DOUBLE PRECISION NOT NULL
+        );
+        """
+        with self.temporary_database_connection() as conn, conn.cursor() as cur:
+            cur.execute(sql_text)
+
+    def link_account_participant(
+        self, user_id: int, participant_id: str, linked_at: float
+    ) -> None:
+        """Idempotently record a user's participant hash (set at every login)."""
+        sql_text = """
+        INSERT INTO account_participants (user_id, participant_id, linked_at)
+        VALUES (%s, %s, %s)
+        ON CONFLICT (user_id)
+        DO UPDATE SET participant_id = EXCLUDED.participant_id;
+        """
+        with self.temporary_database_connection() as conn, conn.cursor() as cur:
+            cur.execute(sql_text, (user_id, participant_id, linked_at))
+
+    def get_participant_id_for_user(self, user_id: int) -> Optional[str]:
+        """Return the participant hash linked to this account, or None."""
+        sql_text = "SELECT participant_id FROM account_participants WHERE user_id = %s"
+        with self.temporary_database_connection() as conn, conn.cursor() as cur:
+            cur.execute(sql_text, (user_id,))
+            row = cur.fetchone()
+            return row[0] if row else None
+
 # db = DB()
 
 # # Create or ensure a participant exists

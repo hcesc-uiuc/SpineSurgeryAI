@@ -10,23 +10,38 @@
 //  again (see ProfileStore.isEnrolled).
 //
 //  INTERIM CLIENT-SIDE VALIDATION:
-//  Until the backend implements server-side codes (PROFILE_API.md), the
-//  valid codes are baked into the app — as SHA-256 hashes, so the codes
-//  cannot be read out of the shipped binary with `strings`. The plaintext
-//  codes are distributed to coordinators out-of-band and are intentionally
-//  NOT in this repository.
+//  The app currently runs in demo mode (SecureAuthManager.demoMode), so
+//  login() returns before it ever reaches the server. That makes this local
+//  check the ONLY thing gating enrollment today, even though the backend's
+//  real gate is already built (auth/routes.py returns 403
+//  invalid_enrollment_code against the enrollment_codes table).
+//
+//  HOW MUCH PROTECTION THE HASHING ACTUALLY GIVES: very little. Storing
+//  digests instead of plaintext stops someone running `strings` on the
+//  binary — and nothing more. A 6-digit code is a keyspace of one million,
+//  so computing all 10^6 SHA-256 digests and matching them against the list
+//  below takes well under a second on any laptop. Treat this as a barrier to
+//  casual sign-ups, NOT as a secret. The real gate is the server's.
+//
+//  ⚠️ TWO PLACES TO UPDATE: a code must exist BOTH here and in the server's
+//  enrollment_codes table (manage_enrollment_codes.py). A code added only on
+//  the server is rejected on the phone before the request is ever made, so
+//  the CLI appears broken. Removing this file's check is part of leaving
+//  demo mode — see below.
 //
 //  To add a code:   echo -n 123456 | shasum -a 256
-//  and append the hex digest to validCodeHashes.
+//  and append the hex digest to validCodeHashes — then add the same code
+//  with `python manage_enrollment_codes.py add 123456`.
 //
 //  KNOWN LIMITS (accepted for the pilot):
 //    • Codes are shared, reusable, and cannot be revoked without an
 //      app update.
 //    • A new device cannot know an Apple ID is already enrolled, so the
 //      prompt reappears there until the backend can answer that lookup.
-//  Server-side replacement: validate() becomes a single call to
-//  POST /auth/login with enrollment_code (already sent — see
-//  SecureAuthManager.login), and this hash list is deleted.
+//  Server-side replacement: when demoMode goes false, delete validate()'s
+//  hash check and let POST /auth/login be the sole authority — the code is
+//  already sent (see SecureAuthManager.login) and 403 already maps to
+//  AuthError.invalidEnrollmentCode.
 //
 
 import Foundation

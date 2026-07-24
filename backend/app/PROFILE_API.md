@@ -158,107 +158,108 @@ network or Postgres needed: `python -m pytest tests/`.
 
 ---
 
-## v2 (July 2026, akarsh-issue-55) — 4-endpoint split-authority contract
+## v2 (July 2026) — 4-endpoint split-authority contract
 
-Per the study team, the profile sync moved from ONE blob (`GET/PUT
-/api/profile/<pid>`) to FOUR named endpoints, and gained two
-**server-authoritative** concepts the coordinators own: a friendly **study
-id** (P01…) and a **survey schedule** (daily / weekly / paused / ended). The
-iOS app (branch `akarsh-issue-55`, `util/UserProfile.swift`) already speaks
-this v2 contract; implement it here and everything syncs with zero app
-changes. The old `/api/profile/<pid>` routes can stay as internal helpers or
-be retired — the app no longer calls them.
+The current iOS app (`ios/.../util/UserProfile.swift`, `schema_version: 2`)
+splits the profile into two owners of truth and syncs them over four
+endpoints instead of the single v1 GET/PUT. Implemented on `routes/profile.py`;
+the v1 `/api/profile` routes stay as internal helpers (the app no longer calls
+them). All four are **tokenless** for now, same as v1 — TODO: wrap them (and
+v1) in `require_auth` + a user↔participant check when demo mode is removed.
 
-### Authority model (important)
-- **SERVER owns** `study_id` and `survey_schedule`. Coordinators set them on
-  the web; the app PULLS them on every login and never writes them back. Do
-  NOT overwrite them from the uploaded profile body (see upload note below).
-- **PHONE owns** `first_open_date` and `survey_history` (completion calendar).
-  The app pushes the whole profile up on every change; store it verbatim.
+**Split authority.** Two owners, reconciled on every login:
+- **Server-owned**: `study_id` (P01…) and `survey_schedule`
+  (daily/weekly/paused/ended). Coordinators set these; the phone pulls them on
+  every login and overwrites its local copy — it never edits them.
+- **Phone-owned**: `first_open_date` (the Day-N anchor) and `survey_history`
+  (the calendar of *completed* check-ins — completion state only, never the
+  survey answers). The phone owns these and pushes them up on every mutation.
 
-### Identity — unchanged
-Still keyed by the anonymous `participant_id` hash (no PII). The study id is a
-SEPARATE, human-friendly label the server assigns; keep the
-`participant_id ↔ study_id` map and the account↔participant map **siloed away
-from the research dataset** so the P01 label can't be used to re-identify
-anyone. Uploaded sensor/survey data is still tagged with the hash only (the
-app does NOT stamp P01 on uploads — decided July 2026, revisit with the team).
+### Endpoints
 
-### The 4 endpoints
+- **`GET /api/getstudyid/<participant_id>` → `{"study_id": "P01"}`.**
+  Assign-or-return: the first time the server sees a hash it hands out the next
+  id; later calls return the same one (idempotent). Numbers come from a Postgres
+  `SEQUENCE` (race-safe); a SELECT-first fast path means repeat calls never burn
+  a value. Assigns to *any* hash on request (matches the iOS bootstrap, which
+  calls this on every login) — locking that down is part of the auth TODO.
+- **`GET /api/getuserprofile/<participant_id>` → profile JSON | 404.**
+  The v1 GET, renamed. Returns the stored document verbatim; the app calls it
+  only when it has no local copy (fresh install / new device).
+- **`GET /api/getsurveystatus/<participant_id>` → schedule JSON | 404.**
+  `{cadence, weekly_day, note, updated_at}` (snake_case, decoded straight into
+  iOS `SurveySchedule`). `weekly_day` is 1=Sunday…7=Saturday, non-null only for
+  `weekly`. **404** = no schedule on file; the app keeps its daily default.
+- **`POST /api/uploaduserprofile/<participant_id>` → `{"status": "ok"}`.**
+  Upsert of the full document (same validation as v1 PUT: pid-match,
+  `schema_version` ∈ {1, 2}, 256 KB cap). Stores phone-owned fields as sent, but
+  **overwrites `study_id` and `survey_schedule` with the server's stored values**
+  so a stale phone can't revert a coordinator change (when the server has no
+  stored value yet, the sent value is kept). Because it rewrites those fields,
+  the stored bytes are a re-serialization, not verbatim (unlike the v1 PUT).
 
-**1. `GET /api/getstudyid/<participant_id>`**
-Assign-or-return. If this hash has no study id yet, allocate the **next
-available** one (e.g. `P01`, `P02`, … — a simple sequence/counter; guard
-against races so two hashes never get the same id) and persist the mapping.
-Reply:
-```json
-{ "study_id": "P01" }
+### Storage — two new tables (auto-created in `app.py`, alongside `profiles`)
+- `study_ids` (participant_id PK, study_id UNIQUE, assigned_at DOUBLE PRECISION)
+  + a `study_id_seq` SEQUENCE. The participant→study_id map is the
+  account↔participant kind of link the "Identity" section says to keep **siloed**
+  from the research dataset — its own table, never joined into sensor/survey data.
+- `survey_schedule` (participant_id PK, cadence, weekly_day INT, note,
+  updated_at DOUBLE PRECISION) — one row per participant, coordinator-managed.
+
+### Coordinators — `manage_survey_schedule.py` (mirrors `manage_enrollment_codes.py`)
 ```
-Called on every login. Must be idempotent — the same hash always gets the
-same id back.
-
-**2. `GET /api/getuserprofile/<participant_id>`**
-The whole profile JSON (schema below), or **404** if none. The app calls this
-only when it has no local copy (fresh install / new device) — this is what
-restores a participant's progress. (Same behavior as the old `GET
-/api/profile`, just renamed.)
-
-**3. `GET /api/getsurveystatus/<participant_id>`**
-The coordinator-set schedule for this participant, or **404** (app then keeps
-its local default of `daily`). Pulled on EVERY login and overwrites the local
-schedule. Shape (snake_case):
-```json
-{
-  "cadence": "daily",        // "daily" | "weekly" | "paused" | "ended"
-  "weekly_day": 2,           // 1=Sun … 7=Sat; only meaningful for "weekly", else null
-  "note": "Study paused — contact your coordinator.",  // optional, nullable
-  "updated_at": 1782000000.0 // optional
-}
+python manage_survey_schedule.py daily  <participant_id> [--note "..."]
+python manage_survey_schedule.py weekly <participant_id> --day <1-7> [--note "..."]
+python manage_survey_schedule.py paused <participant_id> [--note "..."]
+python manage_survey_schedule.py ended  <participant_id> [--note "..."]
+python manage_survey_schedule.py show   <participant_id>
+python manage_survey_schedule.py list
 ```
-This is the ONLY thing the phone reads to decide daily-reminder scheduling,
-check-in tab availability, and the Home check-in card. Coordinators need a way
-to set it per participant (dashboard row or a `manage_survey_schedule.py` CLI,
-mirroring `manage_enrollment_codes.py`). Suggested storage: one row per
-participant `(participant_id PK, cadence, weekly_day, note, updated_at)`.
 
-**4. `POST /api/uploaduserprofile/<participant_id>`**
-Body = the full profile JSON. Upsert (replace the stored document). MUST reply
-exactly `{"status": "ok"}` (the app string-matches it before showing "Backed
-up"). **Server-authority caveat:** the uploaded body will echo back
-`study_id` and `survey_schedule` (the app carries them in its local copy), but
-those are SERVER-owned — ignore/overwrite them with your stored values rather
-than trusting the client copy, so a stale phone can't revert a coordinator's
-change. Store `first_open_date` and `survey_history` as sent.
+### Auth — off in demo, ready for production (the `REQUIRE_PROFILE_AUTH` switch)
+All six profile routes carry the `require_profile_access` guard, gated by the
+`REQUIRE_PROFILE_AUTH` config flag (env var, default **false**):
 
-### Profile JSON — v2 (snake_case on the wire)
-```json
-{
-  "schema_version": 2,
-  "participant_id": "9f2c…64-hex…",
-  "study_id": "P01",
-  "enrollment_code": "483920",
-  "enrolled_at": 1782000000.0,
-  "first_open_date": 1782000000.0,
-  "survey_schedule": { "cadence": "daily", "weekly_day": null, "note": null, "updated_at": null },
-  "preferences": { "reminder_hour": 20, "reminder_minute": 0 },
-  "survey_history": [
-    { "date": "2026-07-01", "pain_score": 4, "completed": true },
-    { "date": "2026-07-02", "pain_score": null, "completed": true }
-  ],
-  "sensor_status": [],
-  "updated_at": 1782086400.0
-}
-```
-Notes:
-- `schema_version` is now **2**. Keep accepting/storing the raw document so
-  older/newer clients keep working; add `2` to the known-versions set.
-- `study_id`, `enrollment_code`, `enrolled_at`, `first_open_date`,
-  `pain_score`, and every `survey_schedule` sub-field are nullable.
-- `sensor_status` is a display-only mirror of the Sensors-tab "last recorded"
-  lines (`[{ "kind", "value"?, "date" }]`); currently always `[]` from the app
-  (populated later once issue-52 lands). Store verbatim.
+- **false (shipped default)** — tokenless passthrough, matching the iOS app's
+  `demoMode = true` (it sends no Bearer token). Deploying this code changes
+  nothing until the flag is set, so the live demo is never broken.
+- **true (production)** — each route requires a valid access token AND that the
+  token's account **owns** the `<participant_id>` in the URL; otherwise the
+  app's structured 401 (`missing_token`/`token_expired`/`invalid_token`) or
+  **403** `{"error":"forbidden"}`. Without this, anyone knowing a participant
+  hash could read/write that participant's profile.
 
-### Auth — same as v1
-Tokenless for now (demo mode). When demo mode is removed, protect all four
-routes with `require_auth` and verify the token's account maps to
-`<participant_id>`.
+The ownership check uses a new **`account_participants`** map (user_id PK →
+participant_id), populated at `/auth/login`: the server hashes the verified
+Apple `sub` with SHA-256 — byte-for-byte what iOS `ParticipantID.hash` produces
+— so it never trusts a client-sent id. Kept siloed from the research dataset
+per "Identity". Token validation is shared with `require_auth` via
+`auth.middleware.authenticate_bearer`.
+
+**Going to production is a coordinated flip:**
+1. iOS: set `demoMode = false` (deletes the three demo blocks in
+   `SecureAuthManager.swift`) so the app sends Bearer tokens.
+2. Server: `REQUIRE_PROFILE_AUTH=true`, and load real enrollment codes
+   (`manage_enrollment_codes.py add …`) — in demo mode codes are checked
+   client-side, but real `/auth/login` requires them in the DB or every new
+   user gets 403.
+3. Put the API behind **HTTPS** — the iOS `baseURL` is currently plaintext
+   `http://`; tokens and hashes must not travel in the clear.
+
+### Tests
+`tests/test_survey_profile_v2.py` — all four endpoints (assign/idempotency,
+404s, the server-authority overwrite, phone-owned passthrough, schema_version 2,
+the v1 validation cases) plus the `REQUIRE_PROFILE_AUTH` enforcement path
+(missing/expired token, ownership match/mismatch). `tests/test_auth.py` covers
+the login→participant link. Mocked-DB like `test_profile.py`.
+Full suite: `python -m pytest tests/` (55 tests).
+
+### Upload tagging — hash only (team decision, July 2026)
+
+Uploaded sensor and survey files are tagged with the anonymous
+`participant_id` hash **only**. The app deliberately does NOT stamp the
+friendly `study_id` (P01…) onto uploaded data: that label is a coordinator
+convenience, and putting it on the research payload would give the dataset a
+second, human-meaningful key to join on. Coordinators resolve P01 → hash via
+`study_ids` when they need to; the research data itself stays hash-keyed.
+Revisit with the team if the analysis pipeline ever needs the label inline.

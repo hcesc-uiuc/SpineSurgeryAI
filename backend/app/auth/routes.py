@@ -64,6 +64,16 @@ def login():
         user = db.create_user(apple_user_id, None, None)
         db.mark_enrollment_code_used(code_record['code'], user['id'])
 
+    # Record the account↔participant link so profile endpoints can authorize by
+    # participant hash when REQUIRE_PROFILE_AUTH is on. The participant_id is
+    # SHA-256(apple_sub) — exactly what iOS ParticipantID.hash() computes — so
+    # the server derives it here rather than trusting the client. Idempotent:
+    # re-linked (harmlessly) on every login.
+    participant_id = hashlib.sha256(apple_user_id.encode()).hexdigest()
+    db.link_account_participant(
+        user['id'], participant_id, datetime.now(timezone.utc).timestamp()
+    )
+
     raw_refresh, hashed_refresh = _make_refresh_token()
     expires_at = datetime.now(timezone.utc) + REFRESH_TOKEN_TTL
     db.create_refresh_token(user['id'], hashed_refresh, expires_at)

@@ -71,10 +71,21 @@ struct MainAppView: View {
         .onChange(of: selectedTab) { _, newValue in
             // Tapping the separated check-in slot opens the survey instead of
             // navigating; remember the previous tab so we can restore it on dismiss.
-            if newValue == .survey {
+            guard newValue == .survey else {
+                lastNonSurveyTab = newValue
+                return
+            }
+            // Only open the survey when one is actually due — the same test the
+            // Home check-in card uses. Without this the slot was an ungated back
+            // door: a participant whose study is PAUSED or ENDED could still
+            // submit, and a completed check-in could be submitted twice. The
+            // icon already shows the state; this makes the tap agree with it.
+            if canOpenCheckIn {
                 isSurveyPresented = true
             } else {
-                lastNonSurveyTab = newValue
+                // Nothing to do — bounce straight back to the previous tab so
+                // the slot never sits stuck in a selected state.
+                selectedTab = lastNonSurveyTab
             }
         }
         .sheet(isPresented: $isSurveyPresented, onDismiss: {
@@ -136,6 +147,13 @@ struct MainAppView: View {
         if appState.isCompletedToday { return "checkmark.circle.fill" }
         if profileStore.isCheckInDueToday() { return "list.clipboard.fill" }
         return "list.clipboard"
+    }
+
+    /// Whether tapping the check-in slot should actually open the survey.
+    /// Mirrors HomeView's `.disabled(checkInComplete || !checkInDueToday)` so
+    /// the two entry points into the survey can never disagree.
+    private var canOpenCheckIn: Bool {
+        !appState.isCompletedToday && profileStore.isCheckInDueToday()
     }
 
     // ============================================================
