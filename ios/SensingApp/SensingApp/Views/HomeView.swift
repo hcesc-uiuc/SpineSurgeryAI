@@ -57,13 +57,17 @@ struct HomeView: View {
 
                 ScrollView {
                     VStack(spacing: 20) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(greetingText)
-                                .font(.system(size: 14, weight: .medium, design: .rounded))
-                                .foregroundStyle(Color(red: 0.55, green: 0.47, blue: 0.44))
-                            Text("Hi there 👋")
-                                .font(.system(size: 28, weight: .bold, design: .rounded))
-                                .foregroundStyle(Color(red: 0.28, green: 0.22, blue: 0.20))
+                        HStack(alignment: .center, spacing: 12) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(greetingText)
+                                    .font(.system(size: 14, weight: .medium, design: .rounded))
+                                    .foregroundStyle(Color(red: 0.55, green: 0.47, blue: 0.44))
+                                Text("Hi there 👋")
+                                    .font(.system(size: 28, weight: .bold, design: .rounded))
+                                    .foregroundStyle(Color(red: 0.28, green: 0.22, blue: 0.20))
+                            }
+                            Spacer(minLength: 8)
+                            dayPill
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, 24)
@@ -72,10 +76,15 @@ struct HomeView: View {
                         .offset(y: appeared ? 0 : 12)
                         .animation(.easeOut(duration: 0.45).delay(0.05), value: appeared)
 
-                        recoveryDayCard
-                            .opacity(appeared ? 1 : 0)
-                            .offset(y: appeared ? 0 : 16)
-                            .animation(.easeOut(duration: 0.45).delay(0.15), value: appeared)
+                        // The welcome block is a day-one-only moment. From day 2 on
+                        // the day number lives in the pill beside the greeting, so
+                        // the card would just repeat it and push everything down.
+                        if currentDay == 1 {
+                            recoveryDayCard
+                                .opacity(appeared ? 1 : 0)
+                                .offset(y: appeared ? 0 : 16)
+                                .animation(.easeOut(duration: 0.45).delay(0.15), value: appeared)
+                        }
 
                         // ── Weekly survey strip ──────────────
                         weeklyStripCard
@@ -285,6 +294,40 @@ struct HomeView: View {
         statCaptions = captions
     }
 
+    /// Compact day counter that sits beside the greeting. It is the permanent
+    /// home of the day number from day 2 on, and it absorbs the milestone
+    /// callout (🎉 Day 7) rather than adding a second element to the row.
+    private var dayPill: some View {
+        HStack(spacing: 5) {
+            if currentMilestone != nil {
+                Text("🎉")
+                    .font(.system(size: 13))
+            }
+            Text("Day")
+                .font(.system(size: 13, weight: .medium, design: .rounded))
+                .foregroundStyle(.white.opacity(0.85))
+            Text("\(currentDay)")
+                .font(.system(size: 17, weight: .bold, design: .rounded))
+                .foregroundStyle(.white)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+        .background(
+            Capsule()
+                .fill(
+                    LinearGradient(
+                        colors: [accentColor, accentColor.opacity(0.75)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .shadow(color: accentColor.opacity(0.30), radius: 8, y: 3)
+        )
+        .fixedSize()
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(currentMilestone ?? "Day \(currentDay) of your recovery journey")
+    }
+
     private var recoveryDayCard: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 24)
@@ -303,19 +346,11 @@ struct HomeView: View {
                 Text("\(currentDay)")
                     .font(.system(size: 40, weight: .bold, design: .rounded))
                     .foregroundStyle(.white)
-                Text(currentDay == 1 ? "Welcome to your recovery journey!" : "of your recovery journey")
+                Text("Welcome to your recovery journey!")
                     .font(.system(size: 12, weight: .medium, design: .rounded))
                     .foregroundStyle(.white.opacity(0.85))
-                if let milestone = currentMilestone {
-                    Text(milestone)
-                        .font(.system(size: 11, weight: .semibold, design: .rounded))
-                        .foregroundStyle(accentColor)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 4)
-                        .background(.white.opacity(0.9))
-                        .clipShape(Capsule())
-                        .padding(.top, 4)
-                }
+                // No milestone capsule here: this card only renders on day 1,
+                // which is never a milestone day. Milestones live in dayPill.
             }
             .padding(.vertical, 16)
         }
