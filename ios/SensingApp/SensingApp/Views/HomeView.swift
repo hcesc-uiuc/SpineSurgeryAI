@@ -7,6 +7,7 @@
 
 import SwiftUI
 import HealthKit
+internal import Combine   // .receive(on:) on the NSCalendarDayChanged publisher
 
 struct HomeView: View {
     let accentColor: Color
@@ -17,12 +18,21 @@ struct HomeView: View {
     @AppStorage("journey_first_open_date") private var firstOpenTimestamp: Double = 0
     @Environment(\.scenePhase) private var scenePhase
 
+    /// Midnight of the current day, held as state rather than read from `Date()`
+    /// inside the body. Everything date-dependent on this screen (the Day pill,
+    /// the "Today" column, which circles are in the future) derives from it, so
+    /// refreshing this one value rolls the whole screen over — and because the
+    /// body READS it, SwiftUI is guaranteed to re-render. Computing from
+    /// `Date()` directly looked identical but only updated when something else
+    /// happened to invalidate the view, so an app left open past midnight kept
+    /// yesterday's day number and labelled yesterday "Today".
+    @State private var todayStart = Calendar.current.startOfDay(for: Date())
+
     private var currentDay: Int {
         guard firstOpenTimestamp != 0 else { return 1 }
         let cal = Calendar.current
         let start = cal.startOfDay(for: Date(timeIntervalSince1970: firstOpenTimestamp))
-        let today = cal.startOfDay(for: Date())
-        return max(1, (cal.dateComponents([.day], from: start, to: today).day ?? 0) + 1)
+        return max(1, (cal.dateComponents([.day], from: start, to: todayStart).day ?? 0) + 1)
     }
 
     private var checkInComplete: Bool { appState.isCompletedToday }
@@ -133,6 +143,7 @@ struct HomeView: View {
         .onAppear {
             appeared = true
             if firstOpenTimestamp == 0 { firstOpenTimestamp = Date().timeIntervalSince1970 }
+            rollDayIfNeeded()
             loadTodayHealthStats()
             loadWeeklyProgress()
         }
@@ -140,10 +151,34 @@ struct HomeView: View {
         // when the app was reopened. Reload whenever the scene becomes active.
         .onChange(of: scenePhase) { _, newPhase in
             if newPhase == .active {
+                rollDayIfNeeded()
                 loadTodayHealthStats()
                 loadWeeklyProgress()
             }
         }
+        // Covers the app being left open across midnight, when neither onAppear
+        // nor scenePhase fires. iOS posts this on a day change and on timezone
+        // changes; RunLoop.main because @State must only be touched on main.
+        .onReceive(
+            NotificationCenter.default
+                .publisher(for: .NSCalendarDayChanged)
+                .receive(on: RunLoop.main)
+        ) { _ in
+            rollDayIfNeeded()
+        }
+    }
+
+    /// Re-anchors the screen on the current day. No-op when the day has not
+    /// changed, so it is safe to call on every appear and foreground.
+    private func rollDayIfNeeded() {
+        let start = calendar.startOfDay(for: Date())
+        guard start != todayStart else { return }
+        todayStart = start
+        // The visible week may have rolled too (Sat → Sun), so the completion
+        // map has to be rebuilt for the new set of days. `start` is passed
+        // explicitly rather than relying on the @State write above being
+        // readable again this same tick.
+        loadWeeklyProgress(anchor: start)
     }
 
     // ── Weekly strip card ─────────────────────
@@ -155,15 +190,20 @@ struct HomeView: View {
 
             HStack(spacing: 0) {
                 ForEach(currentWeekDays(), id: \.self) { date in
-                    let isToday    = calendar.isDateInToday(date)
-                    let isFuture   = date > Date()
+                    let isToday    = calendar.isDate(date, inSameDayAs: todayStart)
+                    let isFuture   = date > todayStart
                     let completed  = weeklyProgress[calendar.startOfDay(for: date)] ?? false
                     let dayLetter  = shortDayLetter(for: date)
                     let dayNum     = calendar.component(.day, from: date)
 
                     VStack(spacing: 6) {
-                        Text(dayLetter)
-                            .font(.system(size: 11, weight: .medium, design: .rounded))
+                        // Today reads "Today" rather than its weekday letter — it is
+                        // the one column people look for. lineLimit/minimumScaleFactor
+                        // keep it inside the ~34pt column on the smallest phones.
+                        Text(isToday ? "Today" : dayLetter)
+                            .font(.system(size: 11, weight: isToday ? .semibold : .medium, design: .rounded))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.75)
                             .foregroundStyle(isToday
                                 ? Color(red: 0.22, green: 0.48, blue: 0.40)
                                 : Color(red: 0.55, green: 0.47, blue: 0.44))
@@ -214,8 +254,8 @@ struct HomeView: View {
         .padding(.horizontal, 24)
     }
 
-    private func currentWeekDays() -> [Date] {
-        let today       = calendar.startOfDay(for: Date())
+    private func currentWeekDays(anchor: Date? = nil) -> [Date] {
+        let today       = anchor ?? todayStart
         let weekday     = calendar.component(.weekday, from: today) // 1=Sun
         let startOfWeek = calendar.date(byAdding: .day, value: -(weekday - 1), to: today)!
         return (0..<7).compactMap { calendar.date(byAdding: .day, value: $0, to: startOfWeek) }
@@ -227,8 +267,8 @@ struct HomeView: View {
         return symbols[weekday]
     }
 
-    private func loadWeeklyProgress() {
-        let days = currentWeekDays()
+    private func loadWeeklyProgress(anchor: Date? = nil) {
+        let days = currentWeekDays(anchor: anchor)
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd"
 
