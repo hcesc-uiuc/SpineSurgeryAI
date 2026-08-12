@@ -295,27 +295,35 @@ struct HomeView: View {
         weeklyProgress = result
     }
 
-    // Home tiles read from SensorDataStore, which resolves every metric in one
-    // place: an imported file wins, else the live HealthKit stamp, else the
-    // sample fallback. The six HealthKit queries that used to live here were a
-    // second, duplicate source of truth for the same six numbers.
+    // Home tiles read from SensorStatusStore, which resolves every metric in one
+    // place: an imported file wins, else the live HealthKit stamp, else nothing.
+    // The six HealthKit queries that used to live here were a second, duplicate
+    // source of truth for the same six numbers.
     private func loadTodayHealthStats() {
         applySensorStore()                                   // cached stamps + imports, instantly
-        SensorStatusStore.shared.refreshHealthKitSamples {    // then the live samples
+        Task {
+            // Pick up anything dropped into the Documents folder since we were
+            // last on screen. Blocking file I/O, so it runs off the main actor;
+            // captures nothing, so it is safe to detach.
+            await Task.detached { _ = SensorFileImporter.autoIngestInbox() }.value
             applySensorStore()
+            SensorStatusStore.shared.refreshHealthKitSamples {   // then the live samples
+                applySensorStore()
+            }
         }
     }
 
     /// Pull each tile's value and caption out of the store. A caption appears
     /// only when the reading is noteworthy — imported, or not from today. (The
-    /// DEBUG sample table is never surfaced on Home; see SensorDataStore.homeTile.)
+    /// DEBUG sample table is never surfaced on Home; see
+    /// SensorStatusStore.homeTile.)
     ///
     /// Every tile is assigned on every pass, INCLUDING the nil case. Skipping the
     /// nil case left the last known value on screen forever: deleting an import,
     /// or clearing them all, kept showing the imported number because nothing
     /// ever wrote over it.
     private func applySensorStore() {
-        let store = SensorDataStore.shared
+        let store = SensorStatusStore.shared
         var captions: [SensorKind: String] = [:]
 
         func tile(_ kind: SensorKind, _ assign: (Double?) -> Void) {

@@ -2,14 +2,21 @@
 //  ImportDataView.swift
 //  SensingApp
 //
-//  DEBUG-only screen for loading sensor data from a CSV instead of editing
+//  DEBUG-only screen for loading sensor data from a file instead of editing
 //  hardcoded values in code. Reached from the Debug tab; never shipped to
 //  patients (the Debug tab itself is behind #if DEBUG).
 //
-//  The import log at the bottom is not bookkeeping — it is the check that an
-//  import actually landed. If you load a new file and the screen still shows
-//  yesterday's value, the log tells you whether the import silently failed or
-//  the display is stale.
+//  There are two ways in, and this screen is the SECOND one:
+//    1. Drop a file into the app's Documents folder over the Files app or
+//       Finder, then reopen the app. No UI at all — the app picks it up on
+//       foreground. This is the everyday path.
+//    2. This screen, for picking a file from anywhere, checking what the
+//       importer made of it before storing, and overriding the sensor when the
+//       filename does not say.
+//
+//  The log at the bottom is not bookkeeping — it is the check that an import
+//  actually landed. If you load a file and a screen still shows the old value,
+//  the log says whether the import failed or the display is stale.
 //
 
 import SwiftUI
@@ -26,14 +33,11 @@ struct ImportDataView: View {
     @State private var preview: SensorFileImporter.Preview?
     @State private var chosenKind: SensorKind = .heartRate
 
-    @State private var activeImports: [SensorImportRecord] = []
-    @State private var log: [SensorImportRecord] = []
+    @State private var loaded: [SensorImportInfo] = []
+    @State private var log: [String] = []
     @State private var status: String?
     @State private var busy = false
     @State private var showClearConfirm = false
-    // Set while the "send to database" confirmation is up. Uploading writes into
-    // the live study pipeline, so it asks first.
-    @State private var pendingSend: SensorImportRecord?
 
     private let cream = Color(red: 0.99, green: 0.97, blue: 0.95)
     private let ink = Color(red: 0.28, green: 0.22, blue: 0.20)
@@ -76,39 +80,25 @@ struct ImportDataView: View {
             }
         }
         .fileImporter(isPresented: $showFileImporter,
-                      allowedContentTypes: [.commaSeparatedText, .plainText, .data],
+                      allowedContentTypes: [.commaSeparatedText, .plainText, .json, .data],
                       allowsMultipleSelection: false) { result in
             if case .success(let urls) = result, let url = urls.first { inspect(picked: url) }
         }
         .sheet(item: $preview) { p in confirmSheet(p) }
         .alert("Clear all imported data?", isPresented: $showClearConfirm) {
             Button("Clear", role: .destructive) {
-                SensorDataStore.shared.clearAllImports()
+                SensorStatusStore.shared.clearAllImports()
+                // Otherwise files still sitting in the Documents folder would
+                // stay suppressed forever — they are unchanged, so the automatic
+                // pickup would consider them already done.
+                SensorFileImporter.forgetAutoIngestHistory()
                 status = "Cleared. Screens fall back to live data."
+                log.insert("Cleared all imported data", at: 0)
                 reload()
             }
             Button("Cancel", role: .cancel) { }
         } message: {
-            Text("Every imported series is deleted and the app goes back to live HealthKit and recorder data.")
-        }
-        // Sending is not a preview step — it puts this file into the same queue
-        // the recorders use, tagged with the real participant ID, so it asks first.
-        .alert("Send to the live study database?",
-               isPresented: Binding(get: { pendingSend != nil },
-                                    set: { if !$0 { pendingSend = nil } }),
-               presenting: pendingSend) { record in
-            Button("Send", role: .destructive) {
-                let target = record
-                pendingSend = nil
-                send(target)
-            }
-            Button("Cancel", role: .cancel) { pendingSend = nil }
-        } message: { record in
-            Text("""
-                 \(record.filename) (\(record.rowCount) rows) will be uploaded to the real study pipeline, tagged with this device's participant ID — the same path recorder data takes. It is identifiable server-side only by its "healthkit_import_" filename prefix.
-
-                 This also flushes everything else waiting in the upload queue.
-                 """)
+            Text("Every imported reading is dropped and the app goes back to live HealthKit and recorder data. Files in the Documents folder are left alone, and will be picked up again next time the app opens.")
         }
         .onAppear(perform: reload)
     }
@@ -117,133 +107,131 @@ struct ImportDataView: View {
 
     private var sourceCard: some View {
         card("LOAD A FILE") {
-            Text("Expects `timestamp,value` per line, header optional. The sensor is detected from the filename — heartratedata.csv, steps.csv, sleep.csv.")
+            Text("The importer works out the shape of the file: comma, tab or semicolon separated, or JSON. It finds the timestamp column by probing, and the value column after it. Header optional. A file with no timestamps at all is read as bare readings, dated by the file itself.")
+                .font(.system(size: 12, design: .rounded))
+                .foregroundStyle(muted)
+
+            Text("The sensor is taken from the filename — heartratedata.csv, steps.csv, sleep.json — and you can override it on the next screen.")
                 .font(.system(size: 12, design: .rounded))
                 .foregroundStyle(muted)
 
             Button { showFileImporter = true } label: {
-                actionLabel("Import data file…", icon: "square.and.arrow.down")
+                actionLabel("Choose a file…", icon: "doc.badge.plus")
             }
+            .buttonStyle(.plain)
+
             Button {
-                scannedFiles = SensorFileImporter.scanDocumentsFolder()
+                scannedFiles = SensorFileImporter.scanAllFolders()
                 didScan = true
-                status = scannedFiles.isEmpty
-                    ? "No .csv or .txt files found in Documents, to-be-processed/ or processed/."
-                    : nil
+                if scannedFiles.isEmpty {
+                    status = "No data files found in Documents, to-be-processed/ or processed/."
+                }
             } label: {
-                actionLabel("Scan on-device files", icon: "folder")
+                HStack(spacing: 8) {
+                    Image(systemName: "folder.badge.questionmark")
+                    Text("Scan on-device files")
+                        .font(.system(size: 15, weight: .semibold, design: .rounded))
+                    Spacer()
+                }
+                .foregroundStyle(terracotta)
+                .padding(.vertical, 11)
+                .padding(.horizontal, 14)
+                .background(RoundedRectangle(cornerRadius: 12).fill(terracotta.opacity(0.12)))
             }
-            Text("Scans Documents, to-be-processed/ and processed/ for .csv and .txt — so it finds both files dropped in over Finder and the app's own recordings. Importing one only reads it; nothing is moved or consumed.")
+            .buttonStyle(.plain)
+
+            Text("Anything you drop into the app's Documents folder over Finder or the Files app is loaded automatically the next time the app opens — this screen is only needed to pick a file from elsewhere or to override the sensor. Scanning also finds the app's own recordings; importing one only reads it, and never disturbs the upload queue.")
                 .font(.system(size: 11, design: .rounded))
-                .foregroundStyle(muted.opacity(0.8))
+                .foregroundStyle(muted.opacity(0.85))
 
             if let status {
                 Text(status)
                     .font(.system(size: 12, weight: .medium, design: .rounded))
-                    .foregroundStyle(terracotta)
+                    .foregroundStyle(ink)
+                    .padding(.top, 2)
             }
         }
     }
 
     private var scannedCard: some View {
-        card("FOUND IN DOCUMENTS") {
-            ForEach(scannedFiles, id: \.self) { url in
+        card("FOUND ON DEVICE") {
+            ForEach(scannedFiles, id: \.path) { url in
                 Button { inspect(picked: url, needsSecurityScope: false) } label: {
                     HStack {
-                        VStack(alignment: .leading, spacing: 2) {
+                        VStack(alignment: .leading, spacing: 1) {
                             Text(url.lastPathComponent)
-                                .font(.system(size: 14, weight: .medium, design: .rounded))
+                                .font(.system(size: 13, weight: .medium, design: .rounded))
                                 .foregroundStyle(ink)
                             Text(scanSubtitle(for: url))
                                 .font(.system(size: 11, design: .rounded))
                                 .foregroundStyle(muted)
                         }
                         Spacer()
-                        Image(systemName: "chevron.right").font(.system(size: 12)).foregroundStyle(muted)
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(muted.opacity(0.6))
                     }
-                    .padding(.vertical, 6)
+                    .padding(.vertical, 4)
                 }
+                .buttonStyle(.plain)
             }
         }
     }
 
     private var loadedCard: some View {
-        card("LOADED SENSORS") {
-            if activeImports.isEmpty {
-                Text("Nothing imported. Every screen is showing live data, or the hardcoded sample table where there is none.")
+        card("SHOWING IMPORTED DATA") {
+            if loaded.isEmpty {
+                Text("Nothing imported. Every screen is showing live HealthKit and recorder data\("")\(sampleNote).")
                     .font(.system(size: 12, design: .rounded))
                     .foregroundStyle(muted)
             } else {
-                ForEach(activeImports) { record in
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack {
-                            Text(record.kind.displayName)
-                                .font(.system(size: 15, weight: .semibold, design: .rounded))
+                Text("These sensors show file data instead of live data, and keep doing so until cleared.")
+                    .font(.system(size: 11, design: .rounded))
+                    .foregroundStyle(muted.opacity(0.85))
+
+                ForEach(loaded) { info in
+                    HStack(alignment: .top) {
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(info.kind?.displayName ?? info.kindRaw)
+                                .font(.system(size: 14, weight: .semibold, design: .rounded))
                                 .foregroundStyle(ink)
-                            Spacer()
-                            Text("\(record.rowCount) pts")
-                                .font(.system(size: 12, weight: .medium, design: .rounded))
+                            Text("\(info.filename) · \(info.rowCount) rows\(rangeText(info))")
+                                .font(.system(size: 11, design: .rounded))
                                 .foregroundStyle(muted)
                         }
-                        Text(record.filename)
-                            .font(.system(size: 12, design: .rounded))
-                            .foregroundStyle(muted)
-                        Text("Imported \(Self.stamp.string(from: record.importedAt))\(rangeText(record))")
-                            .font(.system(size: 11, design: .rounded))
-                            .foregroundStyle(muted.opacity(0.85))
-
-                        HStack(spacing: 8) {
-                            smallButton("Send to database") { pendingSend = record }
-                            if let prev = SensorDataStore.shared.previousImports(for: record.kind).first {
-                                smallButton("Restore previous") {
-                                    SensorDataStore.shared.activate(importID: prev.id, kind: prev.kind)
-                                    status = "Restored \(prev.filename)."
-                                    reload()
-                                }
-                            }
-                            smallButton("Delete", destructive: true) {
-                                SensorDataStore.shared.delete(importID: record.id)
-                                status = "Deleted \(record.filename)."
+                        Spacer()
+                        if let kind = info.kind {
+                            smallButton("Clear", destructive: true) {
+                                SensorStatusStore.shared.clearImport(kind)
+                                log.insert("Cleared \(kind.displayName)", at: 0)
                                 reload()
                             }
                         }
                     }
-                    .padding(.vertical, 8)
-                    Divider()
+                    .padding(.vertical, 3)
                 }
 
-                Button(role: .destructive) { showClearConfirm = true } label: {
-                    Text("Clear all imported data")
-                        .font(.system(size: 14, weight: .semibold, design: .rounded))
+                Button { showClearConfirm = true } label: {
+                    Text("Clear all")
+                        .font(.system(size: 13, weight: .semibold, design: .rounded))
                         .foregroundStyle(.red)
-                        .padding(.top, 4)
                 }
+                .buttonStyle(.plain)
+                .padding(.top, 2)
             }
         }
     }
 
     private var logCard: some View {
-        card("IMPORT LOG") {
+        card("LOG") {
             Text("Newest first. If a screen still shows an old value, check the newest entry actually landed.")
                 .font(.system(size: 11, design: .rounded))
                 .foregroundStyle(muted.opacity(0.85))
-            ForEach(log) { record in
-                HStack(alignment: .top, spacing: 8) {
-                    Circle()
-                        .fill(record.isActive ? Color(red: 0.22, green: 0.60, blue: 0.45) : muted.opacity(0.35))
-                        .frame(width: 7, height: 7)
-                        .padding(.top, 5)
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text("\(Self.stamp.string(from: record.importedAt))  \(record.filename)")
-                            .font(.system(size: 12, weight: .medium, design: .rounded))
-                            .foregroundStyle(ink)
-                        Text("\(record.kind.displayName) · \(record.rowCount) pts\(record.isActive ? " · showing now" : "")")
-                            .font(.system(size: 11, design: .rounded))
-                            .foregroundStyle(muted)
-                    }
-                    Spacer()
-                }
-                .padding(.vertical, 3)
+            ForEach(Array(log.enumerated()), id: \.offset) { _, line in
+                Text(line)
+                    .font(.system(size: 12, design: .rounded))
+                    .foregroundStyle(ink)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
     }
@@ -267,20 +255,27 @@ struct ImportDataView: View {
                 // the first one — show what was picked so a wrong guess on an
                 // unusual file is visible before anything is stored.
                 Section("Columns detected") {
-                    LabeledContent("Timestamp", value: "column \(p.timestampColumn + 1)")
+                    LabeledContent("Timestamp",
+                                   value: p.timestampColumn.map { "column \($0 + 1)" } ?? "none found")
                     LabeledContent("Value", value: p.valueColumn.map { "column \($0 + 1)" } ?? "none found")
+                    if p.usedFileDate {
+                        Label("No timestamps in this file, so every row is dated from the file itself. Only the total or last reading is stored, so this is usually still fine.",
+                              systemImage: "calendar.badge.exclamationmark")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                    }
                     // "None found" is fine for a timestamp-only sensor and a
-                    // silent disaster for a numeric one — every reading would
+                    // silent disaster for a numeric one — the reading would
                     // import with no number at all. Say so plainly.
                     if p.valueColumn == nil && chosenKind.isNumeric {
-                        Label("No numeric column was found after the timestamp. \(chosenKind.displayName) needs one — importing now would store timestamps with no readings.",
+                        Label("No numeric column was found. \(chosenKind.displayName) needs one — importing now would store a timestamp with no reading.",
                               systemImage: "exclamationmark.triangle.fill")
                             .font(.caption)
                             .foregroundStyle(.orange)
                     }
                 }
                 Section("Sensor") {
-                    Picker("Detected", selection: $chosenKind) {
+                    Picker(p.detectedKind == nil ? "Sensor" : "Detected", selection: $chosenKind) {
                         ForEach(SensorKind.allCases.sorted { $0.displayName < $1.displayName }, id: \.self) {
                             Text($0.displayName).tag($0)
                         }
@@ -291,6 +286,10 @@ struct ImportDataView: View {
                     }
                     if !chosenKind.isNumeric {
                         Text("This sensor shows only a timestamp, so the value column is ignored.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                    if chosenKind.isCumulative {
+                        Text("Adds up over a day, so the stored figure is the total for the newest day in the file — the same thing Apple Health reports.")
                             .font(.caption).foregroundStyle(.secondary)
                     }
                 }
@@ -311,8 +310,8 @@ struct ImportDataView: View {
 
     // MARK: - Actions
 
-    /// Copies the picked file somewhere we reliably control, then streams it for
-    /// a row count and date range. Nothing is stored at this stage.
+    /// Copies the picked file somewhere we reliably control, then reads it for a
+    /// row count and date range. Nothing is stored at this stage.
     private func inspect(picked url: URL, needsSecurityScope: Bool = true) {
         busy = true
         status = nil
@@ -354,45 +353,45 @@ struct ImportDataView: View {
                 busy = false
                 switch result {
                 case .success(let r):
-                    var msg = "Imported \(r.rowCount) rows into \(r.kind.displayName)."
-                    if let replaced = r.replacedRowCount { msg += " Replaced a \(replaced)-point series." }
-                    if r.skippedRows > 0 { msg += " \(r.skippedRows) rows skipped." }
+                    var msg = "\(r.kind.displayName) ← \(r.filename): \(r.rowCount) rows"
+                    if let value = r.storedValue { msg += ", showing \(value)" }
+                    if r.skippedRows > 0 { msg += " (\(r.skippedRows) skipped)" }
                     status = msg
+                    log.insert(msg, at: 0)
                 case .failure(let error):
                     status = error.localizedDescription
+                    log.insert("Failed: \(error.localizedDescription)", at: 0)
                 }
                 reload()
             }
         }
     }
 
-    private func send(_ record: SensorImportRecord) {
-        busy = true
-        Task {
-            let message = await SensorDataExporter.sendToDatabase(record)
-            await MainActor.run {
-                busy = false
-                status = message
-            }
-        }
-    }
-
     private func reload() {
-        activeImports = SensorDataStore.shared.activeImports()
-        log = SensorDataStore.shared.importLog()
+        loaded = SensorStatusStore.shared.loadedImports()
     }
 
-    /// Detected sensor plus the folder it came from — the scan now covers
-    /// Documents, to-be-processed/ and processed/, so the folder matters.
+    /// Detected sensor plus the folder it came from — the scan covers Documents,
+    /// to-be-processed/ and processed/, so the folder matters.
     private func scanSubtitle(for url: URL) -> String {
         let sensor = SensorKindMatcher.match(filename: url.lastPathComponent)?.displayName ?? "sensor not recognized"
         let folder = url.deletingLastPathComponent().lastPathComponent
         return folder == "Documents" ? sensor : "\(sensor) · \(folder)"
     }
 
-    private func rangeText(_ record: SensorImportRecord) -> String {
-        guard let min = record.dateMin, let max = record.dateMax else { return "" }
+    private func rangeText(_ info: SensorImportInfo) -> String {
+        guard let min = info.dateMin, let max = info.dateMax else { return "" }
         return " · covers \(Self.day.string(from: min)) – \(Self.day.string(from: max))"
+    }
+
+    /// Release has no sample table at all, so the empty-state sentence must not
+    /// promise one.
+    private var sampleNote: String {
+#if DEBUG
+        return ", or sample data where there is none"
+#else
+        return ""
+#endif
     }
 
     // MARK: - Small view helpers
@@ -439,13 +438,6 @@ struct ImportDataView: View {
         }
         .buttonStyle(.plain)
     }
-
-    private static let stamp: DateFormatter = {
-        let f = DateFormatter()
-        f.dateStyle = .short
-        f.timeStyle = .short
-        return f
-    }()
 
     private static let day: DateFormatter = {
         let f = DateFormatter()

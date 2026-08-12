@@ -95,19 +95,27 @@ struct SensorsTabView: View {
         }
     }
 
-    // Rebuild every row's freshness line from the store, then ask HealthKit for
-    // the genuine latest samples and rebuild again once those land.
+    // Show what the store already knows, then catch up on both live sources:
+    // any data file dropped into the Documents folder since we were last here,
+    // and the genuine latest HealthKit samples. Each rebuilds the rows as it
+    // lands, so the tab is never blank waiting on I/O.
     private func refreshStatus() {
         rebuildStatusLines()
-        SensorStatusStore.shared.refreshHealthKitSamples {
+        Task {
+            // Blocking file I/O — keep it off the main actor. Captures nothing,
+            // so it is safe to detach.
+            await Task.detached { _ = SensorFileImporter.autoIngestInbox() }.value
             rebuildStatusLines()
+            SensorStatusStore.shared.refreshHealthKitSamples {
+                rebuildStatusLines()
+            }
         }
     }
 
     private func rebuildStatusLines() {
         var lines: [SensorKind: SensorDisplay] = [:]
         for kind in SensorKind.allCases {
-            lines[kind] = SensorDataStore.shared.display(for: kind)
+            lines[kind] = SensorStatusStore.shared.display(for: kind)
         }
         statusLines = lines
     }

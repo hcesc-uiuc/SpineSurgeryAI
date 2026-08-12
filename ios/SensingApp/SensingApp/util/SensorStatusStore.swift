@@ -2,26 +2,31 @@
 //  SensorStatusStore.swift
 //  SensingApp
 //
-//  "Last recorded" freshness store backing the Sensors tab ("What We Collect").
+//  The ONE store behind every sensor reading the app displays — the Sensors tab
+//  ("What We Collect") and the Home stat tiles.
 //
-//  Every row on the Sensors tab shows a "Last recorded: …" line sourced from here.
-//  Real data flows in from two places:
-//    1. Recorders stamp the store the moment they save data
-//       (AcclerometerRecorder, AdaptiveLocationManager, SensorKit watch fetcher,
-//        survey submit).
-//    2. refreshHealthKitSamples() queries HealthKit for the genuine latest sample
-//       of each Apple Health row and stamps the result.
-//  When no real stamp exists for a sensor yet (fresh install, simulator, no watch),
-//  DEBUG builds fall back to the SAMPLE DATA table below, always suffixed
-//  "(sample)". RELEASE builds have no fallback at all — the row reads "No data
-//  recorded yet". The Sensors tab is NOT behind #if DEBUG, so it ships to
-//  patients; a patient without an Apple Watch must never be shown an invented
-//  "999 bpm", however it is labelled.
+//  Storage is UserDefaults. Nothing else. There is no sensor database.
 //
-//  Storage is UserDefaults: three keys per sensor —
-//    sensorLast_<kind>_value    (String, optional — the rendered line, "72 bpm")
-//    sensorLast_<kind>_numeric  (Double, optional — the same reading as a number)
-//    sensorLast_<kind>_date     (Date)
+//  ── Where a displayed reading comes from ────────────────────────────────────
+//  Three sources, in strict precedence order:
+//
+//    1. AN IMPORTED FILE — a dev dropped a data file into the app's Documents
+//       folder (visible in Files / Finder) or picked one in the Debug tab.
+//       An import WINS until it is cleared, so a demo value cannot be silently
+//       overwritten by a live HealthKit refresh two seconds later.
+//    2. A REAL STAMP — recorders stamp the store as they save data
+//       (AcclerometerRecorder, AdaptiveLocationManager, the SensorKit watch
+//       fetcher, survey submit), and refreshHealthKitSamples() stamps the
+//       genuine latest sample for each Apple Health row.
+//    3. DEBUG SAMPLE DATA — the hardcoded table below, only when nothing else
+//       exists, only in DEBUG, and always labelled "sample data".
+//
+//  ── Keys, per sensor ────────────────────────────────────────────────────────
+//    sensorLast_<kind>_value    String?  the rendered reading, "72 bpm"
+//    sensorLast_<kind>_numeric  Double?  the same reading as a number
+//    sensorLast_<kind>_date     Date     when it was recorded
+//    sensorLast_<kind>_source   String?  "import" — absent means a live stamp
+//    sensorImport_<kind>        Data?    JSON metadata about the imported file
 //
 //  `numeric` exists because Home tiles need a NUMBER. Recovering one by parsing
 //  the display string back apart is locale-dependent — NumberFormatter renders
@@ -30,11 +35,13 @@
 //
 //  CONTRACT: `numeric` is always expressed in the sensor's own unit
 //  (SensorKind.unit) — km for distance, percent for blood oxygen, hours for
-//  sleep — so it is directly comparable with an imported series.
+//  sleep — so a live stamp and an imported file are directly comparable.
 //
 
 import Foundation
 import HealthKit
+
+// MARK: - Sensors
 
 /// One case per row on the Sensors tab.
 nonisolated enum SensorKind: String, CaseIterable {
@@ -64,14 +71,161 @@ nonisolated enum SensorKind: String, CaseIterable {
     case survey
 }
 
+// MARK: - Per-sensor metadata
+
+nonisolated extension SensorKind {
+
+    /// Human name used in the import picker and the loaded-sensor list.
+    var displayName: String {
+        switch self {
+        case .accelerometer:        return "Accelerometer"
+        case .gyroscope:            return "Gyroscope"
+        case .location:             return "Location"
+        case .heartRate:            return "Heart Rate"
+        case .heartRateVariability: return "Heart Rate Variability"
+        case .steps:                return "Steps"
+        case .distance:             return "Walking Distance"
+        case .bloodOxygen:          return "Blood Oxygen"
+        case .activeEnergy:         return "Active Energy"
+        case .flights:              return "Flights Climbed"
+        case .sleep:                return "Sleep"
+        case .watchAccelerometer:   return "Watch Accelerometer"
+        case .watchHeartPPG:        return "Watch Heart & PPG"
+        case .ecg:                  return "ECG"
+        case .wristTemperature:     return "Wrist Temperature"
+        case .ambientLight:         return "Ambient Light"
+        case .survey:               return "Recovery Check-in"
+        }
+    }
+
+    /// Unit appended to a bare imported number ("72" → "72 bpm").
+    /// nil = timestamp-only sensor: the file's value column is ignored and the
+    /// row shows only when it was recorded.
+    var unit: String? {
+        switch self {
+        case .heartRate:            return "bpm"
+        case .heartRateVariability: return "ms"
+        case .steps:                return "steps"
+        case .distance:             return "km"
+        case .bloodOxygen:          return "%"
+        case .activeEnergy:         return "kcal"
+        case .flights:              return "flights"
+        case .sleep:                return "hr"
+        default:                    return nil
+        }
+    }
+
+    /// True when the sensor carries a numeric reading worth displaying.
+    var isNumeric: Bool { unit != nil }
+
+    /// True when the reading accumulates over a day, so the meaningful figure is
+    /// a DAILY TOTAL rather than the most recent single measurement.
+    ///
+    /// This is what keeps the two sources honest. For the live path,
+    /// stampDailyTotal below already stores a day total. An imported file holding
+    /// one row per hour would otherwise contribute only its LAST row, so the same
+    /// "Steps" label would silently mean "today so far" from Apple Health and
+    /// "the last hour" from a file. Imported cumulative series are therefore
+    /// summed over the day of their newest row — which also leaves a file that
+    /// already holds daily totals correct, since that day has one row.
+    ///
+    /// Sleep is NOT cumulative: it is already stored as a per-night aggregate.
+    var isCumulative: Bool {
+        switch self {
+        case .steps, .distance, .activeEnergy, .flights: return true
+        default: return false
+        }
+    }
+
+    /// Where a non-imported reading for this sensor genuinely comes from.
+    var realSource: SensorSource {
+        switch self {
+        case .heartRate, .heartRateVariability, .steps, .distance,
+             .bloodOxygen, .activeEnergy, .flights, .sleep:
+            return .healthKit
+        case .survey:
+            return .checkIn
+        default:
+            return .recorder
+        }
+    }
+
+    /// Render a raw number the way this sensor should read.
+    func formatted(_ value: Double) -> String {
+        guard let unit else { return "" }
+        switch self {
+        case .steps:
+            let f = NumberFormatter()
+            f.numberStyle = .decimal
+            let n = f.string(from: NSNumber(value: Int(value))) ?? "\(Int(value))"
+            return "\(n) \(unit)"
+        case .distance, .sleep:
+            return String(format: "%.1f %@", value, unit)
+        case .bloodOxygen:
+            return "\(Int(value))\(unit)"          // no space before %
+        default:
+            return "\(Int(value)) \(unit)"
+        }
+    }
+}
+
+// MARK: - Model
+
+/// Where a displayed value came from. Drives the source line under every row.
+nonisolated enum SensorSource {
+    case healthKit
+    case recorder
+    case checkIn
+    case imported(String)
+    case sample
+
+    var label: String {
+        switch self {
+        case .healthKit:          return "Apple Health"
+        case .recorder:           return "this iPhone"
+        case .checkIn:            return "your check-ins"
+        case .imported(let name): return name
+        case .sample:             return "sample data"
+        }
+    }
+}
+
 nonisolated struct SensorStatusEntry {
     let value: String?      // nil = timestamp-only sensor (motion, location, watch)
     /// The same reading as a number, in SensorKind.unit. nil for timestamp-only
     /// sensors and for stamps written by builds before this field existed.
     let numeric: Double?
     let date: Date
-    let isSample: Bool
+    let source: SensorSource
+
+    var isSample: Bool {
+        if case .sample = source { return true }
+        return false
+    }
 }
+
+/// What a file contributed, kept so the Debug tab can list what is loaded and
+/// offer to clear it. Small enough to live in UserDefaults as JSON.
+nonisolated struct SensorImportInfo: Codable, Identifiable {
+    let kindRaw: String
+    let filename: String
+    let rowCount: Int
+    let skippedRows: Int
+    let dateMin: Date?
+    let dateMax: Date?
+    let importedAt: Date
+
+    var id: String { kindRaw }
+    var kind: SensorKind? { SensorKind(rawValue: kindRaw) }
+}
+
+/// The two lines a Sensors-tab row renders.
+nonisolated struct SensorDisplay {
+    let valueLine: String       // "Last recorded: 72 bpm · Jul 22 at 9:00 AM"
+    let sourceLine: String?     // "from heartratedata.csv"
+}
+
+// MARK: - Store
 
 nonisolated final class SensorStatusStore: @unchecked Sendable {
     static let shared = SensorStatusStore()
@@ -81,18 +235,21 @@ nonisolated final class SensorStatusStore: @unchecked Sendable {
 
 #if DEBUG
     // ══════════════════════════════════════════════════════════════════
-    //  SAMPLE DATA — EDIT THIS TABLE TO TEST HOW THE SENSORS TAB LOOKS.
+    //  SAMPLE DATA — shown when a sensor has nothing else at all.
     //
-    //  DEBUG ONLY. Shown when a sensor has no real recorded stamp yet, and
-    //  always rendered with a "(sample)" suffix. `value` is the reading shown
-    //  (nil = timestamp-only); `minutesAgo` positions the fake timestamp
-    //  relative to now. Values are deliberately absurd (999 bpm) so real
-    //  and sample data can never be confused.
+    //  DEBUG ONLY, and always attributed as "from sample data". `value` is the
+    //  reading shown (nil = timestamp-only); `minutesAgo` positions the fake
+    //  timestamp relative to now. Values are deliberately absurd (999 bpm) so
+    //  real and sample data can never be confused.
     //
     //  Deliberately compiled out of Release: the Sensors tab ships to patients,
     //  and five of these rows (gyroscope, watch PPG, ECG, wrist temperature,
     //  ambient light) have no fetcher at all, so in Release they would have
     //  shown sample data permanently, to everyone.
+    //
+    //  To preview the tab with different numbers, prefer dropping a data file
+    //  into the app's Documents folder over editing this table — that path is
+    //  what the Sensors tab actually uses in the field.
     // ══════════════════════════════════════════════════════════════════
     static let sampleData: [SensorKind: (value: String?, minutesAgo: Double)] = [
         .accelerometer:        (nil,            45),
@@ -115,9 +272,20 @@ nonisolated final class SensorStatusStore: @unchecked Sendable {
     ]
 #endif
 
-    private func valueKey(_ kind: SensorKind) -> String { "sensorLast_\(kind.rawValue)_value" }
+    private func valueKey(_ kind: SensorKind)   -> String { "sensorLast_\(kind.rawValue)_value" }
     private func numericKey(_ kind: SensorKind) -> String { "sensorLast_\(kind.rawValue)_numeric" }
-    private func dateKey(_ kind: SensorKind)  -> String { "sensorLast_\(kind.rawValue)_date" }
+    private func dateKey(_ kind: SensorKind)    -> String { "sensorLast_\(kind.rawValue)_date" }
+    private func sourceKey(_ kind: SensorKind)  -> String { "sensorLast_\(kind.rawValue)_source" }
+    private func importKey(_ kind: SensorKind)  -> String { "sensorImport_\(kind.rawValue)" }
+
+    private static let importedMarker = "import"
+
+    /// True when the stored reading came from a file rather than a live stamp.
+    func isImported(_ kind: SensorKind) -> Bool {
+        defaults.string(forKey: sourceKey(kind)) == Self.importedMarker
+    }
+
+    // MARK: Writing — live stamps
 
     /// Stamp a sensor as recorded. Safe to call from any thread (UserDefaults
     /// is thread-safe). Keeps only the newest stamp — older dates are ignored,
@@ -126,8 +294,37 @@ nonisolated final class SensorStatusStore: @unchecked Sendable {
     /// `numeric` is the same reading as a plain number, in SensorKind.unit. Pass
     /// it whenever a number is available; Home tiles read it directly instead of
     /// parsing `value` back apart, which is locale-dependent.
+    ///
+    /// NO-OP while an import is loaded for this sensor. That is the whole point
+    /// of an import: a dev drops a file, and the value stays put until they
+    /// clear it, instead of being overwritten by the next HealthKit refresh.
     func record(_ kind: SensorKind, value: String? = nil, numeric: Double? = nil, at date: Date = Date()) {
+        guard !isImported(kind) else { return }
         if let existing = defaults.object(forKey: dateKey(kind)) as? Date, existing > date { return }
+        write(kind, value: value, numeric: numeric, date: date)
+        defaults.removeObject(forKey: sourceKey(kind))
+    }
+
+    // MARK: Writing — imports
+
+    /// Store the one reading a file boils down to, and mark the sensor imported.
+    ///
+    /// Deliberately skips the newest-wins guard that `record` applies: an
+    /// imported file is frequently OLDER than the live stamp it is replacing
+    /// (that is normal for test data), and it must still take effect.
+    func recordImport(_ kind: SensorKind,
+                      value: String?,
+                      numeric: Double?,
+                      at date: Date,
+                      info: SensorImportInfo) {
+        write(kind, value: value, numeric: numeric, date: date)
+        defaults.set(Self.importedMarker, forKey: sourceKey(kind))
+        if let data = try? JSONEncoder().encode(info) {
+            defaults.set(data, forKey: importKey(kind))
+        }
+    }
+
+    private func write(_ kind: SensorKind, value: String?, numeric: Double?, date: Date) {
         defaults.set(date, forKey: dateKey(kind))
         if let value {
             defaults.set(value, forKey: valueKey(kind))
@@ -141,37 +338,125 @@ nonisolated final class SensorStatusStore: @unchecked Sendable {
         }
     }
 
-    /// Real stamp if one exists, else (DEBUG only) the sample-table fallback,
-    /// else nil. Release has no fallback — see the file header.
+    /// Forget an imported reading entirely. The row falls back to whatever the
+    /// live sources next produce — for Apple Health rows that is the very next
+    /// refresh; for recorder rows, the next time that recorder runs.
+    func clearImport(_ kind: SensorKind) {
+        guard isImported(kind) else { return }
+        defaults.removeObject(forKey: valueKey(kind))
+        defaults.removeObject(forKey: numericKey(kind))
+        defaults.removeObject(forKey: dateKey(kind))
+        defaults.removeObject(forKey: sourceKey(kind))
+        defaults.removeObject(forKey: importKey(kind))
+    }
+
+    func clearAllImports() {
+        for kind in SensorKind.allCases { clearImport(kind) }
+    }
+
+    /// Metadata for every sensor currently showing imported data.
+    func loadedImports() -> [SensorImportInfo] {
+        SensorKind.allCases.compactMap { importInfo(for: $0) }
+            .sorted { $0.importedAt > $1.importedAt }
+    }
+
+    func importInfo(for kind: SensorKind) -> SensorImportInfo? {
+        guard isImported(kind), let data = defaults.data(forKey: importKey(kind)) else { return nil }
+        return try? JSONDecoder().decode(SensorImportInfo.self, from: data)
+    }
+
+    // MARK: Reading
+
+    /// Imported reading if one is loaded, else the real stamp, else (DEBUG only)
+    /// the sample-table fallback, else nil. Release has no sample fallback — see
+    /// the file header.
     func entry(for kind: SensorKind) -> SensorStatusEntry? {
         if let date = defaults.object(forKey: dateKey(kind)) as? Date {
+            let source: SensorSource
+            if isImported(kind) {
+                source = .imported(importInfo(for: kind)?.filename ?? "an imported file")
+            } else {
+                source = kind.realSource
+            }
             return SensorStatusEntry(value: defaults.string(forKey: valueKey(kind)),
                                      numeric: defaults.object(forKey: numericKey(kind)) as? Double,
                                      date: date,
-                                     isSample: false)
+                                     source: source)
         }
 #if DEBUG
         if let sample = Self.sampleData[kind] {
             return SensorStatusEntry(value: sample.value,
-                                     numeric: nil,
+                                     numeric: sample.value.flatMap(Self.numericValue(from:)),
                                      date: Date().addingTimeInterval(-sample.minutesAgo * 60),
-                                     isSample: true)
+                                     source: .sample)
         }
 #endif
         return nil
     }
 
-    /// The full display line for a row, e.g.
-    ///   "Last recorded: 72 bpm · Today at 3:45 PM"
-    ///   "Last recorded: Yesterday at 9:12 PM"
-    ///   "Last recorded: 999 bpm · Today at 3:45 PM (sample)"
-    ///   "No data recorded yet"
-    func displayLine(for kind: SensorKind) -> String {
-        guard let entry = entry(for: kind) else { return "No data recorded yet" }
+    /// The two lines a Sensors-tab row shows.
+    func display(for kind: SensorKind) -> SensorDisplay {
+        guard let entry = entry(for: kind) else {
+            return SensorDisplay(valueLine: "No data recorded yet", sourceLine: nil)
+        }
         let when = Self.timestampFormatter.string(from: entry.date)
-        var line = entry.value.map { "Last recorded: \($0) · \(when)" } ?? "Last recorded: \(when)"
-        if entry.isSample { line += " (sample)" }
-        return line
+        let valueLine: String
+        if kind.isNumeric, let value = entry.value {
+            valueLine = "Last recorded: \(value) · \(when)"
+        } else {
+            valueLine = "Last recorded: \(when)"
+        }
+        return SensorDisplay(valueLine: valueLine, sourceLine: "from \(entry.source.label)")
+    }
+
+    /// Value + caption for a Home stat tile. The caption appears only when the
+    /// reading is noteworthy — imported, or simply not from today — so live
+    /// same-day HealthKit data keeps the clean, caption-free look and a stale
+    /// import is impossible to mistake for a fresh one.
+    ///
+    /// The hardcoded sample table is deliberately NOT surfaced here. Unlike the
+    /// Sensors tab, Home is not behind #if DEBUG — it ships. A patient whose
+    /// HealthKit simply has no data must see "—", not "99,999 steps" with a
+    /// small caption. Home therefore shows real or imported readings only.
+    func homeTile(for kind: SensorKind) -> (value: Double, caption: String?)? {
+        guard let entry = entry(for: kind) else { return nil }
+        if case .sample = entry.source { return nil }
+        guard let value = entry.numeric ?? entry.value.flatMap(Self.numericValue(from:)) else { return nil }
+
+        let isToday = Calendar.current.isDateInToday(entry.date)
+        var caption: String?
+        switch entry.source {
+        case .imported(let name):
+            caption = isToday ? shortName(name) : "\(shortName(name)) · \(Self.shortDayFormatter.string(from: entry.date))"
+        case .healthKit, .recorder, .checkIn:
+            caption = isToday ? nil : Self.shortDayFormatter.string(from: entry.date)
+        case .sample:
+            caption = nil   // unreachable, filtered above
+        }
+        return (value, caption)
+    }
+
+    /// Tiles are narrow — keep the filename readable rather than complete.
+    private func shortName(_ filename: String) -> String {
+        let stem = (filename as NSString).deletingPathExtension
+        return stem.count > 14 ? String(stem.prefix(13)) + "…" : stem
+    }
+
+    /// Pulls the number back out of a display string ("72 bpm" → 72).
+    ///
+    /// LEGACY FALLBACK ONLY — `SensorStatusEntry.numeric` is the real path.
+    /// This assumes "," grouping and "." decimals, so it is wrong on a device
+    /// whose locale reverses them (de_DE renders 8420 as "8.420", which lands
+    /// here as 8.42). It survives only to read stamps written by builds that
+    /// predate `numeric`, and to give the DEBUG sample table a value.
+    private static func numericValue(from text: String) -> Double? {
+        let cleaned = text.replacingOccurrences(of: ",", with: "")
+        var digits = ""
+        for ch in cleaned {
+            if ch.isNumber || ch == "." { digits.append(ch) }
+            else if !digits.isEmpty { break }
+        }
+        return Double(digits)
     }
 
     // Absolute time with natural day phrasing: "Today at 3:45 PM",
@@ -183,6 +468,13 @@ nonisolated final class SensorStatusStore: @unchecked Sendable {
         f.doesRelativeDateFormatting = true
         return f
     }()
+
+    // "Jul 22" — compact enough for a stat tile caption.
+    private static let shortDayFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.setLocalizedDateFormatFromTemplate("MMMd")
+        return f
+    }()
 }
 
 // MARK: - HealthKit latest-sample refresh
@@ -192,6 +484,7 @@ extension SensorStatusStore {
     /// Queries HealthKit for the genuine latest reading of each Apple Health row
     /// and stamps the store. Read-only; sensors the user hasn't authorized simply
     /// return no samples and keep their previous stamp (or sample fallback).
+    /// Sensors currently showing an imported file are left alone by `record`.
     /// `completion` fires on the main queue after all queries finish.
     func refreshHealthKitSamples(completion: (() -> Void)? = nil) {
         guard HKHealthStore.isHealthDataAvailable() else {
@@ -210,8 +503,7 @@ extension SensorStatusStore {
         func stampLatestSample(_ identifier: HKQuantityTypeIdentifier,
                                kind: SensorKind,
                                unit: HKUnit,
-                               scale: Double = 1,
-                               format: @escaping (Double) -> String) {
+                               scale: Double = 1) {
             guard let type = HKQuantityType.quantityType(forIdentifier: identifier) else { return }
             group.enter()
             let query = HKSampleQuery(
@@ -222,7 +514,7 @@ extension SensorStatusStore {
             ) { _, samples, _ in
                 if let sample = samples?.first as? HKQuantitySample {
                     let reading = sample.quantity.doubleValue(for: unit) * scale
-                    self.record(kind, value: format(reading), numeric: reading, at: sample.endDate)
+                    self.record(kind, value: kind.formatted(reading), numeric: reading, at: sample.endDate)
                 }
                 group.leave()
             }
@@ -234,8 +526,7 @@ extension SensorStatusStore {
         func stampDailyTotal(_ identifier: HKQuantityTypeIdentifier,
                              kind: SensorKind,
                              unit: HKUnit,
-                             scale: Double = 1,
-                             format: @escaping (Double) -> String) {
+                             scale: Double = 1) {
             guard let type = HKQuantityType.quantityType(forIdentifier: identifier) else { return }
             group.enter()
             let latestQuery = HKSampleQuery(
@@ -258,7 +549,7 @@ extension SensorStatusStore {
                 ) { _, result, _ in
                     if let raw = result?.sumQuantity()?.doubleValue(for: unit) {
                         let total = raw * scale
-                        self.record(kind, value: format(total), numeric: total, at: latest.endDate)
+                        self.record(kind, value: kind.formatted(total), numeric: total, at: latest.endDate)
                     }
                     group.leave()
                 }
@@ -268,24 +559,19 @@ extension SensorStatusStore {
         }
 
         stampLatestSample(.heartRate, kind: .heartRate,
-                          unit: .count().unitDivided(by: .minute())) { "\(Int($0)) bpm" }
+                          unit: .count().unitDivided(by: .minute()))
         stampLatestSample(.heartRateVariabilitySDNN, kind: .heartRateVariability,
-                          unit: .secondUnit(with: .milli)) { "\(Int($0)) ms" }
+                          unit: .secondUnit(with: .milli))
         // HealthKit reports saturation as a 0–1 fraction; the sensor's unit is %.
         stampLatestSample(.oxygenSaturation, kind: .bloodOxygen,
-                          unit: .percent(), scale: 100) { "\(Int($0))%" }
+                          unit: .percent(), scale: 100)
 
-        stampDailyTotal(.stepCount, kind: .steps, unit: .count()) { total in
-            let formatter = NumberFormatter()
-            formatter.numberStyle = .decimal
-            let text = formatter.string(from: NSNumber(value: Int(total))) ?? "\(Int(total))"
-            return "\(text) steps"
-        }
-        stampDailyTotal(.activeEnergyBurned, kind: .activeEnergy, unit: .kilocalorie()) { "\(Int($0)) kcal" }
+        stampDailyTotal(.stepCount, kind: .steps, unit: .count())
+        stampDailyTotal(.activeEnergyBurned, kind: .activeEnergy, unit: .kilocalorie())
         // Queried in metres; the sensor's unit is km.
         stampDailyTotal(.distanceWalkingRunning, kind: .distance,
-                        unit: .meter(), scale: 1.0 / 1000.0) { String(format: "%.1f km", $0) }
-        stampDailyTotal(.flightsClimbed, kind: .flights, unit: .count()) { "\(Int($0)) flights" }
+                        unit: .meter(), scale: 1.0 / 1000.0)
+        stampDailyTotal(.flightsClimbed, kind: .flights, unit: .count())
 
         // Sleep: total asleep-stage time over the last night-and-a-bit (30 h),
         // stamped at the latest sample's end. Older stamps persist unchanged.
@@ -311,7 +597,7 @@ extension SensorStatusStore {
                 let totalSeconds = asleep.reduce(0.0) { $0 + $1.endDate.timeIntervalSince($1.startDate) }
                 guard totalSeconds > 0, let latestEnd = asleep.map(\.endDate).max() else { return }
                 let hours = totalSeconds / 3600.0
-                self.record(.sleep, value: String(format: "%.1f hr", hours), numeric: hours, at: latestEnd)
+                self.record(.sleep, value: SensorKind.sleep.formatted(hours), numeric: hours, at: latestEnd)
             }
             store.execute(sleepQuery)
         }
