@@ -31,7 +31,7 @@ extension SQLiteSaver {
             );
         """
         if exec(sql) {
-            print("✅ Table ready: data_batches")
+            print("Table ready: data_batches")
         }
     }
     
@@ -42,7 +42,7 @@ extension SQLiteSaver {
         
         // We already check for open
         //        guard let db else {
-        //            print("❌ insertData: no database connection")
+        //            print("insertData: no database connection")
         //            return false
         //        }
 
@@ -50,7 +50,7 @@ extension SQLiteSaver {
         //        var stmt: OpaquePointer?
         //
         //        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
-        //            print("❌ insertData prepare failed: \(lastError())")
+        //            print("insertData prepare failed: \(lastError())")
         //            return false
         //        }
 
@@ -91,7 +91,7 @@ extension SQLiteSaver {
         let stepResult = sqlite3_step(insertStmt) //Value written
         sqlite3_reset(insertStmt)   // just reset the insert string to input new values
         //        guard stepResult == SQLITE_DONE else {
-        //            print("❌ insertData step failed: \(lastError())")
+        //            print("insertData step failed: \(lastError())")
         //            sqlite3_finalize(stmt)
         //            return false
         //        }
@@ -108,7 +108,7 @@ extension SQLiteSaver {
         sqlite3_exec(db, "COMMIT", nil, nil, nil)  // matches the BEGIN earlier
         let rc = sqlite3_exec(db, "BEGIN", nil, nil, nil)
         if rc != SQLITE_OK {
-            print("❌ BEGIN failed: \(String(cString: sqlite3_errmsg(db)))")
+            print("BEGIN failed: \(String(cString: sqlite3_errmsg(db)))")
         }
     }
 

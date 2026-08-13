@@ -32,13 +32,13 @@ class LocationFileLogger {
 
         if fileManager.fileExists(atPath: todayFilePath.path) {
             // File for today already exists — append to it
-            print("📄 Using existing file: \(todayFileName)")
+            print("Using existing file: \(todayFileName)")
             return todayFilePath
         }
 
         // File for today does not exist — create a new one
         // Any previous date files are left untouched in the documents directory
-        print("📄 Creating new file: \(todayFileName)")
+        print("Creating new file: \(todayFileName)")
         fileManager.createFile(atPath: todayFilePath.path, contents: nil)
         return todayFilePath
     }
@@ -50,7 +50,7 @@ class LocationFileLogger {
         let entry = text + "\n"
 
         guard let data = entry.data(using: .utf8) else {
-            print("❌ Failed to encode log entry")
+            print("Failed to encode log entry")
             return
         }
 
@@ -64,18 +64,18 @@ class LocationFileLogger {
                 handle.seekToEndOfFile()  // move cursor to end before writing
                 handle.write(data)
                 handle.closeFile()
-                print("✅ Appended to: \(url.lastPathComponent)")
+                print("Appended to: \(url.lastPathComponent)")
             } catch {
-                print("❌ Failed to append: \(error.localizedDescription)")
+                print("Failed to append: \(error.localizedDescription)")
             }
         } else {
             // File was deleted between resolveFilePath() and here —
             // write directly as a fresh file
             do {
                 try data.write(to: url, options: .atomic)
-                print("✅ Created and wrote to: \(url.lastPathComponent)")
+                print("Created and wrote to: \(url.lastPathComponent)")
             } catch {
-                print("❌ Failed to write new file: \(error.localizedDescription)")
+                print("Failed to write new file: \(error.localizedDescription)")
             }
         }
     }

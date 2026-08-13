@@ -3,6 +3,8 @@
 //  SensingApp
 //
 //  Created by Samir Kurudi on 11/20/25.
+//  Updated: added stop controls + isActive flags so the Sensors tab
+//  can toggle live accelerometer/gyroscope tracking on and off.
 //
 import Foundation
 import CoreMotion
@@ -13,6 +15,14 @@ class MotionManager: ObservableObject {
 
     @Published var accelerometerData: CMAccelerometerData?
     @Published var gyroscopeData: CMGyroData?
+
+    // Reflects whether updates are actively being requested from CoreMotion
+    // right now (bound to the toggles in SensorsTabView).
+    @Published var isAccelerometerActive = false
+    @Published var isGyroscopeActive = false
+
+    var isAccelerometerAvailable: Bool { motion.isAccelerometerAvailable }
+    var isGyroscopeAvailable: Bool { motion.isGyroAvailable }
 
     init() {
         startAccelerometerUpdates()
@@ -26,6 +36,17 @@ class MotionManager: ObservableObject {
         motion.startAccelerometerUpdates(to: OperationQueue.main) { [weak self] data, _ in
             self?.accelerometerData = data
         }
+        isAccelerometerActive = true
+    }
+
+    func stopAccelerometerUpdates() {
+        motion.stopAccelerometerUpdates()
+        isAccelerometerActive = false
+        accelerometerData = nil
+    }
+
+    func setAccelerometerEnabled(_ enabled: Bool) {
+        enabled ? startAccelerometerUpdates() : stopAccelerometerUpdates()
     }
 
     func startGyroUpdates() {
@@ -35,5 +56,16 @@ class MotionManager: ObservableObject {
         motion.startGyroUpdates(to: OperationQueue.main) { [weak self] data, _ in
             self?.gyroscopeData = data
         }
+        isGyroscopeActive = true
+    }
+
+    func stopGyroUpdates() {
+        motion.stopGyroUpdates()
+        isGyroscopeActive = false
+        gyroscopeData = nil
+    }
+
+    func setGyroscopeEnabled(_ enabled: Bool) {
+        enabled ? startGyroUpdates() : stopGyroUpdates()
     }
 }

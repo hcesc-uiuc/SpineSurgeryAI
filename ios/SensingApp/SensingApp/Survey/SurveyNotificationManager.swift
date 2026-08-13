@@ -25,9 +25,9 @@ final class SurveyNotificationManager {
         ) { granted, error in
 
             if granted {
-                print("✅ Notifications authorized")
+                print("Notifications authorized")
             } else {
-                print("❌ Notifications denied")
+                print("Notifications denied")
             }
         }
     }
@@ -65,7 +65,7 @@ final class SurveyNotificationManager {
         )
 
         UNUserNotificationCenter.current().add(request)
-        print("📅 Daily reminder scheduled")
+        print("Daily reminder scheduled")
     }
 
     // MARK: - Cancel Reminder
@@ -76,7 +76,7 @@ final class SurveyNotificationManager {
                 withIdentifiers: ["dailySurveyReminder"]
             )
 
-        print("🛑 Reminder cancelled")
+        print("Reminder cancelled")
     }
 
     // MARK: - Test Notification (For Debugging)

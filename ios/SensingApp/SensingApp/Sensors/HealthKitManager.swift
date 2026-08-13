@@ -17,6 +17,14 @@ enum SupportedMetric: String, CaseIterable {
     case bodyTemperature  = "Body Temperature"
     case exerciseTime     = "Exercise Minutes"
     case standTime        = "Stand Time"
+    
+    //What HK fields are left?
+    //-- Workout types? A lot harder/Needs a lot more formatting?
+    //-- Data formatting in JSON: Sleep, additional data types
+    //-- Notebooks: Marcus Hand over the notebooks.
+    //-- Steps: Steps are fixed.
+    //-- Push: Any additional changes
+    //--
 
     var hkType: HKSampleType? {
             func getQuantity(_ identifier: HKQuantityTypeIdentifier) -> HKSampleType? {
@@ -206,7 +214,7 @@ class HealthKitManager: ObservableObject {
     }
 
     // MARK: - Private Query Logic
-    
+    // Todo: This should be fetchDeepHKQuantityData
     private func fetchDeepData(for metric: SupportedMetric, daysBack: Int, isHistorical: Bool = false, completion: @escaping ([RawDataPoint]) -> Void) {
         guard let type = metric.hkType as? HKQuantityType, let unit = metric.unit else { completion([]); return }
         
@@ -347,7 +355,10 @@ class HealthKitManager: ObservableObject {
             let meta = p.metadata.map { "\($0.key):\($0.value)" }
                 .joined(separator: "|")
                 .replacingOccurrences(of: ",", with: ";")
-
+            
+            // JSON formatting should be done here
+            // Jason did most of this
+            // 
             let row = [
                 p.id.uuidString, p.sleepStage, "\(p.sleepStageRaw)",
                 ISO8601DateFormatter().string(from: p.startDate),

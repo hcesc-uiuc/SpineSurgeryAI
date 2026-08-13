@@ -43,10 +43,18 @@
 		<key>SRSensorUsageMotion</key>
 		<dict>
 			<key>Description</key>
-			<string>Wrist accelerometer data is used to assess spine recovery activity levels.</string>
+			<string>Wrist accelerometer data is used to assess movement related metrics to assess recovery of surgery recovery states.</string>
 			<key>Required</key>
 			<true/>
 		</dict>
+        <key>SRSensorUsageWristDetection</key>
+        <dict>
+            <key>Description</key>
+            <string>Wrist detection is used to detect when the watch is worn and to use data from those moments to derive movement metrics.</string>
+            <key>Required</key>
+            <true/>
+        </dict>
+        
 	</dict>
 	<key>UIBackgroundModes</key>
 	<array>

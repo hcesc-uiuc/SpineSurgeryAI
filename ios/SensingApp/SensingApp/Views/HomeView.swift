@@ -72,7 +72,7 @@ struct HomeView: View {
                                 Text(greetingText)
                                     .font(.system(size: 14, weight: .medium, design: .rounded))
                                     .foregroundStyle(Color(red: 0.55, green: 0.47, blue: 0.44))
-                                Text("Hi there 👋")
+                                Text("Hi there!")
                                     .font(.system(size: 28, weight: .bold, design: .rounded))
                                     .foregroundStyle(Color(red: 0.28, green: 0.22, blue: 0.20))
                             }
@@ -202,11 +202,11 @@ struct HomeView: View {
                         // keep it inside the ~34pt column on the smallest phones.
                         Text(isToday ? "Today" : dayLetter)
                             .font(.system(size: 11, weight: isToday ? .semibold : .medium, design: .rounded))
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.75)
                             .foregroundStyle(isToday
                                 ? Color(red: 0.22, green: 0.48, blue: 0.40)
                                 : Color(red: 0.55, green: 0.47, blue: 0.44))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.75)
 
                         ZStack {
                             Circle()
@@ -214,7 +214,7 @@ struct HomeView: View {
                                     ? Color.clear
                                     : completed
                                         ? Color(red: 0.22, green: 0.60, blue: 0.45)
-                                        : Color(red: 0.80, green: 0.75, blue: 0.72).opacity(0.5))
+                                        : Color(red: 0.55, green: 0.48, blue: 0.44).opacity(0.85))
                                 .frame(width: 34, height: 34)
 
                             if isToday && !completed {
@@ -231,7 +231,7 @@ struct HomeView: View {
                                 } else {
                                     Text("\(dayNum)")
                                         .font(.system(size: 13, weight: isToday ? .bold : .regular, design: .rounded))
-                                        .foregroundStyle(Color(red: 0.40, green: 0.32, blue: 0.29))
+                                        .foregroundStyle(.white)
                                 }
                             } else {
                                 Text("\(dayNum)")
@@ -254,15 +254,23 @@ struct HomeView: View {
         .padding(.horizontal, 24)
     }
 
+    /// Rolling 7-day window ending today, so today is always the last
+    /// (rightmost) entry and the whole strip shifts left as new days arrive.
+    ///
+    /// Anchored on `todayStart` rather than a fresh `Date()` so the midnight
+    /// rollover works: the body reads that @State, which is what guarantees a
+    /// re-render when the day changes. `rollDayIfNeeded` passes the new day in
+    /// explicitly rather than relying on the just-written @State being visible
+    /// in the same tick.
     private func currentWeekDays(anchor: Date? = nil) -> [Date] {
-        let today       = anchor ?? todayStart
-        let weekday     = calendar.component(.weekday, from: today) // 1=Sun
-        let startOfWeek = calendar.date(byAdding: .day, value: -(weekday - 1), to: today)!
-        return (0..<7).compactMap { calendar.date(byAdding: .day, value: $0, to: startOfWeek) }
+        let today = anchor ?? todayStart
+        return (0..<7).compactMap { offset in
+            calendar.date(byAdding: .day, value: -(6 - offset), to: today)
+        }
     }
 
     private func shortDayLetter(for date: Date) -> String {
-        let symbols = ["S", "M", "T", "W", "T", "F", "S"]
+        let symbols = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"]
         let weekday = calendar.component(.weekday, from: date) - 1
         return symbols[weekday]
     }
@@ -514,10 +522,10 @@ struct HomeView: View {
 
     private var currentMilestone: String? {
         switch currentDay {
-        case 7:  return "🎉 1 week milestone!"
-        case 14: return "🎉 2 week milestone!"
-        case 30: return "🎉 1 month milestone!"
-        case 90: return "🎉 3 month milestone!"
+        case 7:  return "1 week milestone!"
+        case 14: return "2 week milestone!"
+        case 30: return "1 month milestone!"
+        case 90: return "3 month milestone!"
         default: return nil
         }
     }

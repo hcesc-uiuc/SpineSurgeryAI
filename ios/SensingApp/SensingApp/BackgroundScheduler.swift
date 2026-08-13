@@ -112,9 +112,9 @@ class BackgroundScheduler {
             do {
                 try BGTaskScheduler.shared.submit(request)
                 Logger.shared.append("SensingApp: BGAppRefreshTask scheduled")
-                print("🕒 BGAppRefreshTask scheduled")
+                print("BGAppRefreshTask scheduled")
             } catch {
-                print("❌ Could not schedule BGAppRefreshTask: \(error)")
+                print("Could not schedule BGAppRefreshTask: \(error)")
             }
         }
     }
@@ -125,7 +125,7 @@ class BackgroundScheduler {
          Handle app grabs data if 60 minutes has passed since last recording.
          
          */
-        print("🔄 ==BGAppRefreshTask== started")
+        print("==BGAppRefreshTask== started")
         Logger.shared.append("==BGAppRefreshTask== started")
         
         // Reschedule next task
@@ -138,7 +138,7 @@ class BackgroundScheduler {
         
         // Expiration handler
         task.expirationHandler = {
-            print("⏰ ==BGAppRefreshTask== expired")
+            print("==BGAppRefreshTask== expired")
             Logger.shared.append("==BGAppRefreshTask== expired before completion.")
         }
 
@@ -146,7 +146,7 @@ class BackgroundScheduler {
         // Background tasks are started as a thread.
         // This thread is borrowed from Apple DispatchQueue thread pool
         // Do not block the operation with wait, unless we release it soon (using a consumer)
-        print("📡 Performing background fetch")
+        print("Performing background fetch")
         // Do my tak here
         
         //We will do a recording of motion and reschedule a background task
@@ -158,16 +158,16 @@ class BackgroundScheduler {
             let differenceInMinutes = now.timeIntervalSince(lastSensorDateSaveTime) / 60  // seconds → minutes
 
             if differenceInMinutes >= 65 {
-                print("⏰ More than 60 minutes have passed.")
+                print("More than 60 minutes have passed.")
                 Logger.shared.append("More than 60 minutes have passed since last recording")
                 //Sensor recording
                 BackgroundScheduler.shared.startSensorRecording()
             } else {
-                print("🕒 Only \(Int(differenceInMinutes)) minutes have passed.")
+                print("Only \(Int(differenceInMinutes)) minutes have passed.")
                 Logger.shared.append("Only \(Int(differenceInMinutes)) minutes since last recording")
             }
         } else {
-            print("⚠️ No saved date found in UserDefaults.")
+            print("No saved date found in UserDefaults.")
             Logger.shared.append("No lastSensorDateSaveTime. Recording...")
             //Note the following function will also create "lastSensorDateSaveTime"
             BackgroundScheduler.shared.startSensorRecording()
@@ -175,7 +175,7 @@ class BackgroundScheduler {
         
         
         task.setTaskCompleted(success: true)
-        print("✅ BGAppRefreshTask completed")
+        print("BGAppRefreshTask completed")
         Logger.shared.append("==BGAppRefreshTask== sucessfully completed")
         
     }
@@ -318,16 +318,16 @@ class BackgroundScheduler {
             let differenceInMinutes = now.timeIntervalSince(lastSensorDateSaveTime) / 60  // seconds → minutes
 
             if differenceInMinutes >= 65 {
-                print("⏰ More than 60 minutes have passed.")
+                print("More than 60 minutes have passed.")
                 Logger.shared.append("More than 60 minutes have passed since last recording")
                 //Sensor recording
                 BackgroundScheduler.shared.startSensorRecording()
             } else {
-                print("🕒 Only \(Int(differenceInMinutes)) minutes have passed.")
+                print("Only \(Int(differenceInMinutes)) minutes have passed.")
                 Logger.shared.append("Only \(Int(differenceInMinutes)) minutes since last recording")
             }
         } else {
-            print("⚠️ No saved date found in UserDefaults.")
+            print("No saved date found in UserDefaults.")
             Logger.shared.append("No lastSensorDateSaveTime. Recording...")
             //Note the following function will also create "lastSensorDateSaveTime"
             BackgroundScheduler.shared.startSensorRecording()
@@ -532,7 +532,7 @@ class BackgroundScheduler {
          We try to schedule Sensorkit fetch.
          
          */
-        print("🔄 ==BGSensorkitFetchTask== started")
+        print("==BGSensorkitFetchTask== started")
         Logger.shared.append("==BGSensorkitFetchTask== started")
         
         // Reschedule next task
@@ -542,7 +542,7 @@ class BackgroundScheduler {
         
         // Expiration handler
         task.expirationHandler = {
-            print("⏰ ==BGSensorkitFetchTask== expired")
+            print("==BGSensorkitFetchTask== expired")
             Logger.shared.append("==BGSensorkitFetchTask== expired before completion.")
         }
 
@@ -562,8 +562,9 @@ class BackgroundScheduler {
         // Fetcher will call setTaskCompleted in didCompleteFetch
         // accelFetcher.fetchLatestData()
         SensorKitAccelerometerFetcher.shared.fetchLatestData()
-        
-        
+        SensorKitGyroscopeFetcher.shared.fetchLatestData()
+
+
     }
     
     //=============================================================

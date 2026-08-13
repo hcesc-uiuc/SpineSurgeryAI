@@ -223,7 +223,7 @@ class SensorKitAccelerometerFetcher: NSObject {
     // MARK: - CSV File Management
     
     private func csvFileName(index: Int) -> String {
-        return "sensorkit_accel_watch_\(String(format: "%05d", index)).csv"
+        return "sensorkit_accel_phone_\(String(format: "%05d", index)).csv"
     }
     
     private func openCurrentFile() {
@@ -310,13 +310,13 @@ class SensorKitAccelerometerFetcher: NSObject {
 extension SensorKitAccelerometerFetcher: SRSensorReaderDelegate {
     
     func sensorReaderWillStartRecording(_ reader: SRSensorReader) {
-        print("✅ SK: SensorKit recording successfully started")
-        Logger.shared.append("✅ SK: SensorKit recording successfully started")
+        print("SK: SensorKit recording successfully started")
+        Logger.shared.append("SK: SensorKit recording successfully started")
     }
 
     func sensorReader(_ reader: SRSensorReader, startRecordingFailedWithError error: Error) {
-        print("❌ SensorKit recording failed: \(error)")
-        Logger.shared.append("❌ SensorKit recording failed: \(error)")
+        print("SensorKit recording failed: \(error)")
+        Logger.shared.append("SensorKit recording failed: \(error)")
     }
     
     func sensorReader(_ reader: SRSensorReader, didFetch devices: [SRDevice]) {
@@ -330,10 +330,11 @@ extension SensorKitAccelerometerFetcher: SRSensorReaderDelegate {
             Logger.shared.append("SK: Device: \(device.name) — model: \(device.model)")
         }
         
-        let watchDevice = devices.first { $0.model.lowercased().contains("watch") }
+        // The iPhone's own accelerometer (not a paired Watch).
+        let phoneDevice = devices.first { $0.model.lowercased().contains("iphone") }
             ?? devices.first
-        
-        guard let device = watchDevice else {
+
+        guard let device = phoneDevice else {
             print("No SensorKit devices found")
             return
         }

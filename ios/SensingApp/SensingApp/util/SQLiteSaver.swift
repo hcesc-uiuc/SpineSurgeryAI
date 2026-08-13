@@ -71,7 +71,7 @@ final class SQLiteSaver {
     //We sometimes have to write hours of cached data.
     private var capacity: Int = 120000
     private var flushAfterThisCount: Int = 120000
-    private let maxFileSizeMB: Double = 5  // 👈 change this threshold
+    private let maxFileSizeMB: Double = 5  // change this threshold
     private let accessQueue = DispatchQueue(label: "com.sensingapp.sqlitesaver")
     
     
@@ -154,7 +154,7 @@ final class SQLiteSaver {
         
         guard sqlite3_open(path, &db) == SQLITE_OK else {
             let msg = String(cString: sqlite3_errmsg(db))
-            print("❌ Failed to open DB at \(path): \(msg)")
+            print("Failed to open DB at \(path): \(msg)")
             db = nil
             return
         }
@@ -187,7 +187,7 @@ final class SQLiteSaver {
          */
         // defer { sqlite3_finalize(insertStmt) }
         
-        print("✅ Database opened at: \(path)")
+        print("Database opened at: \(path)")
     }
     
     func prepareInsertStatement(){
@@ -196,7 +196,7 @@ final class SQLiteSaver {
         
         let rc = sqlite3_exec(db, "BEGIN", nil, nil, nil)
         if rc != SQLITE_OK {
-            print("❌ BEGIN failed: \(String(cString: sqlite3_errmsg(db)))")
+            print("BEGIN failed: \(String(cString: sqlite3_errmsg(db)))")
         }
     }
     
@@ -214,7 +214,7 @@ final class SQLiteSaver {
         sqlite3_finalize(insertStmt)
         sqlite3_close(db)
         self.db = nil
-        print("🔒 Database closed")
+        print("Database closed")
         
         deleteWALFiles()  // then safe to delete
     }
@@ -234,10 +234,10 @@ final class SQLiteSaver {
             do {
                 if FileManager.default.fileExists(atPath: url.path) {
                     try FileManager.default.removeItem(at: url)
-                    print("🗑️ Deleted: \(url.lastPathComponent)")
+                    print("Deleted: \(url.lastPathComponent)")
                 }
             } catch {
-                print("❌ Failed to delete \(url.lastPathComponent): \(error)")
+                print("Failed to delete \(url.lastPathComponent): \(error)")
             }
         }
         
@@ -441,7 +441,7 @@ final class SQLiteSaver {
         guard sqlite3_exec(db, sql, nil, nil, &errorMsg) == SQLITE_OK else {
             let msg = errorMsg.map { String(cString: $0) } ?? "Unknown error"
             sqlite3_free(errorMsg)
-            print("❌ exec failed: \(msg)\nSQL: \(sql)")
+            print("exec failed: \(msg)\nSQL: \(sql)")
             return false
         }
         return true
