@@ -66,9 +66,12 @@ class AcclerometerRecorder {
         }
         writer.flush()
         writer.closeFile()
-        
+
+        if counter > 0 {
+            SensorStatusStore.shared.record(.accelerometer, at: now)
+        }
     }
-    
+
     func fetchAndSaveRecordedAcclerometerData() {
         let now = Date()
         let key = "lastAccelerometerSaveDate"
@@ -105,13 +108,14 @@ class AcclerometerRecorder {
         */
         
         //saving data to a csv folder
+        var rowCount = 0
         let writer = PreallocatedCSVBuffer(filename: "accelerometer_\(currentTimestampString()).csv", capacity: 100000)
         if let dataList = recorder.accelerometerData(from: past, to: now) {
             for case let data as CMRecordedAccelerometerData in dataList {
                 let accel = data.acceleration
                 let unixTime = data.startDate.timeIntervalSince1970 * 1000
                 //print("\(unixTime),\(accel.x),\(accel.y),\(accel.z)")
-                
+
                 //sqlite write
                 SQLiteSaver.shared.addRow(
                     timestamp: unixTime,
@@ -119,14 +123,19 @@ class AcclerometerRecorder {
                     blob: accelToBlob(x: accel.x, y: accel.y, z: accel.z),
                     counter: -1
                 )
-                
-                
+
+
                 //csv file write
                 writer.addRowStr(rowOfData: "\(unixTime),\(accel.x),\(accel.y),\(accel.z)")
+                rowCount += 1
             }
         }
         writer.flush()
         writer.closeFile()
+
+        if rowCount > 0 {
+            SensorStatusStore.shared.record(.accelerometer, at: now)
+        }
         
         //save last save date
         UserDefaults.standard.set(now, forKey: key)

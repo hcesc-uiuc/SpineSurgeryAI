@@ -7,6 +7,7 @@
 
 import SwiftUI
 import HealthKit
+internal import Combine   // .receive(on:) on the NSCalendarDayChanged publisher
 
 struct HomeView: View {
     let accentColor: Color
@@ -15,13 +16,23 @@ struct HomeView: View {
     @Binding var isSurveyPresented: Bool
 
     @AppStorage("journey_first_open_date") private var firstOpenTimestamp: Double = 0
+    @Environment(\.scenePhase) private var scenePhase
+
+    /// Midnight of the current day, held as state rather than read from `Date()`
+    /// inside the body. Everything date-dependent on this screen (the Day pill,
+    /// the "Today" column, which circles are in the future) derives from it, so
+    /// refreshing this one value rolls the whole screen over — and because the
+    /// body READS it, SwiftUI is guaranteed to re-render. Computing from
+    /// `Date()` directly looked identical but only updated when something else
+    /// happened to invalidate the view, so an app left open past midnight kept
+    /// yesterday's day number and labelled yesterday "Today".
+    @State private var todayStart = Calendar.current.startOfDay(for: Date())
 
     private var currentDay: Int {
         guard firstOpenTimestamp != 0 else { return 1 }
         let cal = Calendar.current
         let start = cal.startOfDay(for: Date(timeIntervalSince1970: firstOpenTimestamp))
-        let today = cal.startOfDay(for: Date())
-        return max(1, (cal.dateComponents([.day], from: start, to: today).day ?? 0) + 1)
+        return max(1, (cal.dateComponents([.day], from: start, to: todayStart).day ?? 0) + 1)
     }
 
     private var checkInComplete: Bool { appState.isCompletedToday }
@@ -34,6 +45,9 @@ struct HomeView: View {
     @State private var lastNightSleepHours: Double? = nil
     @State private var todayActiveEnergy: Int? = nil
     @State private var todayFlights: Int? = nil
+    // Per-tile provenance note ("heartrate", "heartrate · Jul 22"), set by
+    // applySensorStore(). Absent when the reading is live and from today.
+    @State private var statCaptions: [SensorKind: String] = [:]
     @State private var weeklyProgress: [Date: Bool] = [:]
 
     private let calendar = Calendar.current
@@ -53,13 +67,17 @@ struct HomeView: View {
 
                 ScrollView {
                     VStack(spacing: 20) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(greetingText)
-                                .font(.system(size: 14, weight: .medium, design: .rounded))
-                                .foregroundStyle(Color(red: 0.55, green: 0.47, blue: 0.44))
-                            Text("Hi there ")
-                                .font(.system(size: 28, weight: .bold, design: .rounded))
-                                .foregroundStyle(Color(red: 0.28, green: 0.22, blue: 0.20))
+                        HStack(alignment: .center, spacing: 12) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(greetingText)
+                                    .font(.system(size: 14, weight: .medium, design: .rounded))
+                                    .foregroundStyle(Color(red: 0.55, green: 0.47, blue: 0.44))
+                                Text("Hi there!")
+                                    .font(.system(size: 28, weight: .bold, design: .rounded))
+                                    .foregroundStyle(Color(red: 0.28, green: 0.22, blue: 0.20))
+                            }
+                            Spacer(minLength: 8)
+                            dayPill
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, 24)
@@ -68,10 +86,15 @@ struct HomeView: View {
                         .offset(y: appeared ? 0 : 12)
                         .animation(.easeOut(duration: 0.45).delay(0.05), value: appeared)
 
-                        recoveryDayCard
-                            .opacity(appeared ? 1 : 0)
-                            .offset(y: appeared ? 0 : 16)
-                            .animation(.easeOut(duration: 0.45).delay(0.15), value: appeared)
+                        // The welcome block is a day-one-only moment. From day 2 on
+                        // the day number lives in the pill beside the greeting, so
+                        // the card would just repeat it and push everything down.
+                        if currentDay == 1 {
+                            recoveryDayCard
+                                .opacity(appeared ? 1 : 0)
+                                .offset(y: appeared ? 0 : 16)
+                                .animation(.easeOut(duration: 0.45).delay(0.15), value: appeared)
+                        }
 
                         // ── Weekly survey strip ──────────────
                         weeklyStripCard
@@ -120,9 +143,42 @@ struct HomeView: View {
         .onAppear {
             appeared = true
             if firstOpenTimestamp == 0 { firstOpenTimestamp = Date().timeIntervalSince1970 }
+            rollDayIfNeeded()
             loadTodayHealthStats()
             loadWeeklyProgress()
         }
+        // onAppear does not fire on background→foreground, so stats went stale
+        // when the app was reopened. Reload whenever the scene becomes active.
+        .onChange(of: scenePhase) { _, newPhase in
+            if newPhase == .active {
+                rollDayIfNeeded()
+                loadTodayHealthStats()
+                loadWeeklyProgress()
+            }
+        }
+        // Covers the app being left open across midnight, when neither onAppear
+        // nor scenePhase fires. iOS posts this on a day change and on timezone
+        // changes; RunLoop.main because @State must only be touched on main.
+        .onReceive(
+            NotificationCenter.default
+                .publisher(for: .NSCalendarDayChanged)
+                .receive(on: RunLoop.main)
+        ) { _ in
+            rollDayIfNeeded()
+        }
+    }
+
+    /// Re-anchors the screen on the current day. No-op when the day has not
+    /// changed, so it is safe to call on every appear and foreground.
+    private func rollDayIfNeeded() {
+        let start = calendar.startOfDay(for: Date())
+        guard start != todayStart else { return }
+        todayStart = start
+        // The visible week may have rolled too (Sat → Sun), so the completion
+        // map has to be rebuilt for the new set of days. `start` is passed
+        // explicitly rather than relying on the @State write above being
+        // readable again this same tick.
+        loadWeeklyProgress(anchor: start)
     }
 
     // ── Weekly strip card ─────────────────────
@@ -134,20 +190,23 @@ struct HomeView: View {
 
             HStack(spacing: 0) {
                 ForEach(currentWeekDays(), id: \.self) { date in
-                    let isToday    = calendar.isDateInToday(date)
-                    let isFuture   = date > Date()
+                    let isToday    = calendar.isDate(date, inSameDayAs: todayStart)
+                    let isFuture   = date > todayStart
                     let completed  = weeklyProgress[calendar.startOfDay(for: date)] ?? false
                     let dayLetter  = shortDayLetter(for: date)
                     let dayNum     = calendar.component(.day, from: date)
 
                     VStack(spacing: 6) {
+                        // Today reads "Today" rather than its weekday letter — it is
+                        // the one column people look for. lineLimit/minimumScaleFactor
+                        // keep it inside the ~34pt column on the smallest phones.
                         Text(isToday ? "Today" : dayLetter)
-                            .font(.system(size: 11, weight: .medium, design: .rounded))
+                            .font(.system(size: 11, weight: isToday ? .semibold : .medium, design: .rounded))
                             .foregroundStyle(isToday
                                 ? Color(red: 0.22, green: 0.48, blue: 0.40)
                                 : Color(red: 0.55, green: 0.47, blue: 0.44))
                             .lineLimit(1)
-                            .minimumScaleFactor(0.8)
+                            .minimumScaleFactor(0.75)
 
                         ZStack {
                             Circle()
@@ -197,8 +256,14 @@ struct HomeView: View {
 
     /// Rolling 7-day window ending today, so today is always the last
     /// (rightmost) entry and the whole strip shifts left as new days arrive.
-    private func currentWeekDays() -> [Date] {
-        let today = calendar.startOfDay(for: Date())
+    ///
+    /// Anchored on `todayStart` rather than a fresh `Date()` so the midnight
+    /// rollover works: the body reads that @State, which is what guarantees a
+    /// re-render when the day changes. `rollDayIfNeeded` passes the new day in
+    /// explicitly rather than relying on the just-written @State being visible
+    /// in the same tick.
+    private func currentWeekDays(anchor: Date? = nil) -> [Date] {
+        let today = anchor ?? todayStart
         return (0..<7).compactMap { offset in
             calendar.date(byAdding: .day, value: -(6 - offset), to: today)
         }
@@ -210,8 +275,8 @@ struct HomeView: View {
         return symbols[weekday]
     }
 
-    private func loadWeeklyProgress() {
-        let days = currentWeekDays()
+    private func loadWeeklyProgress(anchor: Date? = nil) {
+        let days = currentWeekDays(anchor: anchor)
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd"
 
@@ -238,114 +303,85 @@ struct HomeView: View {
         weeklyProgress = result
     }
 
+    // Home tiles read from SensorStatusStore, which resolves every metric in one
+    // place: an imported file wins, else the live HealthKit stamp, else nothing.
+    // The six HealthKit queries that used to live here were a second, duplicate
+    // source of truth for the same six numbers.
     private func loadTodayHealthStats() {
-        guard HKHealthStore.isHealthDataAvailable() else { return }
-        let store = HKHealthStore()
-        let calendar = Calendar.current
-        let startOfDay = calendar.startOfDay(for: Date())
-        let predicate = HKQuery.predicateForSamples(withStart: startOfDay, end: Date(), options: .strictStartDate)
-
-        // Steps query
-        if let stepType = HKQuantityType.quantityType(forIdentifier: .stepCount) {
-            let stepsQuery = HKStatisticsQuery(
-                quantityType: stepType,
-                quantitySamplePredicate: predicate,
-                options: .cumulativeSum
-            ) { _, result, _ in
-                DispatchQueue.main.async {
-                    todaySteps = result?.sumQuantity().map { Int($0.doubleValue(for: .count())) }
-                }
+        applySensorStore()                                   // cached stamps + imports, instantly
+        Task {
+            // Pick up anything dropped into the Documents folder since we were
+            // last on screen. Blocking file I/O, so it runs off the main actor;
+            // captures nothing, so it is safe to detach.
+            await Task.detached { _ = SensorFileImporter.autoIngestInbox() }.value
+            applySensorStore()
+            SensorStatusStore.shared.refreshHealthKitSamples {   // then the live samples
+                applySensorStore()
             }
-            store.execute(stepsQuery)
+        }
+    }
+
+    /// Pull each tile's value and caption out of the store. A caption appears
+    /// only when the reading is noteworthy — imported, or not from today. (The
+    /// DEBUG sample table is never surfaced on Home; see
+    /// SensorStatusStore.homeTile.)
+    ///
+    /// Every tile is assigned on every pass, INCLUDING the nil case. Skipping the
+    /// nil case left the last known value on screen forever: deleting an import,
+    /// or clearing them all, kept showing the imported number because nothing
+    /// ever wrote over it.
+    private func applySensorStore() {
+        let store = SensorStatusStore.shared
+        var captions: [SensorKind: String] = [:]
+
+        func tile(_ kind: SensorKind, _ assign: (Double?) -> Void) {
+            let resolved = store.homeTile(for: kind)
+            assign(resolved?.value)
+            captions[kind] = resolved?.caption
         }
 
-        // Distance query
-        if let distType = HKQuantityType.quantityType(forIdentifier: .distanceWalkingRunning) {
-            let distQuery = HKStatisticsQuery(
-                quantityType: distType,
-                quantitySamplePredicate: predicate,
-                options: .cumulativeSum
-            ) { _, result, _ in
-                DispatchQueue.main.async {
-                    todayDistanceMeters = result?.sumQuantity().map { $0.doubleValue(for: .meter()) }
-                }
-            }
-            store.execute(distQuery)
-        }
+        tile(.steps)        { todaySteps = $0.map { Int($0) } }
+        tile(.distance)     { todayDistanceMeters = $0.map { $0 * 1000 } }   // series is stored in km
+        tile(.heartRate)    { latestHeartRate = $0.map { Int($0) } }
+        tile(.activeEnergy) { todayActiveEnergy = $0.map { Int($0) } }
+        tile(.flights)      { todayFlights = $0.map { Int($0) } }
+        tile(.sleep)        { lastNightSleepHours = $0 }
 
-        // Active energy query
-        if let energyType = HKQuantityType.quantityType(forIdentifier: .activeEnergyBurned) {
-            let energyQuery = HKStatisticsQuery(
-                quantityType: energyType,
-                quantitySamplePredicate: predicate,
-                options: .cumulativeSum
-            ) { _, result, _ in
-                DispatchQueue.main.async {
-                    todayActiveEnergy = result?.sumQuantity().map { Int($0.doubleValue(for: .kilocalorie())) }
-                }
-            }
-            store.execute(energyQuery)
-        }
+        statCaptions = captions
+    }
 
-        // Flights climbed query
-        if let flightsType = HKQuantityType.quantityType(forIdentifier: .flightsClimbed) {
-            let flightsQuery = HKStatisticsQuery(
-                quantityType: flightsType,
-                quantitySamplePredicate: predicate,
-                options: .cumulativeSum
-            ) { _, result, _ in
-                DispatchQueue.main.async {
-                    todayFlights = result?.sumQuantity().map { Int($0.doubleValue(for: .count())) }
-                }
+    /// Compact day counter that sits beside the greeting. It is the permanent
+    /// home of the day number from day 2 on, and it absorbs the milestone
+    /// callout (🎉 Day 7) rather than adding a second element to the row.
+    private var dayPill: some View {
+        HStack(spacing: 5) {
+            if currentMilestone != nil {
+                Text("🎉")
+                    .font(.system(size: 13))
             }
-            store.execute(flightsQuery)
+            Text("Day")
+                .font(.system(size: 13, weight: .medium, design: .rounded))
+                .foregroundStyle(.white.opacity(0.85))
+            Text("\(currentDay)")
+                .font(.system(size: 17, weight: .bold, design: .rounded))
+                .foregroundStyle(.white)
         }
-
-        // Heart rate query — latest sample today
-        if let hrType = HKQuantityType.quantityType(forIdentifier: .heartRate) {
-            let hrQuery = HKSampleQuery(
-                sampleType: hrType,
-                predicate: predicate,
-                limit: 1,
-                sortDescriptors: [NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: false)]
-            ) { _, samples, _ in
-                DispatchQueue.main.async {
-                    if let sample = samples?.first as? HKQuantitySample {
-                        latestHeartRate = Int(sample.quantity.doubleValue(for: HKUnit.count().unitDivided(by: .minute())))
-                    }
-                }
-            }
-            store.execute(hrQuery)
-        }
-
-        // Sleep query — last night (yesterday 18:00 to now)
-        if let sleepType = HKObjectType.categoryType(forIdentifier: .sleepAnalysis) {
-            let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: Date())!
-            let sleepStart = Calendar.current.date(bySettingHour: 18, minute: 0, second: 0, of: yesterday)!
-            let sleepPredicate = HKQuery.predicateForSamples(withStart: sleepStart, end: Date(), options: .strictStartDate)
-            let sleepQuery = HKSampleQuery(
-                sampleType: sleepType,
-                predicate: sleepPredicate,
-                limit: HKObjectQueryNoLimit,
-                sortDescriptors: nil
-            ) { _, samples, _ in
-                DispatchQueue.main.async {
-                    let asleepValues: Set<Int> = [
-                        HKCategoryValueSleepAnalysis.asleep.rawValue,
-                        HKCategoryValueSleepAnalysis.asleepCore.rawValue,
-                        HKCategoryValueSleepAnalysis.asleepDeep.rawValue,
-                        HKCategoryValueSleepAnalysis.asleepREM.rawValue,
-                        HKCategoryValueSleepAnalysis.asleepUnspecified.rawValue
-                    ]
-                    let totalSeconds = (samples as? [HKCategorySample])?.reduce(0.0) { acc, s in
-                        asleepValues.contains(s.value) ? acc + s.endDate.timeIntervalSince(s.startDate) : acc
-                    } ?? 0.0
-                    let hours = totalSeconds / 3600.0
-                    lastNightSleepHours = hours > 0 ? hours : nil
-                }
-            }
-            store.execute(sleepQuery)
-        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+        .background(
+            Capsule()
+                .fill(
+                    LinearGradient(
+                        colors: [accentColor, accentColor.opacity(0.75)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .shadow(color: accentColor.opacity(0.30), radius: 8, y: 3)
+        )
+        .fixedSize()
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(currentMilestone ?? "Day \(currentDay) of your recovery journey")
     }
 
     private var recoveryDayCard: some View {
@@ -359,28 +395,20 @@ struct HomeView: View {
                     )
                 )
                 .shadow(color: accentColor.opacity(0.35), radius: 16, y: 8)
-            VStack(spacing: 6) {
+            VStack(spacing: 2) {
                 Text("Day")
-                    .font(.system(size: 16, weight: .medium, design: .rounded))
+                    .font(.system(size: 13, weight: .medium, design: .rounded))
                     .foregroundStyle(.white.opacity(0.85))
                 Text("\(currentDay)")
-                    .font(.system(size: 72, weight: .bold, design: .rounded))
+                    .font(.system(size: 40, weight: .bold, design: .rounded))
                     .foregroundStyle(.white)
-                Text(currentDay == 1 ? "Welcome to your recovery journey!" : "of your recovery journey")
-                    .font(.system(size: 14, weight: .medium, design: .rounded))
+                Text("Welcome to your recovery journey!")
+                    .font(.system(size: 12, weight: .medium, design: .rounded))
                     .foregroundStyle(.white.opacity(0.85))
-                if let milestone = currentMilestone {
-                    Text(milestone)
-                        .font(.system(size: 12, weight: .semibold, design: .rounded))
-                        .foregroundStyle(accentColor)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 5)
-                        .background(.white.opacity(0.9))
-                        .clipShape(Capsule())
-                        .padding(.top, 6)
-                }
+                // No milestone capsule here: this card only renders on day 1,
+                // which is never a milestone day. Milestones live in dayPill.
             }
-            .padding(.vertical, 32)
+            .padding(.vertical, 16)
         }
         .padding(.horizontal, 24)
     }
@@ -431,12 +459,12 @@ struct HomeView: View {
 
     private var quickStatsRow: some View {
         LazyVGrid(columns: statColumns, spacing: 10) {
-            statCard(icon: "figure.walk",        value: todaySteps.map { formatSteps($0) } ?? "—",                        label: "Steps",       color: Color(red: 0.42, green: 0.62, blue: 0.55))
-            statCard(icon: "figure.walk.motion", value: todayDistanceMeters.map { formatDistance($0) } ?? "—",            label: "Distance",    color: Color(red: 0.38, green: 0.55, blue: 0.75))
-            statCard(icon: "heart.fill",         value: latestHeartRate.map { "\($0)" } ?? "—",                           label: "Heart rate",  color: Color(red: 0.80, green: 0.55, blue: 0.45))
-            statCard(icon: "flame.fill",         value: todayActiveEnergy.map { "\($0)" } ?? "—",                         label: "Active kcal", color: Color(red: 0.85, green: 0.50, blue: 0.35))
-            statCard(icon: "figure.stairs",      value: todayFlights.map { "\($0)" } ?? "—",                              label: "Flights",     color: Color(red: 0.50, green: 0.60, blue: 0.45))
-            statCard(icon: "bed.double.fill",    value: lastNightSleepHours.map { String(format: "%.1f hr", $0) } ?? "—", label: "Sleep",       color: Color(red: 0.58, green: 0.48, blue: 0.72))
+            statCard(icon: "figure.walk",        value: todaySteps.map { formatSteps($0) } ?? "—",                        label: "Steps",       color: Color(red: 0.42, green: 0.62, blue: 0.55), caption: statCaptions[.steps])
+            statCard(icon: "figure.walk.motion", value: todayDistanceMeters.map { formatDistance($0) } ?? "—",            label: "Distance",    color: Color(red: 0.38, green: 0.55, blue: 0.75), caption: statCaptions[.distance])
+            statCard(icon: "heart.fill",         value: latestHeartRate.map { "\($0)" } ?? "—",                           label: "Heart rate",  color: Color(red: 0.80, green: 0.55, blue: 0.45), caption: statCaptions[.heartRate])
+            statCard(icon: "flame.fill",         value: todayActiveEnergy.map { "\($0)" } ?? "—",                         label: "Active kcal", color: Color(red: 0.85, green: 0.50, blue: 0.35), caption: statCaptions[.activeEnergy])
+            statCard(icon: "figure.stairs",      value: todayFlights.map { "\($0)" } ?? "—",                              label: "Flights",     color: Color(red: 0.50, green: 0.60, blue: 0.45), caption: statCaptions[.flights])
+            statCard(icon: "bed.double.fill",    value: lastNightSleepHours.map { String(format: "%.1f hr", $0) } ?? "—", label: "Sleep",       color: Color(red: 0.58, green: 0.48, blue: 0.72), caption: statCaptions[.sleep])
         }
         .padding(.horizontal, 24)
     }
@@ -452,7 +480,7 @@ struct HomeView: View {
         return String(format: "%.1f km", km)
     }
 
-    private func statCard(icon: String, value: String, label: String, color: Color) -> some View {
+    private func statCard(icon: String, value: String, label: String, color: Color, caption: String? = nil) -> some View {
         VStack(spacing: 6) {
             Image(systemName: icon)
                 .font(.system(size: 18))
@@ -464,6 +492,15 @@ struct HomeView: View {
                 .font(.system(size: 10, weight: .medium, design: .rounded))
                 .foregroundStyle(Color(red: 0.55, green: 0.47, blue: 0.44))
                 .multilineTextAlignment(.center)
+            // Only present when the reading is imported or not from today — so a
+            // stale value can't pass for a fresh one.
+            if let caption {
+                Text(caption)
+                    .font(.system(size: 9, weight: .medium, design: .rounded))
+                    .foregroundStyle(Color(red: 0.68, green: 0.60, blue: 0.57))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 12)
