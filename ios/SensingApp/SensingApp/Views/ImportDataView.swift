@@ -108,11 +108,11 @@ struct ImportDataView: View {
     private var sourceCard: some View {
         card("LOAD A FILE") {
             Text("The importer works out the shape of the file: comma, tab or semicolon separated, or JSON. It finds the timestamp column by probing, and the value column after it. Header optional. A file with no timestamps at all is read as bare readings, dated by the file itself.")
-                .font(.system(size: 12, design: .rounded))
+                .font(.journey(.caption))
                 .foregroundStyle(muted)
 
             Text("The sensor is taken from the filename — heartratedata.csv, steps.csv, sleep.json — and you can override it on the next screen.")
-                .font(.system(size: 12, design: .rounded))
+                .font(.journey(.caption))
                 .foregroundStyle(muted)
 
             Button { showFileImporter = true } label: {
@@ -130,7 +130,7 @@ struct ImportDataView: View {
                 HStack(spacing: 8) {
                     Image(systemName: "folder.badge.questionmark")
                     Text("Scan on-device files")
-                        .font(.system(size: 15, weight: .semibold, design: .rounded))
+                        .font(.journey(.subheadline, weight: .semibold))
                     Spacer()
                 }
                 .foregroundStyle(terracotta)
@@ -141,12 +141,12 @@ struct ImportDataView: View {
             .buttonStyle(.plain)
 
             Text("Anything you drop into the app's Documents folder over Finder or the Files app is loaded automatically the next time the app opens — this screen is only needed to pick a file from elsewhere or to override the sensor. Scanning also finds the app's own recordings; importing one only reads it, and never disturbs the upload queue.")
-                .font(.system(size: 11, design: .rounded))
+                .font(.journey(.caption2))
                 .foregroundStyle(muted.opacity(0.85))
 
             if let status {
                 Text(status)
-                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                    .font(.journey(.caption, weight: .medium))
                     .foregroundStyle(ink)
                     .padding(.top, 2)
             }
@@ -160,15 +160,15 @@ struct ImportDataView: View {
                     HStack {
                         VStack(alignment: .leading, spacing: 1) {
                             Text(url.lastPathComponent)
-                                .font(.system(size: 13, weight: .medium, design: .rounded))
+                                .font(.journey(.footnote, weight: .medium))
                                 .foregroundStyle(ink)
                             Text(scanSubtitle(for: url))
-                                .font(.system(size: 11, design: .rounded))
+                                .font(.journey(.caption2))
                                 .foregroundStyle(muted)
                         }
                         Spacer()
                         Image(systemName: "chevron.right")
-                            .font(.system(size: 11, weight: .semibold))
+                            .font(.system(.caption2).weight(.semibold))
                             .foregroundStyle(muted.opacity(0.6))
                     }
                     .padding(.vertical, 4)
@@ -182,21 +182,21 @@ struct ImportDataView: View {
         card("SHOWING IMPORTED DATA") {
             if loaded.isEmpty {
                 Text("Nothing imported. Every screen is showing live HealthKit and recorder data\("")\(sampleNote).")
-                    .font(.system(size: 12, design: .rounded))
+                    .font(.journey(.caption))
                     .foregroundStyle(muted)
             } else {
                 Text("These sensors show file data instead of live data, and keep doing so until cleared.")
-                    .font(.system(size: 11, design: .rounded))
+                    .font(.journey(.caption2))
                     .foregroundStyle(muted.opacity(0.85))
 
                 ForEach(loaded) { info in
                     HStack(alignment: .top) {
                         VStack(alignment: .leading, spacing: 1) {
                             Text(info.kind?.displayName ?? info.kindRaw)
-                                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                                .font(.journey(.subheadline, weight: .semibold))
                                 .foregroundStyle(ink)
                             Text("\(info.filename) · \(info.rowCount) rows\(rangeText(info))")
-                                .font(.system(size: 11, design: .rounded))
+                                .font(.journey(.caption2))
                                 .foregroundStyle(muted)
                         }
                         Spacer()
@@ -213,7 +213,7 @@ struct ImportDataView: View {
 
                 Button { showClearConfirm = true } label: {
                     Text("Clear all")
-                        .font(.system(size: 13, weight: .semibold, design: .rounded))
+                        .font(.journey(.footnote, weight: .semibold))
                         .foregroundStyle(.red)
                 }
                 .buttonStyle(.plain)
@@ -225,11 +225,11 @@ struct ImportDataView: View {
     private var logCard: some View {
         card("LOG") {
             Text("Newest first. If a screen still shows an old value, check the newest entry actually landed.")
-                .font(.system(size: 11, design: .rounded))
+                .font(.journey(.caption2))
                 .foregroundStyle(muted.opacity(0.85))
             ForEach(Array(log.enumerated()), id: \.offset) { _, line in
                 Text(line)
-                    .font(.system(size: 12, design: .rounded))
+                    .font(.journey(.caption))
                     .foregroundStyle(ink)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -399,7 +399,7 @@ struct ImportDataView: View {
     private func card(_ title: String, @ViewBuilder content: () -> some View) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title)
-                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                .font(.journey(.caption, weight: .semibold))
                 .foregroundStyle(muted)
                 .padding(.leading, 4)
             VStack(alignment: .leading, spacing: 10) { content() }
@@ -416,7 +416,7 @@ struct ImportDataView: View {
     private func actionLabel(_ text: String, icon: String) -> some View {
         HStack(spacing: 8) {
             Image(systemName: icon)
-            Text(text).font(.system(size: 15, weight: .semibold, design: .rounded))
+            Text(text).font(.journey(.subheadline, weight: .semibold))
             Spacer()
         }
         .foregroundStyle(.white)
@@ -428,7 +428,7 @@ struct ImportDataView: View {
     private func smallButton(_ title: String, destructive: Bool = false, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(title)
-                .font(.system(size: 11, weight: .semibold, design: .rounded))
+                .font(.journey(.caption2, weight: .semibold))
                 .foregroundStyle(destructive ? .red : terracotta)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)

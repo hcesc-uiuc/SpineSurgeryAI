@@ -152,9 +152,10 @@ struct SensorsTabView: View {
                                     healthManager.refreshWithNewRange(days: 1) { _ in }
                                 } label: {
                                     Image(systemName: "arrow.clockwise")
-                                        .font(.system(size: 12, weight: .semibold))
+                                        .font(.system(.caption).weight(.semibold))
                                         .foregroundStyle(terracotta)
                                 }
+                                .accessibilityLabel("Refresh Apple Health data")
                             }
                         ) {
                             healthRow(.heartRate, icon: "heart.fill", kind: .heartRate,
@@ -320,14 +321,14 @@ struct SensorsTabView: View {
     private func statusLines(for kind: SensorKind?, accent: Color) -> some View {
         if let kind, let status = statusLines[kind] {
             Text(status.valueLine)
-                .font(.system(size: 12, weight: .medium, design: .rounded))
+                .font(.journey(.caption, weight: .medium))
                 .foregroundStyle(accent.opacity(0.9))
                 .padding(.top, 1)
             // Where the value came from — an imported file, Apple Health,
             // or the sample table. Never let a reading go unattributed.
             if let source = status.sourceLine {
                 Text(source)
-                    .font(.system(size: 11, design: .rounded))
+                    .font(.journey(.caption2))
                     .foregroundStyle(Color(red: 0.62, green: 0.55, blue: 0.52))
             }
         }
@@ -346,14 +347,14 @@ struct SensorsTabView: View {
             }
             VStack(alignment: .leading, spacing: 2) {
                 Text(allCoreSensorsOn ? "All sensors active" : "Some sensors paused")
-                    .font(.system(size: 15, weight: .semibold, design: .rounded))
+                    .font(.journey(.subheadline, weight: .semibold))
                     .foregroundStyle(Color(red: 0.28, green: 0.22, blue: 0.20))
                 Text("Motion, gyroscope, and location tracking")
-                    .font(.system(size: 12, design: .rounded))
+                    .font(.journey(.caption))
                     .foregroundStyle(Color(red: 0.55, green: 0.47, blue: 0.44))
             }
             Spacer()
-            Toggle("", isOn: Binding(
+            Toggle("Live sensor preview", isOn: Binding(
                 get: { allCoreSensorsOn },
                 set: { newValue in
                     motionManager.setAccelerometerEnabled(newValue)
@@ -404,7 +405,7 @@ struct SensorsTabView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text(title)
-                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .font(.journey(.caption, weight: .semibold))
                     .foregroundStyle(Color(red: 0.55, green: 0.47, blue: 0.44))
                     .padding(.leading, 4)
                 Spacer()
@@ -436,19 +437,19 @@ struct SensorsTabView: View {
                     .fill(color.opacity(0.15))
                     .frame(width: 34, height: 34)
                 Image(systemName: icon)
-                    .font(.system(size: 16))
+                    .font(.system(.callout))
                     .foregroundStyle(color)
             }
             VStack(alignment: .leading, spacing: 2) {
                 Text(name)
-                    .font(.system(size: 16, weight: .semibold, design: .rounded))
+                    .font(.journey(.callout, weight: .semibold))
                     .foregroundStyle(Color(red: 0.28, green: 0.22, blue: 0.20))
                 Text(detail)
-                    .font(.system(size: 13, design: .rounded))
+                    .font(.journey(.footnote))
                     .foregroundStyle(Color(red: 0.50, green: 0.42, blue: 0.39))
                 if let liveValue {
                     Text(liveValue)
-                        .font(.system(size: 13, design: .monospaced))
+                        .font(.journeyMono(.footnote))
                         .foregroundStyle(color)
                         .lineLimit(1)
                 }
@@ -456,10 +457,13 @@ struct SensorsTabView: View {
             }
             Spacer()
             if let isOn {
-                Toggle("", isOn: isOn).labelsHidden().tint(color)
+                // The label is hidden visually (the row already shows the name)
+                // but must exist, or VoiceOver announces a bare "switch" with no
+                // indication of which sensor it belongs to.
+                Toggle(name, isOn: isOn).labelsHidden().tint(color)
             } else if let badge {
                 Text(badge)
-                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .font(.journey(.caption2, weight: .semibold))
                     .foregroundStyle(color)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
@@ -492,19 +496,19 @@ struct SensorsTabView: View {
                     .fill(terracotta.opacity(0.15))
                     .frame(width: 34, height: 34)
                 Image(systemName: icon)
-                    .font(.system(size: 16))
+                    .font(.system(.callout))
                     .foregroundStyle(terracotta)
             }
             VStack(alignment: .leading, spacing: 2) {
                 Text(name)
-                    .font(.system(size: 16, weight: .semibold, design: .rounded))
+                    .font(.journey(.callout, weight: .semibold))
                     .foregroundStyle(Color(red: 0.28, green: 0.22, blue: 0.20))
                 Text(detail)
-                    .font(.system(size: 13, design: .rounded))
+                    .font(.journey(.footnote))
                     .foregroundStyle(Color(red: 0.50, green: 0.42, blue: 0.39))
                 if let valueText {
                     Text(valueText)
-                        .font(.system(size: 13, design: .monospaced))
+                        .font(.journeyMono(.footnote))
                         .foregroundStyle(terracotta)
                         .lineLimit(1)
                 }
@@ -517,12 +521,12 @@ struct SensorsTabView: View {
                         .fill(isFresh ? Color.green : Color.orange)
                         .frame(width: 6, height: 6)
                     Text(isFresh ? "Recent" : "Older")
-                        .font(.system(size: 11, weight: .semibold, design: .rounded))
+                        .font(.journey(.caption2, weight: .semibold))
                         .foregroundStyle(isFresh ? .green : .orange)
                 }
             } else {
                 Text("No data")
-                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .font(.journey(.caption2, weight: .semibold))
                     .foregroundStyle(Color(red: 0.55, green: 0.47, blue: 0.44))
             }
         }
@@ -541,19 +545,19 @@ struct SensorsTabView: View {
                     .fill(terracotta.opacity(0.15))
                     .frame(width: 34, height: 34)
                 Image(systemName: "bed.double.fill")
-                    .font(.system(size: 16))
+                    .font(.system(.callout))
                     .foregroundStyle(terracotta)
             }
             VStack(alignment: .leading, spacing: 2) {
                 Text("Sleep")
-                    .font(.system(size: 16, weight: .semibold, design: .rounded))
+                    .font(.journey(.callout, weight: .semibold))
                     .foregroundStyle(Color(red: 0.28, green: 0.22, blue: 0.20))
                 Text("Time asleep and sleep stages.")
-                    .font(.system(size: 13, design: .rounded))
+                    .font(.journey(.footnote))
                     .foregroundStyle(Color(red: 0.50, green: 0.42, blue: 0.39))
                 if let valueText {
                     Text(valueText)
-                        .font(.system(size: 13, design: .monospaced))
+                        .font(.journeyMono(.footnote))
                         .foregroundStyle(terracotta)
                         .lineLimit(1)
                 }

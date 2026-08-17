@@ -70,10 +70,10 @@ struct HomeView: View {
                         HStack(alignment: .center, spacing: 12) {
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(greetingText)
-                                    .font(.system(size: 14, weight: .medium, design: .rounded))
+                                    .font(.journey(.subheadline, weight: .medium))
                                     .foregroundStyle(Color(red: 0.55, green: 0.47, blue: 0.44))
                                 Text("Hi there!")
-                                    .font(.system(size: 28, weight: .bold, design: .rounded))
+                                    .font(.journey(.title, weight: .bold))
                                     .foregroundStyle(Color(red: 0.28, green: 0.22, blue: 0.20))
                             }
                             Spacer(minLength: 8)
@@ -107,6 +107,12 @@ struct HomeView: View {
                         }
                         .buttonStyle(.plain)
                         .disabled(checkInComplete)
+                        .accessibilityLabel(checkInComplete
+                                            ? "Daily check-in complete"
+                                            : "Daily check-in due")
+                        .accessibilityHint(checkInComplete
+                                           ? ""
+                                           : "Opens today's check-in. Takes about two minutes.")
                         .opacity(appeared ? 1 : 0)
                         .offset(y: appeared ? 0 : 16)
                         .animation(.easeOut(duration: 0.45).delay(0.25), value: appeared)
@@ -128,12 +134,13 @@ struct HomeView: View {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(action: { showSettings = true }) {
                         Image(systemName: "person.fill")
-                            .font(.system(size: 16, weight: .semibold))
+                            .font(.system(.callout).weight(.semibold))
                             .foregroundStyle(accentColor)
                             .frame(width: 36, height: 36)
                             .glassEffect(.regular.interactive(), in: .circle)
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel("Settings")
                 }
             }
             .sheet(isPresented: $showSettings) {
@@ -185,7 +192,7 @@ struct HomeView: View {
     private var weeklyStripCard: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("This week")
-                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                .font(.journey(.footnote, weight: .semibold))
                 .foregroundStyle(Color(red: 0.55, green: 0.47, blue: 0.44))
 
             HStack(spacing: 0) {
@@ -201,7 +208,7 @@ struct HomeView: View {
                         // the one column people look for. lineLimit/minimumScaleFactor
                         // keep it inside the ~34pt column on the smallest phones.
                         Text(isToday ? "Today" : dayLetter)
-                            .font(.system(size: 11, weight: isToday ? .semibold : .medium, design: .rounded))
+                            .font(.journey(.caption2, weight: isToday ? .semibold : .medium))
                             .foregroundStyle(isToday
                                 ? Color(red: 0.22, green: 0.48, blue: 0.40)
                                 : Color(red: 0.55, green: 0.47, blue: 0.44))
@@ -226,24 +233,31 @@ struct HomeView: View {
                             if !isFuture {
                                 if completed {
                                     Image(systemName: "checkmark")
-                                        .font(.system(size: 13, weight: .bold))
+                                        .font(.system(.footnote).weight(.bold))
                                         .foregroundStyle(.white)
                                 } else {
                                     Text("\(dayNum)")
-                                        .font(.system(size: 13, weight: isToday ? .bold : .regular, design: .rounded))
+                                        .font(.journey(.footnote, weight: isToday ? .bold : .regular))
                                         .foregroundStyle(.white)
                                 }
                             } else {
                                 Text("\(dayNum)")
-                                    .font(.system(size: 13, design: .rounded))
+                                    .font(.journey(.footnote))
                                     .foregroundStyle(Color(red: 0.70, green: 0.65, blue: 0.62).opacity(0.4))
                             }
                         }
                         .opacity(isFuture ? 0.4 : 1.0)
                     }
                     .frame(maxWidth: .infinity)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(weekDayAccessibilityLabel(for: date,
+                                                                 isToday: isToday,
+                                                                 isFuture: isFuture,
+                                                                 completed: completed))
                 }
             }
+            // Seven columns of ~34pt cannot absorb accessibility text sizes.
+            .journeyDenseLayout()
         }
         .padding(18)
         .background(
@@ -267,6 +281,20 @@ struct HomeView: View {
         return (0..<7).compactMap { offset in
             calendar.date(byAdding: .day, value: -(6 - offset), to: today)
         }
+    }
+
+    /// VoiceOver reads each column as one sentence. Without this the strip is
+    /// announced as a stream of orphaned letters and numbers ("Mo", "11",
+    /// "Tu", "12") with no indication of which days were completed.
+    private func weekDayAccessibilityLabel(for date: Date,
+                                           isToday: Bool,
+                                           isFuture: Bool,
+                                           completed: Bool) -> String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .full
+        let day = isToday ? "Today" : formatter.string(from: date)
+        if isFuture { return day }
+        return "\(day), check-in \(completed ? "completed" : "not completed")"
     }
 
     private func shortDayLetter(for date: Date) -> String {
@@ -357,13 +385,13 @@ struct HomeView: View {
         HStack(spacing: 5) {
             if currentMilestone != nil {
                 Text("🎉")
-                    .font(.system(size: 13))
+                    .font(.system(.footnote))
             }
             Text("Day")
-                .font(.system(size: 13, weight: .medium, design: .rounded))
+                .font(.journey(.footnote, weight: .medium))
                 .foregroundStyle(.white.opacity(0.85))
             Text("\(currentDay)")
-                .font(.system(size: 17, weight: .bold, design: .rounded))
+                .font(.journey(.body, weight: .bold))
                 .foregroundStyle(.white)
         }
         .padding(.horizontal, 14)
@@ -379,6 +407,9 @@ struct HomeView: View {
                 )
                 .shadow(color: accentColor.opacity(0.30), radius: 8, y: 3)
         )
+        // .fixedSize() means the pill never truncates, so at accessibility text
+        // sizes it would take the whole row and squeeze the greeting out.
+        .journeyDenseLayout()
         .fixedSize()
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(currentMilestone ?? "Day \(currentDay) of your recovery journey")
@@ -397,13 +428,13 @@ struct HomeView: View {
                 .shadow(color: accentColor.opacity(0.35), radius: 16, y: 8)
             VStack(spacing: 2) {
                 Text("Day")
-                    .font(.system(size: 13, weight: .medium, design: .rounded))
+                    .font(.journey(.footnote, weight: .medium))
                     .foregroundStyle(.white.opacity(0.85))
                 Text("\(currentDay)")
-                    .font(.system(size: 40, weight: .bold, design: .rounded))
+                    .font(.journey(.largeTitle, weight: .bold))
                     .foregroundStyle(.white)
                 Text("Welcome to your recovery journey!")
-                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                    .font(.journey(.caption, weight: .medium))
                     .foregroundStyle(.white.opacity(0.85))
                 // No milestone capsule here: this card only renders on day 1,
                 // which is never a milestone day. Milestones live in dayPill.
@@ -422,25 +453,25 @@ struct HomeView: View {
                           : Color(red: 0.80, green: 0.55, blue: 0.45).opacity(0.15))
                     .frame(width: 52, height: 52)
                 Image(systemName: checkInComplete ? "checkmark.circle.fill" : "pencil.and.list.clipboard")
-                    .font(.system(size: 24))
+                    .font(.system(.title))
                     .foregroundStyle(checkInComplete
                                      ? Color(red: 0.42, green: 0.62, blue: 0.55)
                                      : Color(red: 0.80, green: 0.55, blue: 0.45))
             }
             VStack(alignment: .leading, spacing: 3) {
                 Text(checkInComplete ? "Check-in complete!" : "Daily check-in due")
-                    .font(.system(size: 16, weight: .semibold, design: .rounded))
+                    .font(.journey(.callout, weight: .semibold))
                     .foregroundStyle(Color(red: 0.28, green: 0.22, blue: 0.20))
                 Text(checkInComplete
                      ? "Great work today. See you tomorrow."
                      : "Takes about 2 minutes to complete.")
-                    .font(.system(size: 13, design: .rounded))
+                    .font(.journey(.footnote))
                     .foregroundStyle(Color(red: 0.50, green: 0.42, blue: 0.39))
             }
             Spacer()
             if !checkInComplete {
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.system(.subheadline).weight(.semibold))
                     .foregroundStyle(Color(red: 0.80, green: 0.55, blue: 0.45))
             }
         }
@@ -467,6 +498,9 @@ struct HomeView: View {
             statCard(icon: "bed.double.fill",    value: lastNightSleepHours.map { String(format: "%.1f hr", $0) } ?? "—", label: "Sleep",       color: Color(red: 0.58, green: 0.48, blue: 0.72), caption: statCaptions[.sleep])
         }
         .padding(.horizontal, 24)
+        // Three tiles per row is already tight; let the text grow a long way
+        // but stop before the values start truncating to nothing.
+        .journeyDenseLayout()
     }
 
     private func formatSteps(_ steps: Int) -> String {
@@ -483,20 +517,20 @@ struct HomeView: View {
     private func statCard(icon: String, value: String, label: String, color: Color, caption: String? = nil) -> some View {
         VStack(spacing: 6) {
             Image(systemName: icon)
-                .font(.system(size: 18))
+                .font(.system(.title3))
                 .foregroundStyle(color)
             Text(value)
-                .font(.system(size: 16, weight: .bold, design: .rounded))
+                .font(.journey(.callout, weight: .bold))
                 .foregroundStyle(Color(red: 0.28, green: 0.22, blue: 0.20))
             Text(label)
-                .font(.system(size: 10, weight: .medium, design: .rounded))
+                .font(.journey(.caption2, weight: .medium))
                 .foregroundStyle(Color(red: 0.55, green: 0.47, blue: 0.44))
                 .multilineTextAlignment(.center)
             // Only present when the reading is imported or not from today — so a
             // stale value can't pass for a fresh one.
             if let caption {
                 Text(caption)
-                    .font(.system(size: 9, weight: .medium, design: .rounded))
+                    .font(.journey(.caption2, weight: .medium))
                     .foregroundStyle(Color(red: 0.68, green: 0.60, blue: 0.57))
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
@@ -509,6 +543,15 @@ struct HomeView: View {
                 .fill(Color(red: 0.99, green: 0.97, blue: 0.95))
                 .shadow(color: Color(red: 0.60, green: 0.45, blue: 0.40).opacity(0.10), radius: 8, y: 3)
         )
+        // Read as one tile ("Steps, 8,420") rather than three loose fragments
+        // in icon-value-label order, which is how VoiceOver took it before.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(statAccessibilityLabel(value: value, label: label, caption: caption))
+    }
+
+    private func statAccessibilityLabel(value: String, label: String, caption: String?) -> String {
+        guard value != "—" else { return "\(label), no data yet" }
+        return [label, value, caption].compactMap { $0 }.joined(separator: ", ")
     }
 
     private var greetingText: String {
