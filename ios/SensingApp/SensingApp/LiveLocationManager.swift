@@ -23,6 +23,11 @@ class LiveLocationManager: NSObject, ObservableObject, CLLocationManagerDelegate
     @Published var lastUpdate: Date?
     @Published var isTracking = false
 
+    // Whether the patient wants live location shown. Kept separate from
+    // isTracking so leaving the tab can stop the GPS without flipping
+    // the toggle off underneath them.
+    private(set) var userEnabled = true
+
     var authorizationStatus: CLAuthorizationStatus {
         manager.authorizationStatus
     }
@@ -30,7 +35,14 @@ class LiveLocationManager: NSObject, ObservableObject, CLLocationManagerDelegate
     override init() {
         super.init()
         manager.delegate = self
-        manager.desiredAccuracy = kCLLocationAccuracyBest
+
+        // This drives a coordinate label, not the research pipeline, so it does
+        // not need GPS-grade accuracy. Requesting Best with no distance filter
+        // pins the GPS on for the whole app: CoreLocation powers the hardware to
+        // satisfy the most demanding active client, which would override
+        // AdaptiveLocationManager whenever it drops to low power.
+        manager.desiredAccuracy = kCLLocationAccuracyNearestTenMeters
+        manager.distanceFilter = 10
     }
 
     func start() {
@@ -44,7 +56,15 @@ class LiveLocationManager: NSObject, ObservableObject, CLLocationManagerDelegate
         isTracking = false
     }
 
+    // Called when the Sensors tab appears. Honours the toggle so returning to
+    // the tab does not silently restart location the patient turned off.
+    func resumeIfEnabled() {
+        guard userEnabled else { return }
+        start()
+    }
+
     func setTracking(_ enabled: Bool) {
+        userEnabled = enabled
         enabled ? start() : stop()
     }
 
