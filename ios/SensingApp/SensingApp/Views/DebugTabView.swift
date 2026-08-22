@@ -16,6 +16,7 @@ struct DebugTabView: View {
 
     @State private var showDeniedAlert   = false
     @State private var showSettingsAlert = false
+    @State private var showImportData    = false
     @StateObject var HKManager = HealthKitManager()
     @Environment(\.scenePhase) var scenePhase
     let motionActivityManager = CMMotionActivityManager()
@@ -26,6 +27,15 @@ struct DebugTabView: View {
                 .font(.title2)
                 .padding()
             
+            // Load sensor values from a CSV instead of editing them in code.
+            Button("Imported Data…") {
+                showImportData = true
+            }
+            .padding(.top, 10)
+            .sheet(isPresented: $showImportData) {
+                ImportDataView()
+            }
+
             Button("Ask for sensorkit permissions") {
                 let sk = SensorKitManager()
                 sk.askForAuthorization()

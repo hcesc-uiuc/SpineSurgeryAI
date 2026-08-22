@@ -152,10 +152,10 @@ struct CheckboxRow: View {
             HStack(spacing: 10) {
                 Image(systemName: isChecked ? "checkmark.square.fill" : "square")
                     .foregroundStyle(Color(red: 0.80, green: 0.55, blue: 0.45))
-                    .font(.system(size: 20, design: .rounded))
+                    .font(.journey(.title3))
 
                 Text(title)
-                    .font(.system(size: 15, design: .rounded))
+                    .font(.journey(.subheadline))
                     .foregroundStyle(Color(red: 0.28, green: 0.22, blue: 0.20))
 
                 Spacer()
@@ -163,6 +163,11 @@ struct CheckboxRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        // Announce as a checkbox with an on/off value rather than a plain
+        // button whose state is carried entirely by the tick glyph.
+        .accessibilityRepresentation {
+            Toggle(title, isOn: $isChecked)
+        }
     }
 }
 
@@ -192,6 +197,11 @@ struct SurgerySurveyView: View {
     @State private var isSubmitting = false
     @State private var submitError: String?
 
+    // Drives the keyboard's Done button. The medication fields use numeric
+    // keypads, which have no return key — so once one was focused there was no
+    // way to put the keyboard away except scrolling it off screen.
+    @FocusState private var isEditingMedicationField: Bool
+
     @State private var selectedCalendarDate = Date()
     @State private var completedSurveyDates: Set<String> = []
 
@@ -217,17 +227,17 @@ struct SurgerySurveyView: View {
                         sectionCard(title: "Pain Numeric Rating Scale (NRS)") {
                             VStack(alignment: .leading, spacing: 10) {
                                 Text("How would you rate your overall pain right now?")
-                                    .font(.system(size: 15, design: .rounded))
+                                    .font(.journey(.subheadline))
                                     .foregroundStyle(Color(red: 0.28, green: 0.22, blue: 0.20))
 
                                 nrs0to10Row(selection: $painNRS)
 
                                 Button("Clear selection") { painNRS = nil }
-                                    .font(.system(size: 13, design: .rounded))
+                                    .font(.journey(.footnote))
                                     .foregroundStyle(Color(red: 0.80, green: 0.55, blue: 0.45))
 
                                 Text("0 = No pain • 10 = Worst possible pain")
-                                    .font(.system(size: 13, design: .rounded))
+                                    .font(.journey(.footnote))
                                     .foregroundStyle(Color(red: 0.50, green: 0.42, blue: 0.39))
                             }
                         }
@@ -235,7 +245,7 @@ struct SurgerySurveyView: View {
                         sectionCard(title: "Brief Function Check-In") {
                             VStack(alignment: .leading, spacing: 10) {
                                 Text("Compared to yesterday, my ability to get around is:")
-                                    .font(.system(size: 15, design: .rounded))
+                                    .font(.journey(.subheadline))
                                     .foregroundStyle(Color(red: 0.28, green: 0.22, blue: 0.20))
 
                                 singleChoiceList(
@@ -254,7 +264,7 @@ struct SurgerySurveyView: View {
                         sectionCard(title: "Pain Medication Intake") {
                             VStack(alignment: .leading, spacing: 12) {
                                 Text("Did you take any pain medication today, prescribed or over-the-counter?")
-                                    .font(.system(size: 15, design: .rounded))
+                                    .font(.journey(.subheadline))
                                     .foregroundStyle(Color(red: 0.28, green: 0.22, blue: 0.20))
 
                                 yesNoChoice(selection: $tookPainMedicationToday)
@@ -268,7 +278,7 @@ struct SurgerySurveyView: View {
                         sectionCard(title: "Sleep Quality") {
                             VStack(alignment: .leading, spacing: 10) {
                                 Text("How would you rate your sleep last night?")
-                                    .font(.system(size: 15, design: .rounded))
+                                    .font(.journey(.subheadline))
                                     .foregroundStyle(Color(red: 0.28, green: 0.22, blue: 0.20))
 
                                 singleChoiceList(
@@ -289,7 +299,7 @@ struct SurgerySurveyView: View {
                         sectionCard(title: "Falls Screen") {
                             VStack(alignment: .leading, spacing: 10) {
                                 Text("Have you had any falls since yesterday?")
-                                    .font(.system(size: 15, design: .rounded))
+                                    .font(.journey(.subheadline))
                                     .foregroundStyle(Color(red: 0.28, green: 0.22, blue: 0.20))
 
                                 yesNoChoice(selection: $hadFallsSinceYesterday)
@@ -307,9 +317,9 @@ struct SurgerySurveyView: View {
                                         // Safety note — static informational text, no logic
                                         HStack(alignment: .top, spacing: 8) {
                                             Image(systemName: "cross.case.fill")
-                                                .font(.system(size: 13, design: .rounded))
+                                                .font(.journey(.footnote))
                                             Text("If you've been hurt in a fall, please contact your care team. If this is an emergency, call 911.")
-                                                .font(.system(size: 13, design: .rounded))
+                                                .font(.journey(.footnote))
                                         }
                                         .foregroundStyle(Color(red: 0.75, green: 0.25, blue: 0.22))
                                         .padding(12)
@@ -325,23 +335,51 @@ struct SurgerySurveyView: View {
                         }
 
                         Text("You may skip any question that causes emotional discomfort. Skipped responses will be treated as missing data.")
-                            .font(.system(size: 13, design: .rounded))
+                            .font(.journey(.footnote))
                             .foregroundStyle(Color(red: 0.50, green: 0.42, blue: 0.39))
                             .italic()
 
-                        submitButton
-
+                        // Above the button, not below it: as a trailing line it
+                        // sat under the fold on a small phone, so a failed
+                        // submit looked like nothing had happened at all.
                         if let submitError {
-                            Text(submitError)
-                                .font(.system(size: 13, design: .rounded))
-                                .foregroundStyle(Color(red: 0.75, green: 0.25, blue: 0.22))
+                            HStack(alignment: .top, spacing: 8) {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .font(.journey(.footnote))
+                                Text(submitError)
+                                    .font(.journey(.footnote))
+                            }
+                            .foregroundStyle(Color(red: 0.75, green: 0.25, blue: 0.22))
+                            .padding(12)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .fill(Color(red: 0.75, green: 0.25, blue: 0.22).opacity(0.08))
+                            )
                         }
+
+                        submitButton
                     }
                     .padding(16)
                 }
+                .scrollDismissesKeyboard(.interactively)
             }
             .navigationTitle("Progress Survey")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                // The sheet used to be dismissible only by swiping down, which
+                // is not a gesture every patient in this study knows.
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Close") { dismiss() }
+                        .font(.journey(.callout, weight: .medium))
+                        .foregroundStyle(Color(red: 0.55, green: 0.47, blue: 0.44))
+                }
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("Done") { isEditingMedicationField = false }
+                        .font(.journey(.callout, weight: .semibold))
+                }
+            }
             .onAppear {
                 loadPersistedSurveyData()
                 if appState.isCompletedToday {
@@ -363,11 +401,11 @@ struct SurgerySurveyView: View {
         VStack(alignment: .leading, spacing: 14) {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Progress Survey")
-                    .font(.system(size: 20, weight: .bold, design: .rounded))
+                    .font(.journey(.title3, weight: .bold))
                     .foregroundStyle(Color(red: 0.28, green: 0.22, blue: 0.20))
 
                 Text("Track your weekly survey completion and fill out today's check-in.")
-                    .font(.system(size: 13, design: .rounded))
+                    .font(.journey(.footnote))
                     .foregroundStyle(Color(red: 0.50, green: 0.42, blue: 0.39))
             }
 
@@ -385,7 +423,7 @@ struct SurgerySurveyView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Text(weekRangeTitle(for: selectedCalendarDate))
-                    .font(.system(size: 15, weight: .semibold, design: .rounded))
+                    .font(.journey(.subheadline, weight: .semibold))
                     .foregroundStyle(Color(red: 0.28, green: 0.22, blue: 0.20))
 
                 Spacer()
@@ -402,7 +440,7 @@ struct SurgerySurveyView: View {
                     Button {
                         selectedCalendarDate = Date()
                     } label: {
-                        Text("Today").font(.system(size: 13, design: .rounded))
+                        Text("Today").font(.journey(.footnote))
                     }
 
                     Button {
@@ -426,16 +464,16 @@ struct SurgerySurveyView: View {
                     } label: {
                         VStack(spacing: 6) {
                             Text(day.shortWeekday)
-                                .font(.system(size: 12, design: .rounded))
+                                .font(.journey(.caption))
                                 .foregroundStyle(Color(red: 0.50, green: 0.42, blue: 0.39))
 
                             Text(day.dayNumber)
-                                .font(.system(size: 16, weight: day.isToday ? .bold : .regular, design: .rounded))
+                                .font(.journey(.callout, weight: day.isToday ? .bold : .regular))
                                 .foregroundStyle(Color(red: 0.28, green: 0.22, blue: 0.20))
 
                             if day.isCompleted {
                                 Image(systemName: "checkmark.circle.fill")
-                                    .font(.system(size: 13, design: .rounded))
+                                    .font(.journey(.footnote))
                                     .foregroundStyle(Color(red: 0.42, green: 0.62, blue: 0.55))
                             } else {
                                 Spacer().frame(height: 12)
@@ -458,6 +496,9 @@ struct SurgerySurveyView: View {
                     )
                 }
             }
+            // Seven fixed-height columns; cap growth so the day numbers stay
+            // inside their boxes at accessibility text sizes.
+            .journeyDenseLayout()
         }
     }
 
@@ -489,7 +530,7 @@ struct SurgerySurveyView: View {
     ) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(title)
-                .font(.system(size: 17, weight: .semibold, design: .rounded))
+                .font(.journey(.body, weight: .semibold))
                 .foregroundStyle(Color(red: 0.28, green: 0.22, blue: 0.20))
 
             content()
@@ -504,20 +545,29 @@ struct SurgerySurveyView: View {
 
     // MARK: - NRS
 
+    // The 0–10 scale is the single most-tapped control in the study, and as one
+    // flat row of 11 it gave each number about 25pt of width on a 4.7" phone —
+    // well under Apple's 44pt minimum, on a screen used by people who have just
+    // had spine surgery. An adaptive grid keeps every button at least 44pt wide
+    // and simply wraps to a second row when the screen is too narrow for one.
     private func nrs0to10Row(selection: Binding<Int?>) -> some View {
-        HStack(spacing: 4) {
+        LazyVGrid(
+            columns: [GridItem(.adaptive(minimum: 44), spacing: 6)],
+            spacing: 6
+        ) {
             ForEach(0...10, id: \.self) { value in
+                let isSelected = selection.wrappedValue == value
                 Button {
                     selection.wrappedValue = value
                 } label: {
                     Text("\(value)")
-                        .font(.system(size: 15, weight: .semibold, design: .rounded))
+                        .font(.journey(.subheadline, weight: .semibold))
                         .frame(maxWidth: .infinity)
                         .frame(height: 44)
                         .background(
                             RoundedRectangle(cornerRadius: 8)
                                 .fill(
-                                    selection.wrappedValue == value
+                                    isSelected
                                     ? Color(red: 0.80, green: 0.55, blue: 0.45).opacity(0.22)
                                     : .white
                                 )
@@ -525,13 +575,17 @@ struct SurgerySurveyView: View {
                         .overlay(
                             RoundedRectangle(cornerRadius: 8)
                                 .stroke(
-                                    selection.wrappedValue == value
+                                    isSelected
                                     ? Color(red: 0.80, green: 0.55, blue: 0.45) : Color(red: 0.80, green: 0.65, blue: 0.58).opacity(0.30),
                                     lineWidth: 1
                                 )
                         )
                 }
                 .buttonStyle(.plain)
+                // Bare "3" tells a VoiceOver user nothing about the scale, and
+                // without .isSelected there was no way to hear which one is set.
+                .accessibilityLabel("\(value) out of 10")
+                .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
             }
         }
     }
@@ -564,7 +618,7 @@ struct SurgerySurveyView: View {
 
             if allowClear {
                 Button(clearLabel) { selection.wrappedValue = nil }
-                    .font(.system(size: 13, design: .rounded))
+                    .font(.journey(.footnote))
                     .foregroundStyle(Color(red: 0.80, green: 0.55, blue: 0.45))
                     .padding(.top, 2)
             }
@@ -582,7 +636,7 @@ struct SurgerySurveyView: View {
                     .foregroundStyle(Color(red: 0.80, green: 0.55, blue: 0.45))
 
                 Text(title)
-                    .font(.system(size: 15, design: .rounded))
+                    .font(.journey(.subheadline))
                     .foregroundStyle(Color(red: 0.28, green: 0.22, blue: 0.20))
 
                 Spacer()
@@ -590,6 +644,9 @@ struct SurgerySurveyView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        // The filled-circle glyph is the only thing distinguishing a chosen
+        // answer from an unchosen one, and VoiceOver cannot see it.
+        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
     }
 
     // MARK: - Medications
@@ -597,11 +654,11 @@ struct SurgerySurveyView: View {
     private var medicationTodaySection: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Medications for today")
-                .font(.system(size: 15, weight: .semibold, design: .rounded))
+                .font(.journey(.subheadline, weight: .semibold))
                 .foregroundStyle(Color(red: 0.28, green: 0.22, blue: 0.20))
 
             Text("Yesterday's medications appear first. For those, you can update the dose or number of doses for today, or mark them as skipped if you did not take them.")
-                .font(.system(size: 13, design: .rounded))
+                .font(.journey(.footnote))
                 .foregroundStyle(Color(red: 0.50, green: 0.42, blue: 0.39))
 
             ForEach(medications.indices, id: \.self) { index in
@@ -629,7 +686,7 @@ struct SurgerySurveyView: View {
                 )
             } label: {
                 Label("Add medication", systemImage: "plus.circle")
-                    .font(.system(size: 15, design: .rounded))
+                    .font(.journey(.subheadline))
                     .foregroundStyle(Color(red: 0.80, green: 0.55, blue: 0.45))
             }
 
@@ -648,12 +705,12 @@ struct SurgerySurveyView: View {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(isCarriedOver ? "From yesterday" : "New medication")
-                        .font(.system(size: 15, weight: .semibold, design: .rounded))
+                        .font(.journey(.subheadline, weight: .semibold))
                         .foregroundStyle(Color(red: 0.28, green: 0.22, blue: 0.20))
 
                     if isCarriedOver {
                         Text("Edit dose or number of doses for today, or mark skipped if not taken.")
-                            .font(.system(size: 13, design: .rounded))
+                            .font(.journey(.footnote))
                             .foregroundStyle(Color(red: 0.50, green: 0.42, blue: 0.39))
                     }
                 }
@@ -663,7 +720,7 @@ struct SurgerySurveyView: View {
                 if let onDelete {
                     Button(role: .destructive, action: onDelete) {
                         Label("Delete", systemImage: "trash")
-                            .font(.system(size: 13, design: .rounded))
+                            .font(.journey(.footnote))
                     }
                 }
             }
@@ -671,11 +728,11 @@ struct SurgerySurveyView: View {
             if isCarriedOver {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Medication name")
-                        .font(.system(size: 13, design: .rounded))
+                        .font(.journey(.footnote))
                         .foregroundStyle(Color(red: 0.50, green: 0.42, blue: 0.39))
 
                     Text(entry.wrappedValue.medicationName)
-                        .font(.system(size: 15, design: .rounded))
+                        .font(.journey(.subheadline))
                         .foregroundStyle(Color(red: 0.28, green: 0.22, blue: 0.20))
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, 12)
@@ -688,38 +745,41 @@ struct SurgerySurveyView: View {
             } else {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Medication name")
-                        .font(.system(size: 13, design: .rounded))
+                        .font(.journey(.footnote))
                         .foregroundStyle(Color(red: 0.50, green: 0.42, blue: 0.39))
 
                     TextField("Enter medication name", text: entry.medicationName)
-                        .font(.system(size: 15, design: .rounded))
+                        .font(.journey(.subheadline))
                         .textFieldStyle(.roundedBorder)
+                        .focused($isEditingMedicationField)
                 }
             }
 
             HStack(spacing: 10) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Dose (mg)")
-                        .font(.system(size: 13, design: .rounded))
+                        .font(.journey(.footnote))
                         .foregroundStyle(Color(red: 0.50, green: 0.42, blue: 0.39))
 
                     TextField("mg", text: entry.doseMg)
-                        .font(.system(size: 15, design: .rounded))
+                        .font(.journey(.subheadline))
                         .keyboardType(.decimalPad)
                         .textFieldStyle(.roundedBorder)
+                        .focused($isEditingMedicationField)
                         .disabled(isSkipped)
                         .opacity(isSkipped ? 0.55 : 1.0)
                 }
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Number of doses")
-                        .font(.system(size: 13, design: .rounded))
+                        .font(.journey(.footnote))
                         .foregroundStyle(Color(red: 0.50, green: 0.42, blue: 0.39))
 
                     TextField("Enter number", text: entry.dosesToday)
-                        .font(.system(size: 15, design: .rounded))
+                        .font(.journey(.subheadline))
                         .keyboardType(.numbersAndPunctuation)
                         .textFieldStyle(.roundedBorder)
+                        .focused($isEditingMedicationField)
                         .disabled(isSkipped)
                         .opacity(isSkipped ? 0.55 : 1.0)
                 }
@@ -728,11 +788,11 @@ struct SurgerySurveyView: View {
             if isCarriedOver {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Route")
-                        .font(.system(size: 13, design: .rounded))
+                        .font(.journey(.footnote))
                         .foregroundStyle(Color(red: 0.50, green: 0.42, blue: 0.39))
 
                     Text(entry.wrappedValue.route.displayName)
-                        .font(.system(size: 15, design: .rounded))
+                        .font(.journey(.subheadline))
                         .foregroundStyle(Color(red: 0.28, green: 0.22, blue: 0.20))
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, 12)
@@ -754,7 +814,7 @@ struct SurgerySurveyView: View {
                             .foregroundStyle(Color(red: 0.80, green: 0.55, blue: 0.45))
 
                         Text("Skipped medication")
-                            .font(.system(size: 15, design: .rounded))
+                            .font(.journey(.subheadline))
                             .foregroundStyle(Color(red: 0.80, green: 0.55, blue: 0.45))
                             .fontWeight(entry.wrappedValue.skippedToday ? .semibold : .regular)
 
@@ -766,7 +826,7 @@ struct SurgerySurveyView: View {
             } else {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Route")
-                        .font(.system(size: 13, design: .rounded))
+                        .font(.journey(.footnote))
                         .foregroundStyle(Color(red: 0.50, green: 0.42, blue: 0.39))
 
                     Picker("Route", selection: entry.route) {
@@ -791,7 +851,7 @@ struct SurgerySurveyView: View {
 
     private var scoringNote: some View {
         Text("Opioid intake is auto-converted to morphine milligram equivalents (MME/day) using CDC conversion tables embedded in the app. Baseline MME is established during the preoperative period.")
-            .font(.system(size: 13, design: .rounded))
+            .font(.journey(.footnote))
             .foregroundStyle(Color(red: 0.50, green: 0.42, blue: 0.39))
             .padding(10)
             .background(
@@ -813,7 +873,7 @@ struct SurgerySurveyView: View {
                         .tint(.white)
                 } else {
                     Text("Submit Survey")
-                        .font(.system(size: 16, weight: .semibold, design: .rounded))
+                        .font(.journey(.callout, weight: .semibold))
                         .foregroundStyle(.white)
                 }
                 Spacer()
@@ -860,12 +920,20 @@ struct SurgerySurveyView: View {
                 // (both read SQLiteSaver.fetchSurveys) reflect this completion.
                 _ = SQLiteSaver.shared.insertSurvey(painScore: painNRS)
 
+                SensorStatusStore.shared.record(.survey)
+
                 appState.markCompletedToday()
                 isSubmitting = false
                 dismiss()
             } catch {
                 isSubmitting = false
-                submitError = "Upload failed: \(error.localizedDescription)"
+                // Patients were shown the raw error ("Upload failed: missing
+                // token"), which names an internal concept and gives them no
+                // idea what to do. The real error still goes to the log, where
+                // it is actually useful.
+                Logger.shared.append("Survey upload failed: \(error.localizedDescription)")
+                submitError = "We couldn't send your check-in just now. "
+                            + "Please check your internet connection and tap Submit again."
             }
         }
     }

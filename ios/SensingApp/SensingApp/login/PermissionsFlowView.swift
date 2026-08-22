@@ -261,7 +261,7 @@ struct PermissionsFlowView: View {
                     .frame(width: 76, height: 76)
                     .shadow(color: permission.iconColor.opacity(0.4), radius: 14, y: 6)
                 Image(systemName: permission.icon)
-                    .font(.system(size: 30, weight: .medium))
+                    .font(.system(.largeTitle).weight(.medium))
                     .foregroundStyle(.white)
             }
 
@@ -270,22 +270,22 @@ struct PermissionsFlowView: View {
                 // (e.g. one revoked permission) — "Step 1 of 1" is noise.
                 if permissions.count > 1 {
                     Text("Step \(currentIndex + 1) of \(permissions.count)")
-                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .font(.journey(.caption, weight: .semibold))
                         .foregroundStyle(Color(red: 0.55, green: 0.47, blue: 0.44))
                         .tracking(1.2)
                         .textCase(.uppercase)
                 }
 
                 Text(permission.title)
-                    .font(.system(size: 28, weight: .bold, design: .rounded))
+                    .font(.journey(.title, weight: .bold))
                     .foregroundStyle(Color(red: 0.28, green: 0.22, blue: 0.20))
 
                 Text(permission.headline)
-                    .font(.system(size: 17, weight: .medium, design: .rounded))
+                    .font(.journey(.body, weight: .medium))
                     .foregroundStyle(Color(red: 0.42, green: 0.62, blue: 0.55))
 
                 Text(permission.explanation)
-                    .font(.system(size: 15, design: .rounded))
+                    .font(.journey(.subheadline))
                     .foregroundStyle(Color(red: 0.40, green: 0.32, blue: 0.29).opacity(0.85))
                     .multilineTextAlignment(.center)
                     .lineSpacing(4)
@@ -295,7 +295,7 @@ struct PermissionsFlowView: View {
 
             Button(action: requestCurrentPermission) {
                 Text(permission.buttonLabel)
-                    .font(.system(size: 17, weight: .semibold, design: .rounded))
+                    .font(.journey(.body, weight: .semibold))
                     .foregroundStyle(.white)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 16)
@@ -570,6 +570,8 @@ struct PermissionsFlowView: View {
             HKObjectType.quantityType(forIdentifier: .distanceWalkingRunning)!,
             HKObjectType.quantityType(forIdentifier: .activeEnergyBurned)!,
             HKObjectType.quantityType(forIdentifier: .flightsClimbed)!,
+            HKObjectType.quantityType(forIdentifier: .heartRateVariabilitySDNN)!,
+            HKObjectType.quantityType(forIdentifier: .oxygenSaturation)!,
             HKObjectType.categoryType(forIdentifier: .sleepAnalysis)!
         ]
 
@@ -661,19 +663,19 @@ struct AlwaysLocationPromptView: View {
                         .frame(width: 68, height: 68)
                         .shadow(color: Color(red: 0.42, green: 0.62, blue: 0.55).opacity(0.4), radius: 12, y: 5)
                     Image(systemName: "location.fill")
-                        .font(.system(size: 28, weight: .medium))
+                        .font(.system(.title).weight(.medium))
                         .foregroundStyle(.white)
                 }
 
                 VStack(spacing: 10) {
                     Text("One more step")
-                        .font(.system(size: 24, weight: .bold, design: .rounded))
+                        .font(.journey(.title, weight: .bold))
                         .foregroundStyle(Color(red: 0.28, green: 0.22, blue: 0.20))
                     Text("Always On location is required")
-                        .font(.system(size: 16, weight: .medium, design: .rounded))
+                        .font(.journey(.callout, weight: .medium))
                         .foregroundStyle(Color(red: 0.42, green: 0.62, blue: 0.55))
                     Text("To accurately track your recovery, Journey needs location access even when the app is in the background. Please update this setting now — it only takes a few seconds.")
-                        .font(.system(size: 15, design: .rounded))
+                        .font(.journey(.subheadline))
                         .foregroundStyle(Color(red: 0.40, green: 0.32, blue: 0.29).opacity(0.85))
                         .multilineTextAlignment(.center)
                         .lineSpacing(4)
@@ -692,7 +694,7 @@ struct AlwaysLocationPromptView: View {
                 VStack(spacing: 10) {
                     Button(action: onOpenSettings) {
                         Text("Open Settings")
-                            .font(.system(size: 17, weight: .semibold, design: .rounded))
+                            .font(.journey(.body, weight: .semibold))
                             .foregroundStyle(.white)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 16)
@@ -712,7 +714,7 @@ struct AlwaysLocationPromptView: View {
 
                     Button(action: onCheckAgain) {
                         Text("I've updated it")
-                            .font(.system(size: 16, weight: .medium, design: .rounded))
+                            .font(.journey(.callout, weight: .medium))
                             .foregroundStyle(Color(red: 0.42, green: 0.62, blue: 0.55))
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 14)
@@ -735,11 +737,11 @@ struct AlwaysLocationPromptView: View {
                     .fill(Color(red: 0.42, green: 0.62, blue: 0.55))
                     .frame(width: 26, height: 26)
                 Text(number)
-                    .font(.system(size: 13, weight: .bold, design: .rounded))
+                    .font(.journey(.footnote, weight: .bold))
                     .foregroundStyle(.white)
             }
             Text(text)
-                .font(.system(size: 14, design: .rounded))
+                .font(.journey(.subheadline))
                 .foregroundStyle(Color(red: 0.28, green: 0.22, blue: 0.20))
             Spacer()
         }

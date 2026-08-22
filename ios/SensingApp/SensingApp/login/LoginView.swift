@@ -131,17 +131,17 @@ struct AuthLoginView: View {
                                     radius: 12, y: 6
                                 )
                             Image(systemName: "figure.walk.motion")
-                                .font(.system(size: 32, weight: .medium))
+                                .font(.system(.largeTitle).weight(.medium))
                                 .foregroundStyle(.white)
                         }
                         .padding(.bottom, 4)
 
                         Text("Journey")
-                            .font(.system(size: 38, weight: .bold, design: .rounded))
+                            .font(.journey(.largeTitle, weight: .bold))
                             .foregroundStyle(Color(red: 0.28, green: 0.22, blue: 0.20))
 
                         Text("Your recovery, one day at a time.")
-                            .font(.system(size: 15, weight: .regular, design: .rounded))
+                            .font(.journey(.subheadline, weight: .regular))
                             .foregroundStyle(Color(red: 0.50, green: 0.42, blue: 0.39))
                             .multilineTextAlignment(.center)
                     }
@@ -155,7 +155,7 @@ struct AuthLoginView: View {
                     VStack(spacing: 16) {
 
                         Text("Sign in securely with your Apple ID to access your recovery data.")
-                            .font(.system(size: 14, weight: .regular, design: .rounded))
+                            .font(.journey(.subheadline, weight: .regular))
                             .foregroundStyle(Color(red: 0.45, green: 0.37, blue: 0.34))
                             .multilineTextAlignment(.center)
                             .padding(.horizontal, 4)
@@ -182,9 +182,9 @@ struct AuthLoginView: View {
                         if let errorMessage {
                             HStack(spacing: 6) {
                                 Image(systemName: "exclamationmark.circle.fill")
-                                    .font(.system(size: 13))
+                                    .font(.system(.footnote))
                                 Text(errorMessage)
-                                    .font(.system(size: 13, design: .rounded))
+                                    .font(.journey(.footnote))
                             }
                             .foregroundStyle(Color(red: 0.75, green: 0.25, blue: 0.22))
                             .padding(.horizontal, 4)
@@ -201,7 +201,7 @@ struct AuthLoginView: View {
                                 )
                             }
                         }
-                        .font(.system(size: 13, design: .rounded))
+                        .font(.journey(.footnote))
                         .foregroundStyle(Color(red: 0.55, green: 0.47, blue: 0.44).opacity(0.7))
                         .padding(.top, 4)
                         #endif
@@ -225,7 +225,7 @@ struct AuthLoginView: View {
                     // ── Institution Logos ────────────────────────────
                     VStack(spacing: 12) {
                         Text("A multi-institution research study")
-                            .font(.system(size: 12, weight: .medium, design: .rounded))
+                            .font(.journey(.caption, weight: .medium))
                             .foregroundStyle(Color(red: 0.55, green: 0.47, blue: 0.44))
 
                         LazyVGrid(columns: columns, spacing: 16) {

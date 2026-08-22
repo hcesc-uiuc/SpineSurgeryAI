@@ -2,18 +2,24 @@
 //  SensorsTabView.swift
 //  SensingApp
 //
-//  Sensors tab ("What We Collect"). Now shows live values and lets the
-//  patient toggle individual sensors on/off, instead of a static list.
+//  Sensors tab ("What We Collect"). Shows live values, lets the patient toggle
+//  individual sensors on/off, AND reports when each sensor last produced data
+//  and where that reading came from.
+//
+//  The two halves answer different questions and are deliberately both shown:
+//    "live value"     — what the sensor is reading RIGHT NOW (streaming).
+//    "Last recorded"  — when data last landed, and its provenance (an imported
+//                       file, Apple Health, or the DEBUG sample table). A live
+//                       reading says nothing about whether anything was stored.
 //
 //  DATA SOURCES:
 //    Accelerometer / Gyroscope — MotionManager (CoreMotion, live @Published)
-//    Location                  — LiveLocationManager (new, CoreLocation live @Published)
+//    Location                  — LiveLocationManager (CoreLocation, live @Published)
 //    Apple Health metrics      — HealthKitManager.trialData (background-observer driven)
-//    SensorKit                 — SensorKitManager (authorization only — no live
-//                                 value shown here because SensorKitAccelerometerFetcher's
-//                                 code wasn't available to wire up a live reading)
-//    Apple Watch                — left informational-only; no watch connectivity
-//                                 code exists yet in this project to source real values
+//    SensorKit                 — SensorKitManager (authorization only)
+//    Apple Watch               — informational only; no watch connectivity yet
+//    "Last recorded" lines     — SensorStatusStore (recorder/HealthKit stamps,
+//                                imported files, DEBUG sample fallback)
 //
 
 import SwiftUI
@@ -22,10 +28,30 @@ import CoreLocation
 
 struct SensorsTabView: View {
 
-    @StateObject private var motionManager   = MotionManager()
-    @StateObject private var healthManager   = HealthKitManager()
+    @Environment(\.scenePhase) private var scenePhase
+
+    @StateObject private var motionManager    = MotionManager()
+    @StateObject private var healthManager    = HealthKitManager()
     @StateObject private var sensorKitManager = SensorKitManager()
     @StateObject private var locationManager  = LiveLocationManager.shared
+
+    // Freshness + source lines per sensor, rebuilt by refreshStatus().
+    @State private var statusLines: [SensorKind: SensorDisplay] = [:]
+
+    // Live-preview power management. These streams cost real battery - 10 Hz
+    // accelerometer + 10 Hz gyro delivered onto the main queue, and continuous
+    // GPS at kCLLocationAccuracyBest - so they must not run while nobody is
+    // looking at them. Left running they also pin the whole process at best
+    // accuracy, which defeats AdaptiveLocationManager's power tuning (it drops
+    // to kCLLocationAccuracyKilometer when the patient is stationary).
+    //
+    // `isVisible` gates the scenePhase resume: this view stays alive inside the
+    // TabView while other tabs are shown, so foregrounding the app must not
+    // restart the sensors unless the Sensors tab is the one actually on screen.
+    @State private var isVisible = false
+    @State private var isSuspended = false
+    @State private var resumeAccelerometer = false
+    @State private var resumeGyroscope = false
 
     private let sage        = Color(red: 0.42, green: 0.62, blue: 0.55)
     private let warmBlue    = Color(red: 0.38, green: 0.55, blue: 0.75)
@@ -67,6 +93,7 @@ struct SensorsTabView: View {
                                 sensorRow(
                                     icon: "move.3d", color: sage, name: "Accelerometer",
                                     detail: "Movement and orientation of your phone.",
+                                    kind: .accelerometer,
                                     liveValue: accelerometerText,
                                     isOn: Binding(
                                         get: { motionManager.isAccelerometerActive },
@@ -77,6 +104,7 @@ struct SensorsTabView: View {
                                 sensorRow(
                                     icon: "move.3d", color: sage, name: "Accelerometer",
                                     detail: "Movement and orientation of your phone.",
+                                    kind: .accelerometer,
                                     badge: "No hardware (Simulator)"
                                 )
                             }
@@ -85,6 +113,7 @@ struct SensorsTabView: View {
                                 sensorRow(
                                     icon: "gyroscope", color: sage, name: "Gyroscope",
                                     detail: "Rotation and turning of your phone.",
+                                    kind: .gyroscope,
                                     liveValue: gyroscopeText,
                                     isOn: Binding(
                                         get: { motionManager.isGyroscopeActive },
@@ -95,6 +124,7 @@ struct SensorsTabView: View {
                                 sensorRow(
                                     icon: "gyroscope", color: sage, name: "Gyroscope",
                                     detail: "Rotation and turning of your phone.",
+                                    kind: .gyroscope,
                                     badge: "No hardware (Simulator)"
                                 )
                             }
@@ -105,6 +135,7 @@ struct SensorsTabView: View {
                             sensorRow(
                                 icon: "location.fill", color: warmBlue, name: "Location",
                                 detail: "Approximate location, including in the background.",
+                                kind: .location,
                                 liveValue: locationText,
                                 isOn: Binding(
                                     get: { locationManager.isTracking },
@@ -117,26 +148,35 @@ struct SensorsTabView: View {
                         sensorSection(
                             title: "APPLE HEALTH",
                             trailing: {
-                                AnyView(
-                                    Button {
-                                        healthManager.refreshWithNewRange(days: 1) { _ in }
-                                    } label: {
-                                        Image(systemName: "arrow.clockwise")
-                                            .font(.system(size: 12, weight: .semibold))
-                                            .foregroundStyle(terracotta)
-                                    }
-                                )
+                                Button {
+                                    healthManager.refreshWithNewRange(days: 1) { _ in }
+                                } label: {
+                                    Image(systemName: "arrow.clockwise")
+                                        .font(.system(.caption).weight(.semibold))
+                                        .foregroundStyle(terracotta)
+                                }
+                                .accessibilityLabel("Refresh Apple Health data")
                             }
                         ) {
-                            healthRow(.heartRate, icon: "heart.fill", detail: "Beats per minute over time.")
+                            healthRow(.heartRate, icon: "heart.fill", kind: .heartRate,
+                                      name: "Heart Rate",
+                                      detail: "Beats per minute over time.")
                             Divider().padding(.leading, 64)
-                            healthRow(.hrv, icon: "waveform.path.ecg", detail: "Variation between heartbeats.")
+                            healthRow(.hrv, icon: "waveform.path.ecg", kind: .heartRateVariability,
+                                      name: "Heart Rate Variability",
+                                      detail: "Variation between heartbeats.")
                             Divider().padding(.leading, 64)
-                            healthRow(.steps, icon: "figure.walk", detail: "Steps recorded today.")
+                            healthRow(.steps, icon: "figure.walk", kind: .steps,
+                                      name: "Steps & Walking",
+                                      detail: "Steps, walking speed, asymmetry, and steadiness.")
                             Divider().padding(.leading, 64)
-                            healthRow(.oxygen, icon: "lungs.fill", detail: "Oxygen saturation when available.")
+                            healthRow(.oxygen, icon: "lungs.fill", kind: .bloodOxygen,
+                                      name: "Blood Oxygen",
+                                      detail: "Oxygen saturation when available.")
                             Divider().padding(.leading, 64)
-                            healthRow(.calories, icon: "flame.fill", detail: "Calories burned during activity.")
+                            healthRow(.calories, icon: "flame.fill", kind: .activeEnergy,
+                                      name: "Active Energy",
+                                      detail: "Calories burned during activity.")
                             Divider().padding(.leading, 64)
                             sleepRow
                         }
@@ -144,15 +184,25 @@ struct SensorsTabView: View {
                         // APPLE WATCH — no watch-connectivity code exists yet in the
                         // project, so this stays informational rather than faking live data.
                         sensorSection(title: "APPLE WATCH") {
-                            sensorRow(icon: "applewatch", color: purple, name: "Watch Accelerometer", detail: "High-rate motion from your Apple Watch.", badge: "Not connected")
+                            sensorRow(icon: "applewatch", color: purple, name: "Watch Accelerometer",
+                                      detail: "High-rate motion from your Apple Watch.",
+                                      kind: .watchAccelerometer, badge: "Not connected")
                             Divider().padding(.leading, 64)
-                            sensorRow(icon: "heart.fill", color: purple, name: "Watch Heart & PPG", detail: "Heart rate and optical (PPG) signals.", badge: "When available")
+                            sensorRow(icon: "heart.fill", color: purple, name: "Watch Heart & PPG",
+                                      detail: "Heart rate and optical (PPG) signals.",
+                                      kind: .watchHeartPPG, badge: "When available")
                             Divider().padding(.leading, 64)
-                            sensorRow(icon: "waveform.path.ecg.rectangle", color: purple, name: "ECG", detail: "Electrocardiogram readings.", badge: "When available")
+                            sensorRow(icon: "waveform.path.ecg.rectangle", color: purple, name: "ECG",
+                                      detail: "Electrocardiogram readings.",
+                                      kind: .ecg, badge: "When available")
                             Divider().padding(.leading, 64)
-                            sensorRow(icon: "thermometer.medium", color: purple, name: "Wrist Temperature", detail: "Skin temperature at the wrist.", badge: "When available")
+                            sensorRow(icon: "thermometer.medium", color: purple, name: "Wrist Temperature",
+                                      detail: "Skin temperature at the wrist.",
+                                      kind: .wristTemperature, badge: "When available")
                             Divider().padding(.leading, 64)
-                            sensorRow(icon: "sun.max.fill", color: purple, name: "Ambient Light", detail: "Surrounding light levels.", badge: "When available")
+                            sensorRow(icon: "sun.max.fill", color: purple, name: "Ambient Light",
+                                      detail: "Surrounding light levels.",
+                                      kind: .ambientLight, badge: "When available")
                         }
 
                         // SENSORKIT
@@ -172,7 +222,10 @@ struct SensorsTabView: View {
 
                         // DAILY SURVEY
                         sensorSection(title: "DAILY SURVEY") {
-                            sensorRow(icon: "list.clipboard.fill", color: terracotta, name: "Recovery Check-in", detail: "Pain, function, medications, sleep, and falls.")
+                            sensorRow(icon: "list.clipboard.fill", color: terracotta,
+                                      name: "Recovery Check-in",
+                                      detail: "Pain, function, medications, sleep, and falls.",
+                                      kind: .survey)
                         }
 
                         Spacer().frame(height: 90)
@@ -184,7 +237,100 @@ struct SensorsTabView: View {
             .navigationTitle("What We Collect")
             .onAppear {
                 locationManager.resumeIfEnabled()
+                isVisible = true
+                resumeLivePreview()
                 healthManager.refreshWithNewRange(days: 1) { _ in }
+                refreshStatus()
+            }
+            .onDisappear {
+                isVisible = false
+                suspendLivePreview()
+            }
+            .onChange(of: scenePhase) { _, newPhase in
+                if newPhase == .active {
+                    refreshStatus()
+                    if isVisible { resumeLivePreview() }
+                } else {
+                    // Backgrounding does not fire .onDisappear, so without this
+                    // the streams keep running with the phone in a pocket.
+                    suspendLivePreview()
+                }
+            }
+        }
+    }
+
+    // MARK: - Live Preview Power Management
+
+    // Stop the streaming sensors while the tab is off screen or the app is
+    // backgrounded. Which motion streams were running is remembered so that
+    // resuming restores exactly that set, rather than forcing both back on and
+    // silently overriding a toggle the patient had switched off.
+    private func suspendLivePreview() {
+        guard !isSuspended else { return }
+        isSuspended = true
+        resumeAccelerometer = motionManager.isAccelerometerActive
+        resumeGyroscope     = motionManager.isGyroscopeActive
+        motionManager.setAccelerometerEnabled(false)
+        motionManager.setGyroscopeEnabled(false)
+        locationManager.stop()
+    }
+
+    // Restore whatever was suspended. On the very first appear nothing has been
+    // suspended yet and MotionManager's initialiser has already started both
+    // streams, so only location needs starting - which is exactly what this view
+    // did before, leaving the toggles' own behaviour unchanged.
+    private func resumeLivePreview() {
+        if isSuspended {
+            isSuspended = false
+            if resumeAccelerometer { motionManager.setAccelerometerEnabled(true) }
+            if resumeGyroscope     { motionManager.setGyroscopeEnabled(true) }
+        }
+        locationManager.start()
+    }
+
+    // MARK: - Freshness / Provenance
+
+    // Show what the store already knows, then catch up on both live sources:
+    // any data file dropped into the Documents folder since we were last here,
+    // and the genuine latest HealthKit samples. Each rebuilds the rows as it
+    // lands, so the tab is never blank waiting on I/O.
+    private func refreshStatus() {
+        rebuildStatusLines()
+        Task {
+            // Blocking file I/O — keep it off the main actor. Captures nothing,
+            // so it is safe to detach.
+            await Task.detached { _ = SensorFileImporter.autoIngestInbox() }.value
+            rebuildStatusLines()
+            SensorStatusStore.shared.refreshHealthKitSamples {
+                rebuildStatusLines()
+            }
+        }
+    }
+
+    private func rebuildStatusLines() {
+        var lines: [SensorKind: SensorDisplay] = [:]
+        for kind in SensorKind.allCases {
+            lines[kind] = SensorStatusStore.shared.display(for: kind)
+        }
+        statusLines = lines
+    }
+
+    // The "Last recorded: …" pair shown under every row that maps to a
+    // SensorKind. Split out so the generic row, the health rows and the sleep
+    // row all render provenance identically.
+    @ViewBuilder
+    private func statusLines(for kind: SensorKind?, accent: Color) -> some View {
+        if let kind, let status = statusLines[kind] {
+            Text(status.valueLine)
+                .font(.journey(.caption, weight: .medium))
+                .foregroundStyle(accent.opacity(0.9))
+                .padding(.top, 1)
+            // Where the value came from — an imported file, Apple Health,
+            // or the sample table. Never let a reading go unattributed.
+            if let source = status.sourceLine {
+                Text(source)
+                    .font(.journey(.caption2))
+                    .foregroundStyle(Color(red: 0.62, green: 0.55, blue: 0.52))
             }
             // The live coordinate is only visible on this tab. Without this the
             // GPS keeps streaming after the patient navigates away, for the rest
@@ -208,14 +354,14 @@ struct SensorsTabView: View {
             }
             VStack(alignment: .leading, spacing: 2) {
                 Text(allCoreSensorsOn ? "All sensors active" : "Some sensors paused")
-                    .font(.system(size: 15, weight: .semibold, design: .rounded))
+                    .font(.journey(.subheadline, weight: .semibold))
                     .foregroundStyle(Color(red: 0.28, green: 0.22, blue: 0.20))
                 Text("Motion, gyroscope, and location tracking")
-                    .font(.system(size: 12, design: .rounded))
+                    .font(.journey(.caption))
                     .foregroundStyle(Color(red: 0.55, green: 0.47, blue: 0.44))
             }
             Spacer()
-            Toggle("", isOn: Binding(
+            Toggle("Live sensor preview", isOn: Binding(
                 get: { allCoreSensorsOn },
                 set: { newValue in
                     motionManager.setAccelerometerEnabled(newValue)
@@ -266,7 +412,7 @@ struct SensorsTabView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text(title)
-                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .font(.journey(.caption, weight: .semibold))
                     .foregroundStyle(Color(red: 0.55, green: 0.47, blue: 0.44))
                     .padding(.leading, 4)
                 Spacer()
@@ -283,9 +429,11 @@ struct SensorsTabView: View {
         }
     }
 
-    // Generic sensor row: icon chip + name/detail + live value / toggle / badge
+    // Generic sensor row: icon chip + name/detail, optional live value, the
+    // last-recorded pair, and a trailing toggle or badge.
     private func sensorRow(
         icon: String, color: Color, name: String, detail: String,
+        kind: SensorKind? = nil,
         liveValue: String? = nil,
         isOn: Binding<Bool>? = nil,
         badge: String? = nil
@@ -296,24 +444,33 @@ struct SensorsTabView: View {
                     .fill(color.opacity(0.15))
                     .frame(width: 34, height: 34)
                 Image(systemName: icon)
-                    .font(.system(size: 16))
+                    .font(.system(.callout))
                     .foregroundStyle(color)
             }
             VStack(alignment: .leading, spacing: 2) {
                 Text(name)
-                    .font(.system(size: 16, weight: .semibold, design: .rounded))
+                    .font(.journey(.callout, weight: .semibold))
                     .foregroundStyle(Color(red: 0.28, green: 0.22, blue: 0.20))
-                Text(liveValue ?? detail)
-                    .font(.system(size: 13, design: liveValue != nil ? .monospaced : .rounded))
-                    .foregroundStyle(liveValue != nil ? color : Color(red: 0.50, green: 0.42, blue: 0.39))
-                    .lineLimit(1)
+                Text(detail)
+                    .font(.journey(.footnote))
+                    .foregroundStyle(Color(red: 0.50, green: 0.42, blue: 0.39))
+                if let liveValue {
+                    Text(liveValue)
+                        .font(.journeyMono(.footnote))
+                        .foregroundStyle(color)
+                        .lineLimit(1)
+                }
+                statusLines(for: kind, accent: color)
             }
             Spacer()
             if let isOn {
-                Toggle("", isOn: isOn).labelsHidden().tint(color)
+                // The label is hidden visually (the row already shows the name)
+                // but must exist, or VoiceOver announces a bare "switch" with no
+                // indication of which sensor it belongs to.
+                Toggle(name, isOn: isOn).labelsHidden().tint(color)
             } else if let badge {
                 Text(badge)
-                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .font(.journey(.caption2, weight: .semibold))
                     .foregroundStyle(color)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
@@ -326,8 +483,14 @@ struct SensorsTabView: View {
         .contentShape(Rectangle())
     }
 
-    // Health row backed by the most recent HealthKit sample for that metric
-    private func healthRow(_ metric: SupportedMetric, icon: String, detail: String) -> some View {
+    // Health row backed by the most recent HealthKit sample for that metric.
+    // The Recent/Older pip describes the LIVE sample; the "Last recorded" pair
+    // below describes what the store actually holds, which may be an import.
+    //
+    // `name` is passed explicitly rather than taken from `metric.rawValue`:
+    // the raw values are internal shorthand ("HRV", "Oxygen", "Calories") and
+    // this list is read by older post-surgery patients.
+    private func healthRow(_ metric: SupportedMetric, icon: String, kind: SensorKind, name: String, detail: String) -> some View {
         let point = latestHealthPoint(metric)
         let isFresh = point.map { Date().timeIntervalSince($0.startDate) < 300 } ?? false
         let valueText: String? = point.map { p in
@@ -340,17 +503,23 @@ struct SensorsTabView: View {
                     .fill(terracotta.opacity(0.15))
                     .frame(width: 34, height: 34)
                 Image(systemName: icon)
-                    .font(.system(size: 16))
+                    .font(.system(.callout))
                     .foregroundStyle(terracotta)
             }
             VStack(alignment: .leading, spacing: 2) {
-                Text(metric.rawValue)
-                    .font(.system(size: 16, weight: .semibold, design: .rounded))
+                Text(name)
+                    .font(.journey(.callout, weight: .semibold))
                     .foregroundStyle(Color(red: 0.28, green: 0.22, blue: 0.20))
-                Text(valueText ?? detail)
-                    .font(.system(size: 13, design: valueText != nil ? .monospaced : .rounded))
-                    .foregroundStyle(valueText != nil ? terracotta : Color(red: 0.50, green: 0.42, blue: 0.39))
-                    .lineLimit(1)
+                Text(detail)
+                    .font(.journey(.footnote))
+                    .foregroundStyle(Color(red: 0.50, green: 0.42, blue: 0.39))
+                if let valueText {
+                    Text(valueText)
+                        .font(.journeyMono(.footnote))
+                        .foregroundStyle(terracotta)
+                        .lineLimit(1)
+                }
+                statusLines(for: kind, accent: terracotta)
             }
             Spacer()
             if valueText != nil {
@@ -359,12 +528,12 @@ struct SensorsTabView: View {
                         .fill(isFresh ? Color.green : Color.orange)
                         .frame(width: 6, height: 6)
                     Text(isFresh ? "Recent" : "Older")
-                        .font(.system(size: 11, weight: .semibold, design: .rounded))
+                        .font(.journey(.caption2, weight: .semibold))
                         .foregroundStyle(isFresh ? .green : .orange)
                 }
             } else {
                 Text("No data")
-                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .font(.journey(.caption2, weight: .semibold))
                     .foregroundStyle(Color(red: 0.55, green: 0.47, blue: 0.44))
             }
         }
@@ -383,17 +552,23 @@ struct SensorsTabView: View {
                     .fill(terracotta.opacity(0.15))
                     .frame(width: 34, height: 34)
                 Image(systemName: "bed.double.fill")
-                    .font(.system(size: 16))
+                    .font(.system(.callout))
                     .foregroundStyle(terracotta)
             }
             VStack(alignment: .leading, spacing: 2) {
                 Text("Sleep")
-                    .font(.system(size: 16, weight: .semibold, design: .rounded))
+                    .font(.journey(.callout, weight: .semibold))
                     .foregroundStyle(Color(red: 0.28, green: 0.22, blue: 0.20))
-                Text(valueText ?? "Time asleep and sleep stages.")
-                    .font(.system(size: 13, design: valueText != nil ? .monospaced : .rounded))
-                    .foregroundStyle(valueText != nil ? terracotta : Color(red: 0.50, green: 0.42, blue: 0.39))
-                    .lineLimit(1)
+                Text("Time asleep and sleep stages.")
+                    .font(.journey(.footnote))
+                    .foregroundStyle(Color(red: 0.50, green: 0.42, blue: 0.39))
+                if let valueText {
+                    Text(valueText)
+                        .font(.journeyMono(.footnote))
+                        .foregroundStyle(terracotta)
+                        .lineLimit(1)
+                }
+                statusLines(for: .sleep, accent: terracotta)
             }
             Spacer()
         }

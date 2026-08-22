@@ -9,4 +9,5 @@ __pycache__/
 ios/.DS_Store
 
 AuthKey_*.p8
-config.ini*.xcuserstate
+config.ini
+*.xcuserstate
