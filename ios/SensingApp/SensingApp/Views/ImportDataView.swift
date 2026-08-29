@@ -384,15 +384,8 @@ struct ImportDataView: View {
         return " · covers \(Self.day.string(from: min)) – \(Self.day.string(from: max))"
     }
 
-    /// Release has no sample table at all, so the empty-state sentence must not
-    /// promise one.
-    private var sampleNote: String {
-#if DEBUG
-        return ", or sample data where there is none"
-#else
-        return ""
-#endif
-    }
+    /// The sample table was removed; nothing stands in for missing data now.
+    private var sampleNote: String { "" }
 
     // MARK: - Small view helpers
 

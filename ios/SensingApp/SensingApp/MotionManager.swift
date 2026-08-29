@@ -3,8 +3,16 @@
 //  SensingApp
 //
 //  Created by Samir Kurudi on 11/20/25.
-//  Updated: added stop controls + isActive flags so the Sensors tab
-//  can toggle live accelerometer/gyroscope tracking on and off.
+//
+//  Live CoreMotion preview for the Sensors tab ONLY. This is not the research
+//  pipeline — AcclerometerRecorder and GyroscopeRecorder own that, via
+//  CMSensorRecorder, and are entirely separate objects.
+//
+//  Construction is deliberately inert: these streams run at 10 Hz onto the main
+//  queue, and the owning @StateObject lives for the whole app lifetime once the
+//  TabView materialises the Sensors tab. Starting them in init() therefore
+//  powered the hardware before anyone had looked at the tab. Only start()/stop(),
+//  driven by the tab's appear/disappear and scene phase, may turn these on.
 //
 import Foundation
 import CoreMotion
@@ -16,56 +24,31 @@ class MotionManager: ObservableObject {
     @Published var accelerometerData: CMAccelerometerData?
     @Published var gyroscopeData: CMGyroData?
 
-    // Reflects whether updates are actively being requested from CoreMotion
-    // right now (bound to the toggles in SensorsTabView).
-    @Published var isAccelerometerActive = false
-    @Published var isGyroscopeActive = false
-
     var isAccelerometerAvailable: Bool { motion.isAccelerometerAvailable }
     var isGyroscopeAvailable: Bool { motion.isGyroAvailable }
 
-    init() {
-        startAccelerometerUpdates()
-        startGyroUpdates()
-    }
-
-    func startAccelerometerUpdates() {
-        guard motion.isAccelerometerAvailable else { return }
-
-        motion.accelerometerUpdateInterval = 0.1
-        motion.startAccelerometerUpdates(to: OperationQueue.main) { [weak self] data, _ in
-            self?.accelerometerData = data
+    func start() {
+        if motion.isAccelerometerAvailable {
+            motion.accelerometerUpdateInterval = 0.1
+            motion.startAccelerometerUpdates(to: OperationQueue.main) { [weak self] data, _ in
+                self?.accelerometerData = data
+            }
         }
-        isAccelerometerActive = true
+        if motion.isGyroAvailable {
+            motion.gyroUpdateInterval = 0.1
+            motion.startGyroUpdates(to: OperationQueue.main) { [weak self] data, _ in
+                self?.gyroscopeData = data
+            }
+        }
     }
 
-    func stopAccelerometerUpdates() {
+    // Clearing the published values matters as much as stopping the hardware:
+    // without it the last reading stays frozen on screen while the app is
+    // backgrounded, which reads as live data that is no longer being collected.
+    func stop() {
         motion.stopAccelerometerUpdates()
-        isAccelerometerActive = false
-        accelerometerData = nil
-    }
-
-    func setAccelerometerEnabled(_ enabled: Bool) {
-        enabled ? startAccelerometerUpdates() : stopAccelerometerUpdates()
-    }
-
-    func startGyroUpdates() {
-        guard motion.isGyroAvailable else { return }
-
-        motion.gyroUpdateInterval = 0.1
-        motion.startGyroUpdates(to: OperationQueue.main) { [weak self] data, _ in
-            self?.gyroscopeData = data
-        }
-        isGyroscopeActive = true
-    }
-
-    func stopGyroUpdates() {
         motion.stopGyroUpdates()
-        isGyroscopeActive = false
+        accelerometerData = nil
         gyroscopeData = nil
-    }
-
-    func setGyroscopeEnabled(_ enabled: Bool) {
-        enabled ? startGyroUpdates() : stopGyroUpdates()
     }
 }

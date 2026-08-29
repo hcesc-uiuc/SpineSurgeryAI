@@ -7,6 +7,9 @@
 //  is separate and only exists to drive the live coordinate shown on the
 //  Sensors tab. It does not touch the file-logging pipeline.
 //
+//  Lifecycle is owned entirely by the Sensors tab: start() when the tab is on
+//  screen and the app is active, stop() otherwise.
+//
 
 import Foundation
 import CoreLocation
@@ -22,11 +25,6 @@ class LiveLocationManager: NSObject, ObservableObject, CLLocationManagerDelegate
     @Published var horizontalAccuracy: CLLocationAccuracy?
     @Published var lastUpdate: Date?
     @Published var isTracking = false
-
-    // Whether the patient wants live location shown. Kept separate from
-    // isTracking so leaving the tab can stop the GPS without flipping
-    // the toggle off underneath them.
-    private(set) var userEnabled = true
 
     var authorizationStatus: CLAuthorizationStatus {
         manager.authorizationStatus
@@ -51,21 +49,15 @@ class LiveLocationManager: NSObject, ObservableObject, CLLocationManagerDelegate
         isTracking = true
     }
 
+    // The published values are cleared alongside stopping the hardware. Leaving
+    // the last fix in place kept a coordinate on screen after the tab was left
+    // or the app backgrounded, which looks like location is still being read.
     func stop() {
         manager.stopUpdatingLocation()
         isTracking = false
-    }
-
-    // Called when the Sensors tab appears. Honours the toggle so returning to
-    // the tab does not silently restart location the patient turned off.
-    func resumeIfEnabled() {
-        guard userEnabled else { return }
-        start()
-    }
-
-    func setTracking(_ enabled: Bool) {
-        userEnabled = enabled
-        enabled ? start() : stop()
+        coordinate = nil
+        horizontalAccuracy = nil
+        lastUpdate = nil
     }
 
     // MARK: - CLLocationManagerDelegate
