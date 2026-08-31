@@ -202,7 +202,10 @@ class AdaptiveLocationManager: NSObject, ObservableObject, CLLocationManagerDele
     
     // How far (meters) the user must move within the time window
     // to be considered still moving. Below this = stationary.
-    private let stationaryDistanceThreshold: CLLocationDistance = 10
+    // Raised from 10m to 50m so ordinary GPS jitter from a stationary phone
+    // no longer looks like movement and resets the stationary clock, which
+    // previously kept the manager pinned in high accuracy indefinitely.
+    private let stationaryDistanceThreshold: CLLocationDistance = 50
 
     // How long (seconds) without a location update before we consider
     // the user stationary and drop to low power mode.
@@ -402,10 +405,10 @@ class AdaptiveLocationManager: NSObject, ObservableObject, CLLocationManagerDele
         switch currentMode {
 
         case .highAccuracy:
-            // kCLLocationAccuracyBest requests GPS hardware.
-            // iOS uses GPS satellites + WiFi + cell for maximum precision (~5–10m).
-            // The GPS radio is the primary battery consumer in location tracking.
-            locationManager.desiredAccuracy = kCLLocationAccuracyBest
+            // nearestTenMeters (~10m) is enough for day-to-day movement research
+            // and jitters far less than Best. Best kept the GPS radio pinned on
+            // and produced noise that defeated the stationary detection below.
+            locationManager.desiredAccuracy = kCLLocationAccuracyNearestTenMeters
 
             // Only call didUpdateLocations when the user moves at least 5m.
             // Set below our 10m movement threshold so we never miss
