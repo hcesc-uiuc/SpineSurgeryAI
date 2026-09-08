@@ -37,7 +37,7 @@
 	<key>NSSensorKitPrivacyPolicyURL</key>
 	<string>https://my-site.example.com/privacy-policy/</string>
 	<key>NSSensorKitUsageDescription</key>
-	<string>This research study collects motion data from your Apple Watch.</string>
+	<string>This research study collects data from your Apple Watch and iPhone.</string>
     <key>NSSensorKitUsageDetail</key>
     <dict>
         <key>SRSensorUsageMotion</key>
@@ -51,6 +51,34 @@
         <dict>
             <key>Description</key>
             <string>Wrist detection is used to detect when the watch is worn and to use data from those moments to derive movement metrics.</string>
+            <key>Required</key>
+            <true/>
+        </dict>
+        <key>SRSensorUsageAmbientPressure</key>
+        <dict>
+            <key>Description</key>
+            <string>Ambient pressure is used to derive altitude and activity context during recovery.</string>
+            <key>Required</key>
+            <true/>
+        </dict>
+        <key>SRSensorUsagePhoneUsage</key>
+        <dict>
+            <key>Description</key>
+            <string>Aggregate phone-call activity counts (never call content) are used as an engagement and recovery signal.</string>
+            <key>Required</key>
+            <true/>
+        </dict>
+        <key>SRSensorUsageMessageUsage</key>
+        <dict>
+            <key>Description</key>
+            <string>Aggregate messaging activity counts (never message content) are used as an engagement and recovery signal.</string>
+            <key>Required</key>
+            <true/>
+        </dict>
+        <key>SRSensorUsageKeyboardMetrics</key>
+        <dict>
+            <key>Description</key>
+            <string>Aggregate keyboard usage metrics (never typed content) are used to assess fine motor recovery.</string>
             <key>Required</key>
             <true/>
         </dict>

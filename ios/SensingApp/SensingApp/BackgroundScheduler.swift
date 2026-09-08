@@ -559,6 +559,10 @@ class BackgroundScheduler {
         print("Performing sensorkit fetch")
         Logger.shared.append("BGSensorkitFetchTask: Performing sensorkit fetch")
 
+        // Fetch every registered sensor (accel, gyro, wrist, ...).
+        SensorKitRegistry.all.forEach { $0.fetchLatestData() }
+      
+        /* Mash ToDo: Check if we need this.
         //we need to change the fetch part
         // let accelFetcher = SensorKitAccelerometerFetcher()
         // Fetcher will call setTaskCompleted in didCompleteFetch
@@ -571,6 +575,7 @@ class BackgroundScheduler {
         SensorKitDeviceUsageFetcher.shared.fetchLatestData()
         SensorKitWristTemperatureFetcher.shared.fetchLatestData()
         SensorKitHeartRateFetcher.shared.fetchLatestData()
+        */
 
     }
     
