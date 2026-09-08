@@ -67,8 +67,20 @@ struct MainAppView: View {
         .onChange(of: selectedTab) { _, newValue in
             // Tapping the separated check-in slot opens the survey instead of
             // navigating; remember the previous tab so we can restore it on dismiss.
+            //
+            // The slot used to open the survey unconditionally, so a patient who
+            // had already checked in today got the sheet anyway and was met with
+            // an "Already Completed" alert the moment it appeared — while Home's
+            // own check-in card was correctly disabled. Same rule both places
+            // now: if there is nothing to fill in, the slot just bounces back to
+            // the tab you were on. The icon is already a checkmark, so the state
+            // is visible without the detour through a modal.
             if newValue == .survey {
-                isSurveyPresented = true
+                if canOpenCheckIn {
+                    isSurveyPresented = true
+                } else {
+                    selectedTab = lastNonSurveyTab
+                }
             } else {
                 lastNonSurveyTab = newValue
             }
@@ -124,6 +136,13 @@ struct MainAppView: View {
     //   completed today        -> filled checkmark (clearly "done")
     //   scheduled & still due   -> filled clipboard (weighted, draws the eye)
     //   nothing scheduled today -> outline clipboard (quiet/inactive)
+    /// Whether there is a check-in to fill in right now. Mirrors the condition
+    /// HomeView uses to enable its check-in card, so the two entry points can
+    /// never disagree about whether the survey is open for business.
+    private var canOpenCheckIn: Bool {
+        !appState.isCompletedToday && appState.isSurveyScheduledToday
+    }
+
     private var surveyTabIcon: String {
         if appState.isCompletedToday { return "checkmark.circle.fill" }
         if appState.isSurveyScheduledToday { return "list.clipboard.fill" }

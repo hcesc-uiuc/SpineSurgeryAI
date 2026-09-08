@@ -37,16 +37,16 @@
 	<key>NSSensorKitPrivacyPolicyURL</key>
 	<string>https://my-site.example.com/privacy-policy/</string>
 	<key>NSSensorKitUsageDescription</key>
-	<string>This research study collects motion data from your Apple Watch.</string>
-	<key>NSSensorKitUsageDetail</key>
-	<dict>
-		<key>SRSensorUsageMotion</key>
-		<dict>
-			<key>Description</key>
-			<string>Wrist accelerometer data is used to assess movement related metrics to assess recovery of surgery recovery states.</string>
-			<key>Required</key>
-			<true/>
-		</dict>
+	<string>This research study collects data from your Apple Watch and iPhone.</string>
+    <key>NSSensorKitUsageDetail</key>
+    <dict>
+        <key>SRSensorUsageMotion</key>
+        <dict>
+            <key>Description</key>
+            <string>Wrist accelerometer data is used to assess movement related metrics to assess recovery of surgery recovery states.</string>
+            <key>Required</key>
+            <true/>
+        </dict>
         <key>SRSensorUsageWristDetection</key>
         <dict>
             <key>Description</key>
@@ -82,7 +82,42 @@
             <key>Required</key>
             <true/>
         </dict>
-	</dict>
+        <key>SRSensorUsageAmbientLightSensor</key>
+        <dict>
+            <key>Description</key>
+            <string>Ambient light data is used to characterize the wearer's light exposure patterns as part of assessing recovery of surgery recovery states.</string>
+            <key>Required</key>
+            <true/>
+        </dict>
+        <key>SRSensorUsagePPG</key>
+        <dict>
+            <key>Description</key>
+            <string>Photoplethysmogram data is used to derive heart-related metrics to assess recovery of surgery recovery states.</string>
+            <key>Required</key>
+            <true/>
+        </dict>
+        <key>SRSensorUsageHeartRate</key>
+        <dict>
+            <key>Description</key>
+            <string>Heartrate is used to assess recovery of surgery recovery states.</string>
+            <key>Required</key>
+            <true/>
+        </dict>
+        <key>SRSensorUsageDeviceUsage</key>
+        <dict>
+            <key>Description</key>
+            <string>Device usage data is used to assess phone interaction patterns as part of assessing recovery of surgery recovery states.</string>
+            <key>Required</key>
+            <true/>
+        </dict>
+        <key>SRSensorUsageWristTemperature</key>
+        <dict>
+            <key>Description</key>
+            <string>Wrist temperature data is used to monitor physiological changes during sleep as part of assessing recovery of surgery recovery states.</string>
+            <key>Required</key>
+            <true/>
+        </dict>
+    </dict>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>location</string>

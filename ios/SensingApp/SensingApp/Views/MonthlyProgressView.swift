@@ -53,6 +53,22 @@ struct MonthlyCalendarView: View {
     @State private var showDetail = false
     @State private var progressData: [Date: DayProgress] = [:]
 
+    // The day this participant started using the app. Days before it are
+    // outside the study and must not be drawn as missed check-ins — a patient
+    // enrolled on the 10th was opening this screen to nine "failures" they
+    // could not possibly have completed. Same anchor HomeView counts Day N from.
+    @AppStorage("journey_first_open_date") private var firstOpenTimestamp: Double = 0
+
+    private var enrollmentDay: Date? {
+        guard firstOpenTimestamp != 0 else { return nil }
+        return calendar.startOfDay(for: Date(timeIntervalSince1970: firstOpenTimestamp))
+    }
+
+    private func isBeforeEnrollment(_ date: Date) -> Bool {
+        guard let enrollmentDay else { return false }
+        return calendar.startOfDay(for: date) < enrollmentDay
+    }
+
     private let calendar = Calendar.current
     private let columns  = Array(repeating: GridItem(.flexible(), spacing: 6), count: 7)
     private let daySymbols = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"]
@@ -72,7 +88,6 @@ struct MonthlyCalendarView: View {
             ScrollView {
                 VStack(spacing: 20) {
                     monthNavigationHeader
-                    surveysCompletedCard
                     legendRow
                     dayOfWeekHeader
                     calendarGrid
@@ -137,7 +152,7 @@ struct MonthlyCalendarView: View {
         HStack {
             Button(action: goToPreviousMonth) {
                 Image(systemName: "chevron.left")
-                    .font(.system(size: 15, weight: .medium))
+                    .font(.system(.subheadline).weight(.medium))
                     .foregroundStyle(Color(red: 0.40, green: 0.32, blue: 0.29))
                     .padding(10)
                     .background(Color.white.opacity(0.7))
@@ -145,51 +160,34 @@ struct MonthlyCalendarView: View {
             }
             Spacer()
             Text(displayedMonth, format: .dateTime.month(.wide).year())
-                .font(.system(size: 20, weight: .bold, design: .rounded))
+                .font(.journey(.title3, weight: .bold))
                 .foregroundStyle(Color(red: 0.28, green: 0.22, blue: 0.20))
             Spacer()
             Button(action: goToNextMonth) {
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 15, weight: .medium))
+                    .font(.system(.subheadline).weight(.medium))
                     .foregroundStyle(Color(red: 0.40, green: 0.32, blue: 0.29))
                     .padding(10)
                     .background(Color.white.opacity(0.7))
                     .clipShape(Circle())
             }
+            // goToNextMonth() silently refuses to go past the current month, so
+            // at the newest month the button looked live but did nothing. Say so.
+            .disabled(!canGoToNextMonth)
+            .opacity(canGoToNextMonth ? 1 : 0.35)
+            .accessibilityLabel("Next month")
         }
     }
 
-    // ── Surveys completed count card ─────────
-    private var surveysCompletedCard: some View {
-        let surveysCompleted = progressData.values.filter(\.surveyCompleted).count
-        let pastDays         = pastDaysCount()
-
-        return HStack(spacing: 6) {
-            Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 20))
-                .foregroundStyle(Color(red: 0.22, green: 0.48, blue: 0.40))
-            Text("\(surveysCompleted) of \(pastDays) surveys completed this month")
-                .font(.system(size: 15, weight: .semibold, design: .rounded))
-                .foregroundStyle(Color(red: 0.28, green: 0.22, blue: 0.20))
-            Spacer()
-        }
-        .padding(.vertical, 14)
-        .padding(.horizontal, 18)
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color(red: 0.99, green: 0.97, blue: 0.95).opacity(0.95))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16)
-                        .stroke(Color(red: 0.80, green: 0.65, blue: 0.58).opacity(0.25), lineWidth: 1)
-                )
-        )
+    private var canGoToNextMonth: Bool {
+        displayedMonth < Date().startOfMonth()
     }
 
     // ── Legend ───────────────────────────────
     private var legendRow: some View {
         HStack(spacing: 14) {
             legendItem(color: Color(red: 0.22, green: 0.60, blue: 0.45), label: "Completed")
-            legendItem(color: Color(red: 0.80, green: 0.75, blue: 0.72), label: "Not completed")
+            legendItem(color: Color(red: 0.55, green: 0.48, blue: 0.44), label: "Not completed")
             Spacer()
         }
     }
@@ -200,7 +198,7 @@ struct MonthlyCalendarView: View {
                 .fill(color)
                 .frame(width: 10, height: 10)
             Text(label)
-                .font(.system(size: 11, weight: .medium, design: .rounded))
+                .font(.journey(.caption2, weight: .medium))
                 .foregroundStyle(Color(red: 0.50, green: 0.42, blue: 0.39))
         }
     }
@@ -210,11 +208,12 @@ struct MonthlyCalendarView: View {
         LazyVGrid(columns: columns, spacing: 6) {
             ForEach(daySymbols, id: \.self) { sym in
                 Text(sym)
-                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .font(.journey(.caption, weight: .semibold))
                     .foregroundStyle(Color(red: 0.55, green: 0.47, blue: 0.44))
                     .frame(maxWidth: .infinity)
             }
         }
+        .journeyDenseLayout()
     }
 
     // ── Calendar grid ────────────────────────
@@ -223,13 +222,15 @@ struct MonthlyCalendarView: View {
         return LazyVGrid(columns: columns, spacing: 6) {
             ForEach(cells) { cell in
                 if let day = cell.day {
+                    let outsideStudy = isBeforeEnrollment(day.date)
                     CalendarDayCell(
                         day: day,
                         isToday: calendar.isDateInToday(day.date),
-                        isFuture: day.date > Date()
+                        isFuture: day.date > Date(),
+                        isBeforeEnrollment: outsideStudy
                     )
                     .onTapGesture {
-                        guard day.date <= Date() else { return }
+                        guard day.date <= Date(), !outsideStudy else { return }
                         selectedDay = day
                         showDetail = true
                     }
@@ -238,6 +239,8 @@ struct MonthlyCalendarView: View {
                 }
             }
         }
+        // Seven columns of day circles; text scales but must not overflow them.
+        .journeyDenseLayout()
     }
 
     // ─────────────────────────────────────────
@@ -271,14 +274,6 @@ struct MonthlyCalendarView: View {
         calendar.range(of: .day, in: .month, for: date)?.count ?? 30
     }
 
-    private func pastDaysCount() -> Int {
-        let today = calendar.startOfDay(for: Date())
-        guard calendar.isDate(today, equalTo: displayedMonth, toGranularity: .month) else {
-            return daysInMonth(displayedMonth)
-        }
-        return calendar.component(.day, from: today)
-    }
-
     private func goToPreviousMonth() {
         displayedMonth = calendar.date(byAdding: .month, value: -1, to: displayedMonth) ?? displayedMonth
     }
@@ -297,21 +292,37 @@ struct CalendarDayCell: View {
     let day: DayProgress
     let isToday: Bool
     let isFuture: Bool
+    /// Before the participant joined the study. Rendered exactly like a future
+    /// day — faint and un-tappable — because both mean "no check-in was ever
+    /// expected here", as opposed to "one was expected and missed".
+    var isBeforeEnrollment: Bool = false
 
+    private var isOutsideStudy: Bool { isFuture || isBeforeEnrollment }
+
+    // Days outside the study get a very light, faint gray — clearly lighter
+    // than "Not completed".
     private var fillColor: Color {
-        if isFuture { return Color.clear }
+        if isOutsideStudy {
+            return Color(red: 0.90, green: 0.87, blue: 0.84) // very light gray
+        }
         return day.surveyCompleted
             ? Color(red: 0.22, green: 0.60, blue: 0.45)          // solid green
-            : Color(red: 0.80, green: 0.75, blue: 0.72).opacity(0.45) // soft gray
+            : Color(red: 0.55, green: 0.48, blue: 0.44).opacity(0.85) // "Not completed" gray-brown
     }
 
     private var textColor: Color {
-        if isFuture {
-            return Color(red: 0.70, green: 0.65, blue: 0.62).opacity(0.4)
+        if isOutsideStudy {
+            return Color(red: 0.60, green: 0.55, blue: 0.51) // muted, readable on light fill
         }
-        return day.surveyCompleted
-            ? .white
-            : Color(red: 0.40, green: 0.32, blue: 0.29)
+        return .white
+    }
+
+    private var accessibilityText: String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .full
+        let date = formatter.string(from: day.date)
+        if isOutsideStudy { return date }
+        return "\(date), check-in \(day.surveyCompleted ? "completed" : "not completed")"
     }
 
     var body: some View {
@@ -322,11 +333,12 @@ struct CalendarDayCell: View {
                 Circle().strokeBorder(Color(red: 0.42, green: 0.62, blue: 0.55), lineWidth: 2)
             }
             Text("\(dayNum)")
-                .font(.system(size: 14, weight: isToday ? .bold : .regular, design: .rounded))
+                .font(.journey(.subheadline, weight: .semibold))
                 .foregroundStyle(textColor)
         }
         .aspectRatio(1, contentMode: .fit)
-        .opacity(isFuture ? 0.35 : 1.0)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilityText)
     }
 }
 
@@ -339,17 +351,14 @@ struct DayDetailSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            RoundedRectangle(cornerRadius: 3)
-                .fill(Color(red: 0.75, green: 0.68, blue: 0.65))
-                .frame(width: 36, height: 4)
-                .frame(maxWidth: .infinity)
-                .padding(.top, 12)
-                .padding(.bottom, 20)
-
+            // No hand-drawn grabber here: the sheet is presented with
+            // .presentationDragIndicator(.visible), so drawing one as well
+            // stacked two pills on top of each other.
             Text(day.date, format: .dateTime.weekday(.wide).month(.wide).day())
-                .font(.system(size: 22, weight: .bold, design: .rounded))
+                .font(.journey(.title2, weight: .bold))
                 .foregroundStyle(Color(red: 0.28, green: 0.22, blue: 0.20))
                 .padding(.horizontal, 24)
+                .padding(.top, 36)      // clears the system drag indicator
                 .padding(.bottom, 20)
 
             VStack(spacing: 0) {
@@ -394,15 +403,15 @@ struct DayDetailSheet: View {
     private func detailRow(icon: String, iconColor: Color, label: String, value: String) -> some View {
         HStack(spacing: 16) {
             Image(systemName: icon)
-                .font(.system(size: 20))
+                .font(.system(.title3))
                 .foregroundStyle(iconColor)
                 .frame(width: 28)
             Text(label)
-                .font(.system(size: 15, design: .rounded))
+                .font(.journey(.subheadline))
                 .foregroundStyle(Color(red: 0.40, green: 0.32, blue: 0.29))
             Spacer()
             Text(value)
-                .font(.system(size: 15, weight: .semibold, design: .rounded))
+                .font(.journey(.subheadline, weight: .semibold))
                 .foregroundStyle(Color(red: 0.28, green: 0.22, blue: 0.20))
         }
         .padding(.horizontal, 20)

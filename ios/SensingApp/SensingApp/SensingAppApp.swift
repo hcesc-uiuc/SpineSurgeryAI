@@ -104,6 +104,17 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         //authorization is already available
         #if !targetEnvironment(simulator)
         SensorKitRegistry.all.forEach { $0.startRecordingWithAuthorizationCheck() }
+      
+        /* Mash Todo: Check if we need this.
+        SensorKitAccelerometerFetcher.shared.startRecordingWithAuthorizationCheck()
+        SensorKitGyroscopeFetcher.shared.startRecordingWithAuthorizationCheck()
+        SensorKitWristDetectionFetcher.shared.startRecordingWithAuthorizationCheck()
+        SensorKitPPGFetcher.shared.startRecordingWithAuthorizationCheck()
+        SensorKitAmbientLightFetcher.shared.startRecordingWithAuthorizationCheck()
+        SensorKitDeviceUsageFetcher.shared.startRecordingWithAuthorizationCheck()
+        SensorKitWristTemperatureFetcher.shared.startRecordingWithAuthorizationCheck()
+        SensorKitHeartRateFetcher.shared.startRecordingWithAuthorizationCheck()
+        */
         #endif
         
         registerForPushNotifications()
