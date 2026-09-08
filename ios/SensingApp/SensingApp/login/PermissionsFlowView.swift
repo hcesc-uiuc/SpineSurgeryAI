@@ -481,7 +481,19 @@ struct PermissionsFlowView: View {
         #else
         return await withCheckedContinuation { continuation in
             
-            SRSensorReader.requestAuthorization(sensors: [.accelerometer, .rotationRate, .onWristState]) { error in
+            SRSensorReader.requestAuthorization(
+                sensors: [
+                    .accelerometer,
+                    .rotationRate,
+                    .onWristState,
+                    .deviceUsageReport,
+                    .ambientLightSensor,
+                    .photoplethysmogram,
+                    .wristTemperature,
+                    .heartRate
+                ]
+            )
+            { error in
 
                 if let error = error {
                     print("SensorKit auth error: \(error)")
@@ -494,6 +506,11 @@ struct PermissionsFlowView: View {
                 SensorKitAccelerometerFetcher.shared.startRecording()
                 SensorKitGyroscopeFetcher.shared.startRecording()
                 SensorKitWristDetectionFetcher.shared.startRecording()
+                SensorKitPPGFetcher.shared.startRecording()
+                SensorKitAmbientLightFetcher.shared.startRecording()
+                SensorKitDeviceUsageFetcher.shared.startRecording()
+                SensorKitWristTemperatureFetcher.shared.startRecording()
+                SensorKitHeartRateFetcher.shared.startRecording()
                 continuation.resume(returning: true)
             }
             

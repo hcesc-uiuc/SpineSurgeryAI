@@ -37,6 +37,11 @@ class SensorKitManager: NSObject, ObservableObject {
             SensorKitAccelerometerFetcher.shared.startRecording()
             SensorKitGyroscopeFetcher.shared.startRecording()
             SensorKitWristDetectionFetcher.shared.startRecording()
+            SensorKitPPGFetcher.shared.startRecording()
+            SensorKitAmbientLightFetcher.shared.startRecording()
+            SensorKitDeviceUsageFetcher.shared.startRecording()
+            SensorKitWristTemperatureFetcher.shared.startRecording()
+            SensorKitHeartRateFetcher.shared.startRecording()
             return
         }
         self.askForAuthorization()
@@ -49,7 +54,12 @@ class SensorKitManager: NSObject, ObservableObject {
             sensors: [
                 .accelerometer,
                 .rotationRate,
-                .onWristState
+                .onWristState,
+                .deviceUsageReport,
+                .ambientLightSensor,
+                .photoplethysmogram,
+                .wristTemperature,
+                .heartRate
             ]
         )
         { [weak self] error in
@@ -69,6 +79,11 @@ class SensorKitManager: NSObject, ObservableObject {
             SensorKitAccelerometerFetcher.shared.startRecording()
             SensorKitGyroscopeFetcher.shared.startRecording()
             SensorKitWristDetectionFetcher.shared.startRecording()
+            SensorKitPPGFetcher.shared.startRecording()
+            SensorKitAmbientLightFetcher.shared.startRecording()
+            SensorKitDeviceUsageFetcher.shared.startRecording()
+            SensorKitWristTemperatureFetcher.shared.startRecording()
+            SensorKitHeartRateFetcher.shared.startRecording()
         }
     }
     

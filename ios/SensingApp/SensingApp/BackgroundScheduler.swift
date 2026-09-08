@@ -32,6 +32,9 @@ class BackgroundScheduler {
             performSensorkitFetch()
         }
         
+        //check healthkit authorization
+        HealthkitRecorder.shared.getHealthKitData()
+        
         var someSensorIsActive = false
         if(AcclerometerRecorder.shared.checkAccelerometerAuthorizationStatus() == true){
             // Restart motion recording
@@ -41,8 +44,7 @@ class BackgroundScheduler {
             someSensorIsActive = true
         }
         
-        //check healthkit authorization
-        HealthkitRecorder.shared.getHealthKitData()
+        
         
         let now = Date()
         UserDefaults.standard.set(now, forKey: "lastSensorDateSaveTime")
@@ -563,7 +565,12 @@ class BackgroundScheduler {
         // accelFetcher.fetchLatestData()
         SensorKitAccelerometerFetcher.shared.fetchLatestData()
         SensorKitGyroscopeFetcher.shared.fetchLatestData()
-
+        SensorKitWristDetectionFetcher.shared.fetchLatestData()
+        SensorKitPPGFetcher.shared.fetchLatestData()
+        SensorKitAmbientLightFetcher.shared.fetchLatestData()
+        SensorKitDeviceUsageFetcher.shared.fetchLatestData()
+        SensorKitWristTemperatureFetcher.shared.fetchLatestData()
+        SensorKitHeartRateFetcher.shared.fetchLatestData()
 
     }
     

@@ -64,6 +64,12 @@ struct DebugTabView: View {
                     print("SensorKit fetcher is called")
                     SensorKitAccelerometerFetcher.shared.fetchLatestData()
                     SensorKitGyroscopeFetcher.shared.fetchLatestData()
+                    SensorKitWristDetectionFetcher.shared.fetchLatestData()
+                    SensorKitPPGFetcher.shared.fetchLatestData()
+                    SensorKitAmbientLightFetcher.shared.fetchLatestData()
+                    SensorKitDeviceUsageFetcher.shared.fetchLatestData()
+                    SensorKitWristTemperatureFetcher.shared.fetchLatestData()
+                    SensorKitHeartRateFetcher.shared.fetchLatestData()
                 }
             }.padding(.top, 20)
             
