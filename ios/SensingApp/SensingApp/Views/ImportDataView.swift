@@ -181,7 +181,7 @@ struct ImportDataView: View {
     private var loadedCard: some View {
         card("SHOWING IMPORTED DATA") {
             if loaded.isEmpty {
-                Text("Nothing imported. Every screen is showing live HealthKit and recorder data\("")\(sampleNote).")
+                Text("Nothing imported. Every screen is showing live HealthKit and recorder data.")
                     .font(.journey(.caption))
                     .foregroundStyle(muted)
             } else {
@@ -382,16 +382,6 @@ struct ImportDataView: View {
     private func rangeText(_ info: SensorImportInfo) -> String {
         guard let min = info.dateMin, let max = info.dateMax else { return "" }
         return " · covers \(Self.day.string(from: min)) – \(Self.day.string(from: max))"
-    }
-
-    /// Release has no sample table at all, so the empty-state sentence must not
-    /// promise one.
-    private var sampleNote: String {
-#if DEBUG
-        return ", or sample data where there is none"
-#else
-        return ""
-#endif
     }
 
     // MARK: - Small view helpers

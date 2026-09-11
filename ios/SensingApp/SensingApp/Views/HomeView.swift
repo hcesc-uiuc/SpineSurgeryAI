@@ -28,16 +28,20 @@ struct HomeView: View {
     /// yesterday's day number and labelled yesterday "Today".
     @State private var todayStart = Calendar.current.startOfDay(for: Date())
 
+    // Day Calculation moved to 'RecoveryDay' file, so the Sensors tab reports the same number.
+    // The `firstOpenTimestamp` read is kept so that writing the anchor in
+    // .onAppear still invalidates this view.
     private var currentDay: Int {
         guard firstOpenTimestamp != 0 else { return 1 }
-        let cal = Calendar.current
-        let start = cal.startOfDay(for: Date(timeIntervalSince1970: firstOpenTimestamp))
-        return max(1, (cal.dateComponents([.day], from: start, to: todayStart).day ?? 0) + 1)
+        return RecoveryDay.day(asOf: todayStart)
     }
 
     private var checkInComplete: Bool { appState.isCompletedToday }
 
     @State private var appeared = false
+    // Tabs stay alive in the TabView, so this view hears scene-phase changes
+    // even when another tab is showing. onAppear covers the return to Home.
+    @State private var isVisible = false
     @State private var showSettings = false
     @State private var todaySteps: Int? = nil
     @State private var todayDistanceMeters: Double? = nil
@@ -149,15 +153,21 @@ struct HomeView: View {
         }
         .onAppear {
             appeared = true
+            isVisible = true
             if firstOpenTimestamp == 0 { firstOpenTimestamp = Date().timeIntervalSince1970 }
             rollDayIfNeeded()
-            loadTodayHealthStats()
-            loadWeeklyProgress()
+            // At launch the scene is not active yet and the .active change below
+            // does the load, so it runs once instead of twice.
+            if scenePhase == .active {
+                loadTodayHealthStats()
+                loadWeeklyProgress()
+            }
         }
+        .onDisappear { isVisible = false }
         // onAppear does not fire on background→foreground, so stats went stale
         // when the app was reopened. Reload whenever the scene becomes active.
         .onChange(of: scenePhase) { _, newPhase in
-            if newPhase == .active {
+            if newPhase == .active && isVisible {
                 rollDayIfNeeded()
                 loadTodayHealthStats()
                 loadWeeklyProgress()
@@ -557,9 +567,9 @@ struct HomeView: View {
     private var greetingText: String {
         let hour = Calendar.current.component(.hour, from: Date())
         switch hour {
-        case 0..<12:  return "Good morning"
-        case 12..<17: return "Good afternoon"
-        default:      return "Good evening"
+        case 0..<12:  return "Good Morning"
+        case 12..<17: return "Good Afternoon"
+        default:      return "Good Evening"
         }
     }
 
