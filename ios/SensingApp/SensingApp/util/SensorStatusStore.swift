@@ -8,7 +8,7 @@
 //  Storage is UserDefaults. Nothing else. There is no sensor database.
 //
 //  ── Where a displayed reading comes from ────────────────────────────────────
-//  Three sources, in strict precedence order:
+//  Two sources, in strict precedence order:
 //
 //    1. AN IMPORTED FILE — a dev dropped a data file into the app's Documents
 //       folder (visible in Files / Finder) or picked one in the Debug tab.
@@ -135,19 +135,6 @@ nonisolated extension SensorKind {
         }
     }
 
-    /// Where a non-imported reading for this sensor genuinely comes from.
-    var realSource: SensorSource {
-        switch self {
-        case .heartRate, .heartRateVariability, .steps, .distance,
-             .bloodOxygen, .activeEnergy, .flights, .sleep:
-            return .healthKit
-        case .survey:
-            return .checkIn
-        default:
-            return .recorder
-        }
-    }
-
     /// Render a raw number the way this sensor should read.
     func formatted(_ value: Double) -> String {
         guard let unit else { return "" }
@@ -169,27 +156,15 @@ nonisolated extension SensorKind {
 
 // MARK: - Model
 
-/// Where a displayed value came from. Drives the source line under every row.
+/// Where a stored value came from. Home captions imported tiles with the file name.
 nonisolated enum SensorSource {
-    case healthKit
-    case recorder
-    case checkIn
-    case imported(String)
-
-    var label: String {
-        switch self {
-        case .healthKit:          return "Apple Health"
-        case .recorder:           return "this iPhone"
-        case .checkIn:            return "your check-ins"
-        case .imported(let name): return name
-        }
-    }
+    case live                 // HealthKit, a recorder, or a check-in
+    case imported(String)     // file name
 }
 
 nonisolated struct SensorStatusEntry {
     let value: String?      // nil = timestamp-only sensor (motion, location, watch)
-    /// The same reading as a number, in SensorKind.unit. nil for timestamp-only
-    /// sensors and for stamps written by builds before this field existed.
+    /// The same reading as a number, in SensorKind.unit. nil for timestamp-only sensors.
     let numeric: Double?
     let date: Date
     let source: SensorSource
@@ -313,44 +288,30 @@ nonisolated final class SensorStatusStore: @unchecked Sendable {
 
     // MARK: Reading
 
-    /// Imported reading if one is loaded, else the real stamp, else (DEBUG only)
-    /// the sample-table fallback, else nil. Release has no sample fallback — see
-    /// the file header.
+    /// The stored reading (imported or live), or nil if nothing was ever recorded.
     func entry(for kind: SensorKind) -> SensorStatusEntry? {
-        if let date = defaults.object(forKey: dateKey(kind)) as? Date {
-            let source: SensorSource
-            if isImported(kind) {
-                source = .imported(importInfo(for: kind)?.filename ?? "an imported file")
-            } else {
-                source = kind.realSource
-            }
-            return SensorStatusEntry(value: defaults.string(forKey: valueKey(kind)),
-                                     numeric: defaults.object(forKey: numericKey(kind)) as? Double,
-                                     date: date,
-                                     source: source)
-        }
-        return nil
+        guard let date = defaults.object(forKey: dateKey(kind)) as? Date else { return nil }
+        let source: SensorSource = isImported(kind)
+            ? .imported(importInfo(for: kind)?.filename ?? "an imported file")
+            : .live
+        return SensorStatusEntry(value: defaults.string(forKey: valueKey(kind)),
+                                 numeric: defaults.object(forKey: numericKey(kind)) as? Double,
+                                 date: date,
+                                 source: source)
     }
 
-    /// Value + caption for a Home stat tile. The caption appears only when the
-    /// reading is noteworthy — imported, or simply not from today — so live
-    /// same-day HealthKit data keeps the clean, caption-free look and a stale
-    /// import is impossible to mistake for a fresh one.
-    ///
-    /// The hardcoded sample table is deliberately NOT surfaced here. Unlike the
-    /// Sensors tab, Home is not behind #if DEBUG — it ships. A patient whose
-    /// HealthKit simply has no data must see "—", not "99,999 steps" with a
-    /// small caption. Home therefore shows real or imported readings only.
+    /// Value + caption for a Home stat tile (the Sensors tab uses the value too).
+    /// The caption appears only when the reading is noteworthy — imported, or not
+    /// from today — so a stale reading is impossible to mistake for a fresh one.
     func homeTile(for kind: SensorKind) -> (value: Double, caption: String?)? {
-        guard let entry = entry(for: kind) else { return nil }
-        guard let value = entry.numeric ?? entry.value.flatMap(Self.numericValue(from:)) else { return nil }
+        guard let entry = entry(for: kind), let value = entry.numeric else { return nil }
 
         let isToday = Calendar.current.isDateInToday(entry.date)
         var caption: String?
         switch entry.source {
         case .imported(let name):
             caption = isToday ? shortName(name) : "\(shortName(name)) · \(Self.shortDayFormatter.string(from: entry.date))"
-        case .healthKit, .recorder, .checkIn:
+        case .live:
             caption = isToday ? nil : Self.shortDayFormatter.string(from: entry.date)
         }
         return (value, caption)
@@ -360,23 +321,6 @@ nonisolated final class SensorStatusStore: @unchecked Sendable {
     private func shortName(_ filename: String) -> String {
         let stem = (filename as NSString).deletingPathExtension
         return stem.count > 14 ? String(stem.prefix(13)) + "…" : stem
-    }
-
-    /// Pulls the number back out of a display string ("72 bpm" → 72).
-    ///
-    /// LEGACY FALLBACK ONLY — `SensorStatusEntry.numeric` is the real path.
-    /// This assumes "," grouping and "." decimals, so it is wrong on a device
-    /// whose locale reverses them (de_DE renders 8420 as "8.420", which lands
-    /// here as 8.42). It survives only to read stamps written by builds that
-    /// predate `numeric`, and to give the DEBUG sample table a value.
-    private static func numericValue(from text: String) -> Double? {
-        let cleaned = text.replacingOccurrences(of: ",", with: "")
-        var digits = ""
-        for ch in cleaned {
-            if ch.isNumber || ch == "." { digits.append(ch) }
-            else if !digits.isEmpty { break }
-        }
-        return Double(digits)
     }
 
     // "Jul 22" — compact enough for a stat tile caption.
@@ -393,7 +337,7 @@ extension SensorStatusStore {
 
     /// Queries HealthKit for the genuine latest reading of each Apple Health row
     /// and stamps the store. Read-only; sensors the user hasn't authorized simply
-    /// return no samples and keep their previous stamp (or sample fallback).
+    /// return no samples and keep their previous stamp.
     /// Sensors currently showing an imported file are left alone by `record`.
     /// `completion` fires on the main queue after all queries finish.
     func refreshHealthKitSamples(completion: (() -> Void)? = nil) {

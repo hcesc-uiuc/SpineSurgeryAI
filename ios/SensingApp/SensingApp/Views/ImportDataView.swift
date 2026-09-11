@@ -181,7 +181,7 @@ struct ImportDataView: View {
     private var loadedCard: some View {
         card("SHOWING IMPORTED DATA") {
             if loaded.isEmpty {
-                Text("Nothing imported. Every screen is showing live HealthKit and recorder data\("")\(sampleNote).")
+                Text("Nothing imported. Every screen is showing live HealthKit and recorder data.")
                     .font(.journey(.caption))
                     .foregroundStyle(muted)
             } else {
@@ -383,9 +383,6 @@ struct ImportDataView: View {
         guard let min = info.dateMin, let max = info.dateMax else { return "" }
         return " · covers \(Self.day.string(from: min)) – \(Self.day.string(from: max))"
     }
-
-    /// The sample table was removed; nothing stands in for missing data now.
-    private var sampleNote: String { "" }
 
     // MARK: - Small view helpers
 

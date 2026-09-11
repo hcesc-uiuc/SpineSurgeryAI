@@ -39,6 +39,9 @@ struct HomeView: View {
     private var checkInComplete: Bool { appState.isCompletedToday }
 
     @State private var appeared = false
+    // Tabs stay alive in the TabView, so this view hears scene-phase changes
+    // even when another tab is showing. onAppear covers the return to Home.
+    @State private var isVisible = false
     @State private var showSettings = false
     @State private var todaySteps: Int? = nil
     @State private var todayDistanceMeters: Double? = nil
@@ -150,15 +153,21 @@ struct HomeView: View {
         }
         .onAppear {
             appeared = true
+            isVisible = true
             if firstOpenTimestamp == 0 { firstOpenTimestamp = Date().timeIntervalSince1970 }
             rollDayIfNeeded()
-            loadTodayHealthStats()
-            loadWeeklyProgress()
+            // At launch the scene is not active yet and the .active change below
+            // does the load, so it runs once instead of twice.
+            if scenePhase == .active {
+                loadTodayHealthStats()
+                loadWeeklyProgress()
+            }
         }
+        .onDisappear { isVisible = false }
         // onAppear does not fire on background→foreground, so stats went stale
         // when the app was reopened. Reload whenever the scene becomes active.
         .onChange(of: scenePhase) { _, newPhase in
-            if newPhase == .active {
+            if newPhase == .active && isVisible {
                 rollDayIfNeeded()
                 loadTodayHealthStats()
                 loadWeeklyProgress()

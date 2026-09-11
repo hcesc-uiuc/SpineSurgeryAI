@@ -13,7 +13,7 @@ import SwiftUI
 struct SensorsTabView: View {
 
     @Environment(\.scenePhase) private var scenePhase
-    @StateObject private var feed = SensorFeed.shared
+    @ObservedObject private var feed = SensorFeed.shared
 
     @State private var currentDay = 1
 
@@ -48,14 +48,15 @@ struct SensorsTabView: View {
                                 icon: "move.3d", color: sage, name: "Accelerometer",
                                 detail: "Movement and orientation of your phone.",
                                 liveValue: feed.accelerometer,
-                                badge: feed.motion.isAccelerometerAvailable ? nil : "No hardware (Simulator)"
+                                recorded: .accelerometer,
+                                badge: feed.isAccelerometerAvailable ? nil : "No hardware (Simulator)"
                             )
                             Divider().padding(.leading, 64)
                             sensorRow(
                                 icon: "gyroscope", color: sage, name: "Gyroscope",
                                 detail: "Rotation and turning of your phone.",
                                 liveValue: feed.gyroscope,
-                                badge: feed.motion.isGyroscopeAvailable ? nil : "No hardware (Simulator)"
+                                badge: feed.isGyroscopeAvailable ? nil : "No hardware (Simulator)"
                             )
                         }
 
@@ -63,7 +64,8 @@ struct SensorsTabView: View {
                             sensorRow(
                                 icon: "location.fill", color: warmBlue, name: "Location",
                                 detail: "Approximate location, including in the background.",
-                                liveValue: feed.location
+                                liveValue: feed.location,
+                                recorded: .location
                             )
                         }
 
@@ -71,7 +73,7 @@ struct SensorsTabView: View {
                             title: "FROM THE APPLE HEALTH APP",
                             trailing: {
                                 Button {
-                                    feed.refreshHealth()
+                                    feed.refresh()
                                 } label: {
                                     Image(systemName: "arrow.clockwise")
                                         .font(.system(.caption).weight(.semibold))
@@ -105,12 +107,12 @@ struct SensorsTabView: View {
                                       detail: "Time asleep and sleep stages.")
                         }
 
-                        // No watch-connectivity code exists yet, so these stay
-                        // informational rather than faking live data.
+                        // Only the Watch accelerometer has a fetcher (SensorKit),
+                        // so it alone shows a Last recorded time.
                         sensorSection(title: "APPLE WATCH (Coming Soon)") {
                             sensorRow(icon: "applewatch", color: purple, name: "Watch Accelerometer",
                                       detail: "High-rate motion from your Apple Watch.",
-                                      badge: "Not connected")
+                                      recorded: .watchAccelerometer)
                             Divider().padding(.leading, 64)
                             sensorRow(icon: "heart.fill", color: purple, name: "Watch Heart & PPG",
                                       detail: "Heart rate and optical (PPG) signals.",
@@ -132,7 +134,8 @@ struct SensorsTabView: View {
                         sensorSection(title: "DAILY SURVEY") {
                             sensorRow(icon: "list.clipboard.fill", color: terracotta,
                                       name: "Recovery Check-in",
-                                      detail: "Pain, function, medications, sleep, and falls.")
+                                      detail: "Pain, function, medications, sleep, and falls.",
+                                      recorded: .survey)
                         }
 
                         dayFooter
@@ -145,16 +148,22 @@ struct SensorsTabView: View {
             }
             .navigationTitle("What We Collect")
             .onAppear {
+                print("SensorsTab: appeared")
+                Logger.shared.append("SensorsTab: appeared")
                 isVisible = true
                 currentDay = RecoveryDay.day(asOf: Date())
                 // onAppear also fires while the app is restored in the background.
                 if scenePhase == .active { feed.start() }
             }
             .onDisappear {
+                print("SensorsTab: disappeared")
+                Logger.shared.append("SensorsTab: disappeared")
                 isVisible = false
                 feed.stop()
             }
             .onChange(of: scenePhase) { _, newPhase in
+                print("SensorsTab: app is now \(newPhase) (tab visible: \(isVisible))")
+                Logger.shared.append("SensorsTab: app is now \(newPhase) (tab visible: \(isVisible))")
                 if newPhase == .active {
                     currentDay = RecoveryDay.day(asOf: Date())
                     if isVisible { feed.start() }
@@ -206,6 +215,7 @@ struct SensorsTabView: View {
     private func sensorRow(
         icon: String, color: Color, name: String, detail: String,
         liveValue: String? = nil,
+        recorded: SensorKind? = nil,
         badge: String? = nil
     ) -> some View {
         HStack(spacing: 12) {
@@ -230,6 +240,11 @@ struct SensorsTabView: View {
                         .foregroundStyle(color)
                         .lineLimit(2)
                 }
+                if let recorded {
+                    Text(feed.lastRecordedText(for: recorded))
+                        .font(.journey(.caption))
+                        .foregroundStyle(Color(red: 0.55, green: 0.47, blue: 0.44))
+                }
             }
             Spacer()
             if let badge {
@@ -251,7 +266,6 @@ struct SensorsTabView: View {
     /// values are internal shorthand and this list is read by older patients.
     private func healthRow(_ kind: SensorKind, icon: String, name: String, detail: String) -> some View {
         sensorRow(icon: icon, color: terracotta, name: name, detail: detail,
-                  liveValue: feed.health[kind],
-                  badge: feed.health[kind] == nil ? "No data" : nil)
+                  liveValue: feed.health[kind], recorded: kind)
     }
 }
