@@ -40,6 +40,7 @@ printf '[\n'
 sep=""
 while read -r key; do
   [ -z "$key" ] && continue
+  case "$key" in */) continue ;; esac                 # skip the folder placeholder key
   base="$(basename "$key")"
   case "$base" in ""|manifest.json) continue ;; esac   # skip folder key + the manifest itself
   kind="$(kind_for "$base")"
