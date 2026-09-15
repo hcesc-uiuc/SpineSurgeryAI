@@ -58,6 +58,27 @@ All harness uploads are stamped with a fixed test participant
 (`ParticipantID.store(forAppleUserID: "issue69-harness")`) so the rows they
 create in the backend are easy to identify and purge.
 
+## Fault modes (Issue #72)
+
+A presign upload only counts once the backend's complete step replies
+`"status": "completed"` (see `UPLOAD_FLOW.md`). The **Fault mode** picker makes
+the real backend and S3 return real failure replies, so you can check the app
+treats them as failures. It works by intercepting the harness's own requests
+(`FaultInjection.swift`); the vendored upload code is not modified.
+
+| Mode            | What it does                                   | Real reply                          | Presign files should be |
+|-----------------|------------------------------------------------|-------------------------------------|-------------------------|
+| Normal          | nothing                                        | 200 `completed`                     | recorded                |
+| Bad upload ID   | sends an unknown `upload_id` to complete       | 404 `upload not found`              | not recorded            |
+| Fake S3 success | skips the PUT, returns a fake 200              | 200 `failed` (object not found)     | not recorded            |
+| S3 rejects      | corrupts the PUT signature                     | S3 403, then complete `failed`      | not recorded            |
+
+Multipart files (`loc`, `hk`) are not affected and should be recorded in every
+mode. A row passes when the file did what its mode expects.
+
+Fault runs leave `pending_uploads` rows marked `failed` (or `pending` for Bad
+upload ID) under the test participant; purge them with the rest of the test data.
+
 ## Notes / known app quirks this surfaces
 
 - The presign path hardcodes `content_type: text/csv` even for `.db` files.

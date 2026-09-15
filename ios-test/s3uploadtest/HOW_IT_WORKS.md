@@ -69,7 +69,10 @@ the URL in the vendored files.
 ## Reading the results
 
 - Each row shows a fixture with ✅ pass / ❌ fail, its kind, and which pathway
-  it took.
+  it took. Pass means the upload did what the selected fault mode expects:
+  "recorded" in Normal mode, "not recorded" for presign files in a fault mode.
+- "Recorded" means the backend confirmed it in the complete step
+  (`"status": "completed"`), not just that S3 accepted the file (Issue #72).
 - The **log** panel shows the vendored code's own step-by-step output (captured
   from stdout): the presign HTTP status, the S3 PUT status, and the complete
   status — or, for the multipart path, the `/uploadfile` status.

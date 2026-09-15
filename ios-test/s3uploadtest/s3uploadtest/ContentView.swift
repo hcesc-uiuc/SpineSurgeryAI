@@ -14,7 +14,7 @@ struct HarnessView: View {
 
     var body: some View {
         VStack(spacing: 12) {
-            Text("S3 Upload Harness · #69")
+            Text("S3 Upload Harness · #69 #72")
                 .font(.headline)
                 .padding(.top)
 
@@ -30,6 +30,13 @@ struct HarnessView: View {
                 Text("Backend (from app code): \(S3UploadConfig.baseURL)")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
+                Picker("Fault mode", selection: $runner.faultMode) {
+                    ForEach(FaultMode.allCases) { mode in
+                        Text(mode.label).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .disabled(runner.isRunning)
             }
             .padding(.horizontal)
 

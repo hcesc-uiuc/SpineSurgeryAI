@@ -60,6 +60,7 @@ final class HarnessRunner: ObservableObject {
     @Published var results: [HarnessResult] = []
     @Published var log: String = ""
     @Published var isRunning = false
+    @Published var faultMode: FaultMode = .none
 
     /// Kinds the app routes through the presigned-S3 path (everything else goes
     /// through the multipart /uploadfile path). Mirrors Uploader.uploadFolder.
@@ -99,6 +100,7 @@ final class HarnessRunner: ObservableObject {
         append("Target backend: \(S3UploadConfig.baseURL)")
         append("Participant:    \(ParticipantID.current)")
         append("Manifest:       \(manifestURL)")
+        append("Fault mode:     \(faultMode.label)")
         append("")
 
         guard let entries = await fetchManifest() else {
@@ -127,6 +129,8 @@ final class HarnessRunner: ObservableObject {
         capture.start()
         defer { capture.stop() }
 
+        let session = faultMode.session()
+
         for (i, entry) in entries.enumerated() {
             results[i].outcome = .running
             append("[\(i + 1)/\(entries.count)] \(entry.filename)  (kind=\(entry.kind), path=\(results[i].path))")
@@ -140,15 +144,21 @@ final class HarnessRunner: ObservableObject {
             }
 
             let ok: Bool
+            let expected: Bool
             if Self.presignKinds.contains(entry.kind) {
-                ok = await S3TestUploader().runFullFlow(filenameURL: localURL, kind: entry.kind)
+                ok = await S3TestUploader(session: session).runFullFlow(filenameURL: localURL, kind: entry.kind)
+                expected = faultMode.presignShouldPass
             } else {
+                // Fault modes only touch the presign path.
                 ok = await Uploader.shared.uploadFile(fileURL: localURL)
+                expected = true
             }
 
-            results[i].outcome = ok ? .passed : .failed
-            results[i].detail = ok ? "ok" : "upload failed (see log)"
-            append("  => \(ok ? "PASS" : "FAIL")")
+            // Pass = the uploader reported what this mode should produce.
+            let asExpected = ok == expected
+            results[i].outcome = asExpected ? .passed : .failed
+            results[i].detail = "\(ok ? "recorded" : "not recorded")\(asExpected ? "" : " (UNEXPECTED)")"
+            append("  => \(ok ? "RECORDED" : "NOT RECORDED")  expected \(expected ? "RECORDED" : "NOT RECORDED")  \(asExpected ? "PASS" : "FAIL")")
             append("")
         }
 
