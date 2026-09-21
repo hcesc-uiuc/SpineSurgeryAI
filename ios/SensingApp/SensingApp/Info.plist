@@ -117,7 +117,7 @@
             <key>Required</key>
             <true/>
         </dict>
-        <key>SRSensorUsageSleepSessions</key>
+        <key>SRSensorUsageSleep</key>
         <dict>
             <key>Description</key>
             <string>Sleep session start times and durations are used to track sleep patterns during recovery from surgery.</string>
