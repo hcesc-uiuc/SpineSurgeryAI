@@ -58,6 +58,23 @@ All harness uploads are stamped with a fixed test participant
 (`ParticipantID.store(forAppleUserID: "issue69-harness")`) so the rows they
 create in the backend are easy to identify and purge.
 
+## Python harness
+
+`python/upload_harness.py` replays the same fixtures through the same HTTP
+flow from the command line (standard library only, Python 3.9+). It
+reimplements the app's requests, so it checks the backend and S3, not the
+Swift code; use the iOS harness for that.
+
+```bash
+python3 ios-test/python/upload_harness.py --manifest "<presigned manifest URL>"
+python3 ios-test/python/upload_harness.py --manifest "<url>" --mode all
+python3 ios-test/python/upload_harness.py --dir ~/fixtures --only sqlite_2026-09-09_08-15-09.db
+```
+
+Same kinds, pass rule and fault modes as below (`normal`, `bad-upload-id`,
+`fake-s3-success`, `s3-rejects`, or `all`). Exits non-zero if any file does
+not do what its mode expects, so it can run in CI or cron.
+
 ## Fault modes (Issue #72)
 
 A presign upload only counts once the backend's complete step replies
