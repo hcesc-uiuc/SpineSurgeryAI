@@ -1,5 +1,14 @@
 //
 //  S3Uploader.swift
+//  VENDORED VERBATIM from ios/SensingApp/SensingApp/util/S3Uploader.swift
+//  ---------------------------------------------------------------------------
+//  This is a copy of the app's upload code so the harness exercises the
+//  exact same code path (Issues #69, #72). Do NOT edit here — if the app version
+//  changes, re-copy it. Kept in sync manually with the dev branch.
+//  ---------------------------------------------------------------------------
+
+//
+//  S3Uploader.swift
 //  SensingApp
 //
 //  Created by Mohammod Mashfiqui Rabbi Shuvo on 5/8/26.
