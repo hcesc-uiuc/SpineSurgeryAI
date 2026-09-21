@@ -54,7 +54,7 @@
             <key>Required</key>
             <true/>
         </dict>
-        <key>SRSensorUsageAmbientPressure</key>
+        <key>SRSensorUsageElevation</key>
         <dict>
             <key>Description</key>
             <string>Ambient pressure is used to derive altitude and activity context during recovery.</string>
