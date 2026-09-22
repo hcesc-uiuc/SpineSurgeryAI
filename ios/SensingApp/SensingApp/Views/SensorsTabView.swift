@@ -66,6 +66,8 @@ struct SensorsTabView: View {
     private var allCoreSensorsOn: Bool {
         let accelOK = !motionManager.isAccelerometerAvailable || motionManager.isAccelerometerActive
         let gyroOK  = !motionManager.isGyroscopeAvailable || motionManager.isGyroscopeActive
+        
+        //Akarsh is using a LiveLocation tracker
         return accelOK && gyroOK && locationManager.isTracking
     }
 
@@ -211,6 +213,7 @@ struct SensorsTabView: View {
                                 icon: "iphone.radiowaves.left.and.right", color: warmBlue,
                                 name: "SensorKit Accelerometer",
                                 detail: "Background device motion signals.",
+                                //What authorization is he showing??
                                 badge: sensorKitManager.isAuthorized ? "Authorized" : "Not authorized"
                             )
                             .onTapGesture {
@@ -245,6 +248,12 @@ struct SensorsTabView: View {
             .onDisappear {
                 isVisible = false
                 suspendLivePreview()
+                // The live coordinate is only visible on this tab. Without this the
+                // GPS keeps streaming after the patient navigates away, for the rest
+                // of the app's lifetime.
+                //.onDisappear {
+                locationManager.stop()
+                //}
             }
             .onChange(of: scenePhase) { _, newPhase in
                 if newPhase == .active {
@@ -331,12 +340,6 @@ struct SensorsTabView: View {
                 Text(source)
                     .font(.journey(.caption2))
                     .foregroundStyle(Color(red: 0.62, green: 0.55, blue: 0.52))
-            }
-            // The live coordinate is only visible on this tab. Without this the
-            // GPS keeps streaming after the patient navigates away, for the rest
-            // of the app's lifetime.
-            .onDisappear {
-                locationManager.stop()
             }
         }
     }

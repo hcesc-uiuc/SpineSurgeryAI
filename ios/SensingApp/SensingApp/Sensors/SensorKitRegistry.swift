@@ -14,7 +14,6 @@ enum SensorKitRegistry {
 
     /// Every sensor fetcher, in one place.
     static let all: [SensorKitFetcher] = [
-        SensorKitAccelerometerFetcher.shared,
         SensorKitGyroscopeFetcher.shared,
         SensorKitWristDetectionFetcher.shared,
         // Issue #57 - iPhone usage/environment sensors

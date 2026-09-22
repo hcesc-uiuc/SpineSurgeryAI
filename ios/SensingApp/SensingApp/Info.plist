@@ -61,6 +61,13 @@
             <key>Required</key>
             <true/>
         </dict>
+        <key>SRSensorUsageElevation</key>
+            <dict>
+                <key>Description</key>
+                <string>We use elevation data to correlate device altitude changes with your activity during the study.</string>
+                <key>Required</key>
+                <true/>
+            </dict>
         <key>SRSensorUsagePhoneUsage</key>
         <dict>
             <key>Description</key>
