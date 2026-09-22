@@ -56,7 +56,7 @@ class SensorKitManager: NSObject, ObservableObject {
         let toAdd: [SRSensor] = [.accelerometer, .deviceUsageReport, .ambientLightSensor, .photoplethysmogram, .wristTemperature, .heartRate]
         sensors.formUnion(toAdd)
         
-        SRSensorReader.requestAuthorization(sensors: sensors) { [weak self] error in
+        
                                                                                  
                                                                                  
         /*//We separated this function out to force
@@ -76,6 +76,11 @@ class SensorKitManager: NSObject, ObservableObject {
         { [weak self] error in*/
                                                                                  
                                                                                  
+        // Registry sensors plus the legacy standalone ones, with unconfirmed
+        // sensors (sleep sessions) requested separately. Same set as onboarding.
+        // Jason: changes
+        // SensorKitRegistry.requestAuthorization { [weak self] error in
+        SRSensorReader.requestAuthorization(sensors: sensors) { [weak self] error in
             if let error = error {
                 let nsError = error as NSError
                 if nsError.domain == "SRErrorDomain", nsError.code == 8201 {

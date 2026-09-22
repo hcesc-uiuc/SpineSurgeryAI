@@ -8,7 +8,7 @@
 //  Storage is UserDefaults. Nothing else. There is no sensor database.
 //
 //  ── Where a displayed reading comes from ────────────────────────────────────
-//  Three sources, in strict precedence order:
+//  Two sources, in strict precedence order:
 //
 //    1. AN IMPORTED FILE — a dev dropped a data file into the app's Documents
 //       folder (visible in Files / Finder) or picked one in the Debug tab.
@@ -18,8 +18,6 @@
 //       (AcclerometerRecorder, AdaptiveLocationManager, the SensorKit watch
 //       fetcher, survey submit), and refreshHealthKitSamples() stamps the
 //       genuine latest sample for each Apple Health row.
-//    3. DEBUG SAMPLE DATA — the hardcoded table below, only when nothing else
-//       exists, only in DEBUG, and always labelled "sample data".
 //
 //  ── Keys, per sensor ────────────────────────────────────────────────────────
 //    sensorLast_<kind>_value    String?  the rendered reading, "72 bpm"
@@ -137,19 +135,6 @@ nonisolated extension SensorKind {
         }
     }
 
-    /// Where a non-imported reading for this sensor genuinely comes from.
-    var realSource: SensorSource {
-        switch self {
-        case .heartRate, .heartRateVariability, .steps, .distance,
-             .bloodOxygen, .activeEnergy, .flights, .sleep:
-            return .healthKit
-        case .survey:
-            return .checkIn
-        default:
-            return .recorder
-        }
-    }
-
     /// Render a raw number the way this sensor should read.
     func formatted(_ value: Double) -> String {
         guard let unit else { return "" }
@@ -171,37 +156,18 @@ nonisolated extension SensorKind {
 
 // MARK: - Model
 
-/// Where a displayed value came from. Drives the source line under every row.
+/// Where a stored value came from. Home captions imported tiles with the file name.
 nonisolated enum SensorSource {
-    case healthKit
-    case recorder
-    case checkIn
-    case imported(String)
-    case sample
-
-    var label: String {
-        switch self {
-        case .healthKit:          return "Apple Health"
-        case .recorder:           return "this iPhone"
-        case .checkIn:            return "your check-ins"
-        case .imported(let name): return name
-        case .sample:             return "sample data"
-        }
-    }
+    case live                 // HealthKit, a recorder, or a check-in
+    case imported(String)     // file name
 }
 
 nonisolated struct SensorStatusEntry {
     let value: String?      // nil = timestamp-only sensor (motion, location, watch)
-    /// The same reading as a number, in SensorKind.unit. nil for timestamp-only
-    /// sensors and for stamps written by builds before this field existed.
+    /// The same reading as a number, in SensorKind.unit. nil for timestamp-only sensors.
     let numeric: Double?
     let date: Date
     let source: SensorSource
-
-    var isSample: Bool {
-        if case .sample = source { return true }
-        return false
-    }
 }
 
 /// What a file contributed, kept so the Debug tab can list what is loaded and
@@ -219,12 +185,6 @@ nonisolated struct SensorImportInfo: Codable, Identifiable {
     var kind: SensorKind? { SensorKind(rawValue: kindRaw) }
 }
 
-/// The two lines a Sensors-tab row renders.
-nonisolated struct SensorDisplay {
-    let valueLine: String       // "Last recorded: 72 bpm · Jul 22 at 9:00 AM"
-    let sourceLine: String?     // "from heartratedata.csv"
-}
-
 // MARK: - Store
 
 nonisolated final class SensorStatusStore: @unchecked Sendable {
@@ -232,45 +192,6 @@ nonisolated final class SensorStatusStore: @unchecked Sendable {
     private init() {}
 
     private let defaults = UserDefaults.standard
-
-#if DEBUG
-    // ══════════════════════════════════════════════════════════════════
-    //  SAMPLE DATA — shown when a sensor has nothing else at all.
-    //
-    //  DEBUG ONLY, and always attributed as "from sample data". `value` is the
-    //  reading shown (nil = timestamp-only); `minutesAgo` positions the fake
-    //  timestamp relative to now. Values are deliberately absurd (999 bpm) so
-    //  real and sample data can never be confused.
-    //
-    //  Deliberately compiled out of Release: the Sensors tab ships to patients,
-    //  and five of these rows (gyroscope, watch PPG, ECG, wrist temperature,
-    //  ambient light) have no fetcher at all, so in Release they would have
-    //  shown sample data permanently, to everyone.
-    //
-    //  To preview the tab with different numbers, prefer dropping a data file
-    //  into the app's Documents folder over editing this table — that path is
-    //  what the Sensors tab actually uses in the field.
-    // ══════════════════════════════════════════════════════════════════
-    static let sampleData: [SensorKind: (value: String?, minutesAgo: Double)] = [
-        .accelerometer:        (nil,            45),
-        .gyroscope:            (nil,            45),
-        .location:             (nil,            12),
-        .heartRate:            ("999 bpm",       5),
-        .heartRateVariability: ("999 ms",       60),
-        .steps:                ("99,999 steps", 30),
-        .distance:             ("99.9 km",      30),
-        .flights:              ("999 flights",  30),
-        .bloodOxygen:          ("99%",          90),
-        .activeEnergy:         ("9,999 kcal",   30),
-        .sleep:                ("9.9 hr",      600),
-        .watchAccelerometer:   (nil,           120),
-        .watchHeartPPG:        (nil,           180),
-        .ecg:                  (nil,          1440),
-        .wristTemperature:     (nil,           480),
-        .ambientLight:         (nil,           300),
-        .survey:               (nil,          1440),
-    ]
-#endif
 
     private func valueKey(_ kind: SensorKind)   -> String { "sensorLast_\(kind.rawValue)_value" }
     private func numericKey(_ kind: SensorKind) -> String { "sensorLast_\(kind.rawValue)_numeric" }
@@ -367,71 +288,31 @@ nonisolated final class SensorStatusStore: @unchecked Sendable {
 
     // MARK: Reading
 
-    /// Imported reading if one is loaded, else the real stamp, else (DEBUG only)
-    /// the sample-table fallback, else nil. Release has no sample fallback — see
-    /// the file header.
+    /// The stored reading (imported or live), or nil if nothing was ever recorded.
     func entry(for kind: SensorKind) -> SensorStatusEntry? {
-        if let date = defaults.object(forKey: dateKey(kind)) as? Date {
-            let source: SensorSource
-            if isImported(kind) {
-                source = .imported(importInfo(for: kind)?.filename ?? "an imported file")
-            } else {
-                source = kind.realSource
-            }
-            return SensorStatusEntry(value: defaults.string(forKey: valueKey(kind)),
-                                     numeric: defaults.object(forKey: numericKey(kind)) as? Double,
-                                     date: date,
-                                     source: source)
-        }
-#if DEBUG
-        if let sample = Self.sampleData[kind] {
-            return SensorStatusEntry(value: sample.value,
-                                     numeric: sample.value.flatMap(Self.numericValue(from:)),
-                                     date: Date().addingTimeInterval(-sample.minutesAgo * 60),
-                                     source: .sample)
-        }
-#endif
-        return nil
+        guard let date = defaults.object(forKey: dateKey(kind)) as? Date else { return nil }
+        let source: SensorSource = isImported(kind)
+            ? .imported(importInfo(for: kind)?.filename ?? "an imported file")
+            : .live
+        return SensorStatusEntry(value: defaults.string(forKey: valueKey(kind)),
+                                 numeric: defaults.object(forKey: numericKey(kind)) as? Double,
+                                 date: date,
+                                 source: source)
     }
 
-    /// The two lines a Sensors-tab row shows.
-    func display(for kind: SensorKind) -> SensorDisplay {
-        guard let entry = entry(for: kind) else {
-            return SensorDisplay(valueLine: "No data recorded yet", sourceLine: nil)
-        }
-        let when = Self.timestampFormatter.string(from: entry.date)
-        let valueLine: String
-        if kind.isNumeric, let value = entry.value {
-            valueLine = "Last recorded: \(value) · \(when)"
-        } else {
-            valueLine = "Last recorded: \(when)"
-        }
-        return SensorDisplay(valueLine: valueLine, sourceLine: "from \(entry.source.label)")
-    }
-
-    /// Value + caption for a Home stat tile. The caption appears only when the
-    /// reading is noteworthy — imported, or simply not from today — so live
-    /// same-day HealthKit data keeps the clean, caption-free look and a stale
-    /// import is impossible to mistake for a fresh one.
-    ///
-    /// The hardcoded sample table is deliberately NOT surfaced here. Unlike the
-    /// Sensors tab, Home is not behind #if DEBUG — it ships. A patient whose
-    /// HealthKit simply has no data must see "—", not "99,999 steps" with a
-    /// small caption. Home therefore shows real or imported readings only.
+    /// Value + caption for a Home stat tile (the Sensors tab uses the value too).
+    /// The caption appears only when the reading is noteworthy — imported, or not
+    /// from today — so a stale reading is impossible to mistake for a fresh one.
     func homeTile(for kind: SensorKind) -> (value: Double, caption: String?)? {
-        guard let entry = entry(for: kind) else { return nil }
-        if case .sample = entry.source { return nil }
-        guard let value = entry.numeric ?? entry.value.flatMap(Self.numericValue(from:)) else { return nil }
+        guard let entry = entry(for: kind), let value = entry.numeric else { return nil }
 
         let isToday = Calendar.current.isDateInToday(entry.date)
         var caption: String?
         switch entry.source {
         case .imported(let name):
             caption = isToday ? shortName(name) : "\(shortName(name)) · \(Self.shortDayFormatter.string(from: entry.date))"
-        case .healthKit, .recorder, .checkIn:
+        case .live:
             caption = isToday ? nil : Self.shortDayFormatter.string(from: entry.date)
-        case .sample:
-            caption = nil   // unreachable, filtered above
         }
         return (value, caption)
     }
@@ -441,33 +322,6 @@ nonisolated final class SensorStatusStore: @unchecked Sendable {
         let stem = (filename as NSString).deletingPathExtension
         return stem.count > 14 ? String(stem.prefix(13)) + "…" : stem
     }
-
-    /// Pulls the number back out of a display string ("72 bpm" → 72).
-    ///
-    /// LEGACY FALLBACK ONLY — `SensorStatusEntry.numeric` is the real path.
-    /// This assumes "," grouping and "." decimals, so it is wrong on a device
-    /// whose locale reverses them (de_DE renders 8420 as "8.420", which lands
-    /// here as 8.42). It survives only to read stamps written by builds that
-    /// predate `numeric`, and to give the DEBUG sample table a value.
-    private static func numericValue(from text: String) -> Double? {
-        let cleaned = text.replacingOccurrences(of: ",", with: "")
-        var digits = ""
-        for ch in cleaned {
-            if ch.isNumber || ch == "." { digits.append(ch) }
-            else if !digits.isEmpty { break }
-        }
-        return Double(digits)
-    }
-
-    // Absolute time with natural day phrasing: "Today at 3:45 PM",
-    // "Yesterday at 9:12 PM", "Jul 12, 2026 at 3:45 PM".
-    private static let timestampFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.dateStyle = .medium
-        f.timeStyle = .short
-        f.doesRelativeDateFormatting = true
-        return f
-    }()
 
     // "Jul 22" — compact enough for a stat tile caption.
     private static let shortDayFormatter: DateFormatter = {
@@ -483,7 +337,7 @@ extension SensorStatusStore {
 
     /// Queries HealthKit for the genuine latest reading of each Apple Health row
     /// and stamps the store. Read-only; sensors the user hasn't authorized simply
-    /// return no samples and keep their previous stamp (or sample fallback).
+    /// return no samples and keep their previous stamp.
     /// Sensors currently showing an imported file are left alone by `record`.
     /// `completion` fires on the main queue after all queries finish.
     func refreshHealthKitSamples(completion: (() -> Void)? = nil) {
