@@ -481,19 +481,10 @@ struct PermissionsFlowView: View {
         #else
         return await withCheckedContinuation { continuation in
             
-            SRSensorReader.requestAuthorization(
-                sensors: [
-                    .accelerometer,
-                    .rotationRate,
-                    .onWristState,
-                    .deviceUsageReport,
-                    .ambientLightSensor,
-                    .photoplethysmogram,
-                    .wristTemperature,
-                    .heartRate
-                ]
-            )
-            { error in
+            // Issue #74: this used to list only the eight older sensors, so
+            // pressure, keyboard, messages and phone usage were never granted
+            // at onboarding. The registry set covers every sensor the app reads.
+            SensorKitRegistry.requestAuthorization { error in
 
                 if let error = error {
                     print("SensorKit auth error: \(error)")

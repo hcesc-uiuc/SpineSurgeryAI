@@ -56,6 +56,13 @@ struct Uploader {
                     continue
                 }
                 
+                // A SensorKit CSV with only its header has nothing to upload yet;
+                // leave it for the fetcher to append to.
+                if file_prefix == "sensorkit_" && file.pathExtension == "csv" && !Uploader.hasDataRows(file) {
+                    print("\(file.lastPathComponent) has no data rows yet, skipping")
+                    continue
+                }
+
                 if let size = fileSize(from: file) {
                     let fileSizeInKB = Int(Double(size) / 1024)
                     print("\(index+1)/\(numberOfFiles) Uploading file: \(file.lastPathComponent); \(fileSizeInKB)KB")
@@ -66,7 +73,7 @@ struct Uploader {
                         let uploadSuccess = await uploader.runFullFlow(filenameURL: file, kind: kind)
                         if uploadSuccess {
                             // Move the file to "processed/" so it isn't re-uploaded on the next run
-                            let destination = processedURL.appendingPathComponent(file.lastPathComponent)
+                            let destination = Uploader.processedDestination(for: file, in: processedURL)
                             do {
                                 try fileManager.moveItem(at: file, to: destination)
                                 print("     Moved \(file.lastPathComponent) -> processed/")
@@ -79,7 +86,7 @@ struct Uploader {
                         let success = await uploadFile(fileURL: file)
                         if success {
                             // Move the file to "processed/" so it isn't re-uploaded on the next run
-                            let destination = processedURL.appendingPathComponent(file.lastPathComponent)
+                            let destination = Uploader.processedDestination(for: file, in: processedURL)
                             do {
                                 try fileManager.moveItem(at: file, to: destination)
                                 print("     Moved \(file.lastPathComponent) -> processed/")
@@ -246,6 +253,44 @@ struct Uploader {
         return (responseData, response)
     }
     
+    /// Where an uploaded file goes in processed/. Sensor files reuse names
+    /// (e.g. sensorkit_pressure_phone_00000.csv until the size limit), so when
+    /// the name is taken a timestamp is added instead of failing the move,
+    /// which used to leave the file behind to be uploaded again every run.
+    static func processedDestination(for file: URL, in processedDir: URL,
+                                     now: Date = Date(),
+                                     fileManager: FileManager = .default) -> URL {
+        let plain = processedDir.appendingPathComponent(file.lastPathComponent)
+        guard fileManager.fileExists(atPath: plain.path) else { return plain }
+
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyyMMdd-HHmmss"
+        let base = file.deletingPathExtension().lastPathComponent
+        let ext = file.pathExtension
+        let stamp = formatter.string(from: now)
+
+        var candidate = processedDir.appendingPathComponent(ext.isEmpty ? "\(base)_\(stamp)" : "\(base)_\(stamp).\(ext)")
+        var n = 2
+        while fileManager.fileExists(atPath: candidate.path) {
+            let name = "\(base)_\(stamp)_\(n)"
+            candidate = processedDir.appendingPathComponent(ext.isEmpty ? name : "\(name).\(ext)")
+            n += 1
+        }
+        return candidate
+    }
+
+    /// True when a CSV has at least one non-empty line after its header.
+    /// Reads only the first 64 KB.
+    static func hasDataRows(_ file: URL) -> Bool {
+        guard let handle = try? FileHandle(forReadingFrom: file) else { return false }
+        defer { handle.closeFile() }
+        let data = handle.readData(ofLength: 64 * 1024)
+        guard let text = String(data: data, encoding: .utf8) else { return !data.isEmpty }
+        let lines = text.split(separator: "\n", omittingEmptySubsequences: true)
+        return lines.dropFirst().contains { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+    }
+
     func filesWithPrefix(in directory: URL, prefix: String) -> [URL] {
         let fileManager = FileManager.default
         
