@@ -1,0 +1,7 @@
+[
+  { "filename": "accelerometer_2026-08-01.csv", "kind": "accel", "content_type": "text/csv",                 "url": "https://YOUR-BUCKET.s3.us-east-2.amazonaws.com/test-fixtures/accelerometer_2026-08-01.csv" },
+  { "filename": "locations_2026-08-01.csv",     "kind": "loc",   "content_type": "text/csv",                 "url": "https://YOUR-BUCKET.s3.us-east-2.amazonaws.com/test-fixtures/locations_2026-08-01.csv" },
+  { "filename": "healthkit_2026-08-01.csv",     "kind": "hk",    "content_type": "text/csv",                 "url": "https://YOUR-BUCKET.s3.us-east-2.amazonaws.com/test-fixtures/healthkit_2026-08-01.csv" },
+  { "filename": "sqlite_2026-08-01.db",         "kind": "other", "content_type": "application/octet-stream", "url": "https://YOUR-BUCKET.s3.us-east-2.amazonaws.com/test-fixtures/sqlite_2026-08-01.db" },
+  { "filename": "sensorkit_2026-08-01.csv",     "kind": "other", "content_type": "text/csv",                 "url": "https://YOUR-BUCKET.s3.us-east-2.amazonaws.com/test-fixtures/sensorkit_2026-08-01.csv" }
+]

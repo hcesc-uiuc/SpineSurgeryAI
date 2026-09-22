@@ -49,28 +49,9 @@ class SensorKitManager: NSObject, ObservableObject {
     }
 
     func askForAuthorization(){
-        // Authorize every sensor in the registry; adding a sensor there is all
-        // that's needed to include it here.
-        SRSensorReader.requestAuthorization(sensors: SensorKitRegistry.sensors) { [weak self] error in
-                                                                                 
-                                                                                 
-        /*//We separated this function out to force
-        //authorization of new sensor types as we add them
-        SRSensorReader.requestAuthorization(
-            sensors: [
-                .accelerometer,
-                .rotationRate,
-                .onWristState,
-                .deviceUsageReport,
-                .ambientLightSensor,
-                .photoplethysmogram,
-                .wristTemperature,
-                .heartRate
-            ]
-        )
-        { [weak self] error in*/
-                                                                                 
-                                                                                 
+        // Registry sensors plus the legacy standalone ones, with unconfirmed
+        // sensors (sleep sessions) requested separately. Same set as onboarding.
+        SensorKitRegistry.requestAuthorization { [weak self] error in
             if let error = error {
                 let nsError = error as NSError
                 if nsError.domain == "SRErrorDomain", nsError.code == 8201 {
