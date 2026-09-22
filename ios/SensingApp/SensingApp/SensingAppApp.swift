@@ -104,9 +104,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         //authorization is already available
         #if !targetEnvironment(simulator)
         SensorKitRegistry.all.forEach { $0.startRecordingWithAuthorizationCheck() }
-        // Issue #74: ask once for sensors added after the participant onboarded.
-        SensorKitRegistry.requestMissingAuthorizationIfNeeded()
-
+      
         /* Mash Todo: Check if we need this.
         SensorKitAccelerometerFetcher.shared.startRecordingWithAuthorizationCheck()
         SensorKitGyroscopeFetcher.shared.startRecordingWithAuthorizationCheck()

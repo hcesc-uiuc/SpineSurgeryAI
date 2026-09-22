@@ -54,7 +54,7 @@
             <key>Required</key>
             <true/>
         </dict>
-        <key>SRSensorUsageElevation</key>
+        <key>SRSensorUsageAmbientPressure</key>
         <dict>
             <key>Description</key>
             <string>Ambient pressure is used to derive altitude and activity context during recovery.</string>
@@ -116,13 +116,6 @@
             <string>Wrist temperature data is used to monitor physiological changes during sleep as part of assessing recovery of surgery recovery states.</string>
             <key>Required</key>
             <true/>
-        </dict>
-        <key>SRSensorUsageSleep</key>
-        <dict>
-            <key>Description</key>
-            <string>Sleep session start times and durations are used to track sleep patterns during recovery from surgery.</string>
-            <key>Required</key>
-            <false/>
         </dict>
     </dict>
 	<key>UIBackgroundModes</key>

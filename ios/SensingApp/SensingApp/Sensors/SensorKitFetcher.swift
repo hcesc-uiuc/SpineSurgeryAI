@@ -14,12 +14,6 @@
 //   - Fetches respect the 24-hour embargo (window ends 25h in the past).
 //   - Data only exists from when recording first started.
 //
-//  File rules (Issue #74):
-//   - A CSV is only created once there is a row to write, so empty fetches
-//     never produce header-only files.
-//   - The fetch window only advances when a fetch completes; a failed fetch
-//     is retried from the same start next time.
-//
 
 import SensorKit
 import CoreMotion
@@ -47,13 +41,13 @@ class SensorKitFetcher: NSObject {
     private let batchSize: Int
     private let maxFileSize: Int
 
+    private let authKey = "sk_authorization_status"
     private let fileIndexKey: String
     private let lastFetchEndKey: String
 
     private var lineBuffer: [String] = []
     private var fileHandle: FileHandle?
     private var currentFileURL: URL
-    private var pendingFetchEnd: Double?   // committed to lastFetchEnd on didCompleteFetch
     private let documentsDir = FileManager.default
         .urls(for: .documentDirectory, in: .userDomainMask)[0]
 
@@ -98,11 +92,9 @@ class SensorKitFetcher: NSObject {
 
     // MARK: - Authorization
 
-    /// This sensor's own authorization status, as reported by SensorKit. A
-    /// participant can allow or deny each sensor separately in Settings.
-    var authorizationStatus: SRAuthorizationStatus { reader.authorizationStatus }
-
-    private var isAuthorized: Bool { authorizationStatus == .authorized }
+    private var isAuthorized: Bool {
+        SRAuthorizationStatus(rawValue: UserDefaults.standard.integer(forKey: authKey)) == .authorized
+    }
 
     // MARK: - Record / Fetch
 
@@ -150,8 +142,8 @@ class SensorKitFetcher: NSObject {
         request.to   = SRAbsoluteTime.fromCFAbsoluteTime(_cf: fetchEnd.timeIntervalSinceReferenceDate)
 
         print("\(logTag): Fetching from \(fetchStart) to \(fetchEnd)")
-        pendingFetchEnd = fetchEnd.timeIntervalSinceReferenceDate
         reader.fetch(request)
+        lastFetchEnd = fetchEnd.timeIntervalSinceReferenceDate
     }
 
     private func pickDevice(from devices: [SRDevice]) -> SRDevice? {
@@ -168,36 +160,25 @@ class SensorKitFetcher: NSObject {
         "\(filePrefix)_\(String(format: "%05d", index)).csv"
     }
 
-    /// Points at the current CSV. The file itself is created on the first
-    /// flush that has rows (see write(_:)).
     private func openCurrentFile() {
-        fileHandle?.closeFile()
-        fileHandle = nil
         currentFileURL = documentsDir
             .appendingPathComponent("to-be-processed")
             .appendingPathComponent(csvFileName(index: fileIndex))
-        print("\(logTag): CSV file: \(currentFileURL.lastPathComponent)")
-        Logger.shared.append("\(logTag): Current CSV file: \(currentFileURL.lastPathComponent)")
-    }
 
-    /// Appends text to the current CSV, creating it with the header first if
-    /// it does not exist yet (for example after the uploader moved it away).
-    private func write(_ text: String) {
         if !FileManager.default.fileExists(atPath: currentFileURL.path) {
-            fileHandle?.closeFile()
-            fileHandle = nil
             try? (csvHeader + "\n").write(to: currentFileURL, atomically: false, encoding: .utf8)
         }
-        if fileHandle == nil {
-            fileHandle = try? FileHandle(forWritingTo: currentFileURL)
-            fileHandle?.seekToEndOfFile()
-        }
-        if let data = text.data(using: .utf8) { fileHandle?.write(data) }
+        fileHandle = try? FileHandle(forWritingTo: currentFileURL)
+        fileHandle?.seekToEndOfFile()
+
+        print("\(logTag): CSV file: \(currentFileURL.lastPathComponent)")
+        Logger.shared.append("\(logTag): Current CSV file: \(currentFileURL.lastPathComponent)")
     }
 
     private func rotateFileIfNeeded() {
         guard let size = try? currentFileURL.resourceValues(forKeys: [.fileSizeKey]).fileSize else { return }
         if size >= maxFileSize {
+            fileHandle?.closeFile()
             fileIndex += 1
             openCurrentFile()
             print("\(logTag): Rotated to file index \(fileIndex)")
@@ -214,11 +195,11 @@ class SensorKitFetcher: NSObject {
     }
 
     private func flush() {
-        guard !lineBuffer.isEmpty else { return }
+        guard !lineBuffer.isEmpty, let handle = fileHandle else { return }
         let csv = lineBuffer.joined(separator: "\n") + "\n"
         let count = lineBuffer.count
         lineBuffer.removeAll(keepingCapacity: true)
-        write(csv)
+        if let data = csv.data(using: .utf8) { handle.write(data) }
         print("\(logTag): Flushed \(count) rows -> \(currentFileURL.lastPathComponent)")
         Logger.shared.append("\(logTag): Flushed \(count) rows -> \(currentFileURL.lastPathComponent)")
         rotateFileIfNeeded()
@@ -271,10 +252,6 @@ extension SensorKitFetcher: SRSensorReaderDelegate {
     func sensorReader(_ reader: SRSensorReader, didCompleteFetch fetchRequest: SRFetchRequest) {
         flush()
         fileHandle?.synchronizeFile()   // fsync to disk
-        if let end = pendingFetchEnd {
-            lastFetchEnd = end
-            pendingFetchEnd = nil
-        }
         print("\(logTag): Fetch complete")
         Logger.shared.append("\(logTag): Fetch complete")
     }
@@ -282,11 +259,7 @@ extension SensorKitFetcher: SRSensorReaderDelegate {
     func sensorReader(_ reader: SRSensorReader,
                       fetching fetchRequest: SRFetchRequest,
                       failedWithError error: Error) {
-        // Keep lastFetchEnd where it was so the next fetch retries this window.
-        // Rows already flushed stay; a retry can repeat some of them.
-        pendingFetchEnd = nil
         print("\(logTag): Fetch failed: \(error)")
-        Logger.shared.append("\(logTag): Fetch failed, window will be retried: \(error)")
         flush()
     }
 
