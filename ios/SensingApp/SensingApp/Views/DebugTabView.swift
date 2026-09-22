@@ -63,14 +63,14 @@ struct DebugTabView: View {
                 Task {
                     print("SensorKit fetcher is called")
                     SensorKitRegistry.all.forEach { $0.fetchLatestData() }
-                    /*SensorKitAccelerometerFetcher.shared.fetchLatestData()
-                    SensorKitGyroscopeFetcher.shared.fetchLatestData()
-                    SensorKitWristDetectionFetcher.shared.fetchLatestData()
+                    SensorKitAccelerometerFetcher.shared.fetchLatestData()
+                    //SensorKitGyroscopeFetcher.shared.fetchLatestData()
+                    //SensorKitWristDetectionFetcher.shared.fetchLatestData()
                     SensorKitPPGFetcher.shared.fetchLatestData()
                     SensorKitAmbientLightFetcher.shared.fetchLatestData()
                     SensorKitDeviceUsageFetcher.shared.fetchLatestData()
                     SensorKitWristTemperatureFetcher.shared.fetchLatestData()
-                    SensorKitHeartRateFetcher.shared.fetchLatestData()*/
+                    SensorKitHeartRateFetcher.shared.fetchLatestData()
                 }
             }.padding(.top, 20)
             

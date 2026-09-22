@@ -108,21 +108,22 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         SensorKitRegistry.requestMissingAuthorizationIfNeeded()
 
         /* Mash Todo: Check if we need this.
+         */
         SensorKitAccelerometerFetcher.shared.startRecordingWithAuthorizationCheck()
-        SensorKitGyroscopeFetcher.shared.startRecordingWithAuthorizationCheck()
-        SensorKitWristDetectionFetcher.shared.startRecordingWithAuthorizationCheck()
+        //SensorKitGyroscopeFetcher.shared.startRecordingWithAuthorizationCheck()
+        //SensorKitWristDetectionFetcher.shared.startRecordingWithAuthorizationCheck()
         SensorKitPPGFetcher.shared.startRecordingWithAuthorizationCheck()
         SensorKitAmbientLightFetcher.shared.startRecordingWithAuthorizationCheck()
         SensorKitDeviceUsageFetcher.shared.startRecordingWithAuthorizationCheck()
         SensorKitWristTemperatureFetcher.shared.startRecordingWithAuthorizationCheck()
         SensorKitHeartRateFetcher.shared.startRecordingWithAuthorizationCheck()
-        */
+        
         #endif
         
         registerForPushNotifications()
         // Start background location updates immediately
         // LocationManager.shared.start()
-        //registering does not start the background process right away.
+        // registering does not start the background process right away.
         BackgroundScheduler.shared.registerBackgroundTasks()
         BackgroundScheduler.shared.registerUploadBGTask()
         BackgroundScheduler.shared.registerBackgroundAppRefreshTask()
