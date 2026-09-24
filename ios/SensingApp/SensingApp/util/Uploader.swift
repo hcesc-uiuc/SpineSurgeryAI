@@ -24,7 +24,8 @@ struct Uploader {
         let toBeProcessedURL = documentsURL.appendingPathComponent("to-be-processed")
         let processedURL = documentsURL.appendingPathComponent("processed")
         
-        let uploader = S3TestUploader()
+        //S3Uploader
+        let s3uploader = S3Uploader()
         
         // Create the "processed" directory if it doesn't already exist
         if !fileManager.fileExists(atPath: processedURL.path) {
@@ -34,6 +35,8 @@ struct Uploader {
         //let file_prefixes = ["accelerometer_"] //, "log_"] //add more extension in future
         //let file_prefixes = ["log_"] //add more extension in future
         let todaysDateString = getTodaysDateString()
+        
+        //only these files are allowed.
         let file_prefixes = ["locations_", "accelerometer_", "healthkit_", "sqlite_", "sensorkit_"]
         //let kinds = ["location", "accelerometer", "healthkit"]
         let kinds = [
@@ -58,6 +61,12 @@ struct Uploader {
                 
                 // A SensorKit CSV with only its header has nothing to upload yet;
                 // leave it for the fetcher to append to.
+                //
+                // TODO: Corner case: to handle.
+                // If some data is available then we will upload move the file
+                // to the processed
+                // Next time what will happen? Will we try to write again with an opened file?
+                //
                 if file_prefix == "sensorkit_" && file.pathExtension == "csv" && !Uploader.hasDataRows(file) {
                     print("\(file.lastPathComponent) has no data rows yet, skipping")
                     continue
@@ -70,7 +79,7 @@ struct Uploader {
                     let kind = kinds[file_prefix]!
                     if kind == "accel" || kind == "other"{
                         //Direct S3 upload
-                        let uploadSuccess = await uploader.runFullFlow(filenameURL: file, kind: kind)
+                        let uploadSuccess = await s3uploader.runFullFlow(filenameURL: file, kind: kind)
                         if uploadSuccess {
                             // Move the file to "processed/" so it isn't re-uploaded on the next run
                             let destination = Uploader.processedDestination(for: file, in: processedURL)

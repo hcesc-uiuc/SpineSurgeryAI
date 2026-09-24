@@ -73,7 +73,7 @@ extension CompleteResponse: Decodable {
 }
 
 // MARK: - Uploader
-public actor S3TestUploader {
+public actor S3Uploader {
 
     private let session: URLSession
 
@@ -166,6 +166,10 @@ public actor S3TestUploader {
     /// Returns true only for HTTP 200 with "status": "completed".
     /// Network errors and 5xx are retried; any other reply is final.
     private func notifyComplete(uploadID: String, success: Bool) async -> Bool {
+        
+        /*
+         TODO: Ask Jason what does it do?
+         */
         guard let url = URL(string: S3UploadConfig.completeURL) else {
             print("ERROR: invalid complete URL")
             return false
@@ -176,7 +180,10 @@ public actor S3TestUploader {
 
         let body: [String: Any] = ["upload_id": uploadID, "success": success]
         req.httpBody = try? JSONSerialization.data(withJSONObject: body)
-
+        
+        
+        //Is this max attempts to check if the file is uploaded
+        //successfully or not?
         let maxAttempts = S3UploadConfig.completeMaxAttempts
         for attempt in 1...maxAttempts {
             do {

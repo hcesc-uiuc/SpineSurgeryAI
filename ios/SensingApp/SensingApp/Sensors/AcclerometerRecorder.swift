@@ -133,9 +133,9 @@ class AcclerometerRecorder {
         writer.flush()
         writer.closeFile()
 
-        if rowCount > 0 {
-            SensorStatusStore.shared.record(.accelerometer, at: now)
-        }
+//        if rowCount > 0 {
+//            SensorStatusStore.shared.record(.accelerometer, at: now)
+//        }
         
         //save last save date
         UserDefaults.standard.set(now, forKey: key)

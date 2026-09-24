@@ -543,7 +543,8 @@ class AdaptiveLocationManager: NSObject, ObservableObject, CLLocationManagerDele
             let entry = "\(unixTime), \(timeString),  \(location.coordinate.latitude),\(location.coordinate.longitude),\(Int(location.horizontalAccuracy))m, \(currentMode)"
             LocationFileLogger.shared.log(entry)
 
-            
+            //This checks if lastLocation is null
+            //If not null, then "lastLocation" will be assinged to "last"
             if let last = lastLocation {
 
                 // How far the user has moved since the last recorded position
@@ -618,15 +619,27 @@ class AdaptiveLocationManager: NSObject, ObservableObject, CLLocationManagerDele
         }
 
         // Stamp the Sensors-tab "last recorded" line (throttled to once a minute).
+        // "lastFreshnessStampTime" is initialized as zero, so first lastFreshnessStampTime is set.
+        //
+        // If newer location more thn 60 second newer than our last record,
+        // then newest is assigned to the sensor tab view
+        //
         if let newest = locations.last, Date().timeIntervalSince1970 - lastFreshnessStampTime > 60 {
             lastFreshnessStampTime = Date().timeIntervalSince1970
             SensorStatusStore.shared.record(.location, at: newest.timestamp)
         }
 
         // Keep the stationary geofence following the user as they move.
+        /*
+         
+         Experiment #1, Sep 22:
+         We disable the geofence and see if the location triggering stops
+         if we use the phone. Currently, the location is starting
+         if we use the phone for a bit, like browing or watching kids vidoes.
+         
         if let latest = locations.last {
             updateStationaryGeofence(to: latest)
-        }
+        }*/
     }
 
     // Called automatically by iOS when it decides to pause location delivery.
