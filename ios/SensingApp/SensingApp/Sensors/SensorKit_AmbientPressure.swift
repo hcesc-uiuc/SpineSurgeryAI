@@ -15,6 +15,7 @@ final class SensorKitAmbientPressureFetcher: SensorKitFetcher {
     init() {
         super.init(
             sensor: .ambientPressure,
+            kind: .pressure,
             filePrefix: "sensorkit_pressure_phone",
             csvHeader: "timestamp_unix,pressure_kpa,temperature_c",
             devicePreference: .iPhone,
