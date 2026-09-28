@@ -88,7 +88,8 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         if let folderURL = createFolder(named: "processed") {
             print("Ready to use: \(folderURL)")
         }
-        
+        sealOrphanedPartFiles()
+
         //forcing sqlite files to initialize
         //        _ = SQLiteSaver.shared
         
@@ -196,6 +197,32 @@ class AppDelegate: NSObject, UIApplicationDelegate {
 
     func applicationWillTerminate(_ application: UIApplication) {
         print("App is about to terminate")
+    }
+
+    /// Seals ".part" files left behind by a previous run. Nothing holds them open
+    /// now, so renaming them hands them to the uploader instead of stranding them.
+    func sealOrphanedPartFiles() {
+        let fileManager = FileManager.default
+        guard let docsURL = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first else { return }
+        let toBeProcessed = docsURL.appendingPathComponent("to-be-processed")
+
+        let urls = (try? fileManager.contentsOfDirectory(at: toBeProcessed,
+                                                         includingPropertiesForKeys: nil,
+                                                         options: [.skipsHiddenFiles])) ?? []
+        for url in urls where url.pathExtension == SensorKitFetcher.partExtension {
+            let sealed = url.deletingPathExtension()
+            do {
+                if fileManager.fileExists(atPath: sealed.path) {
+                    try fileManager.removeItem(at: url)   // already sealed by a later run
+                } else {
+                    try fileManager.moveItem(at: url, to: sealed)
+                    print("Sealed orphaned \(sealed.lastPathComponent)")
+                    Logger.shared.append("Sealed orphaned \(sealed.lastPathComponent)")
+                }
+            } catch {
+                print("Failed to seal orphaned \(url.lastPathComponent): \(error)")
+            }
+        }
     }
 
     func createFolder(

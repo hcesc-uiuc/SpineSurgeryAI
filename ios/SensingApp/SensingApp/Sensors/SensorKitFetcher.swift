@@ -50,10 +50,15 @@ class SensorKitFetcher: NSObject {
     private let fileIndexKey: String
     private let lastFetchEndKey: String
 
+    /// Extension marking a file this fetcher still owns; the uploader skips these.
+    static let partExtension = "part"
+    static let partSuffix = ".part"
+
     private var lineBuffer: [String] = []
     private var fileHandle: FileHandle?
     private var currentFileURL: URL
     private var pendingFetchEnd: Double?   // committed to lastFetchEnd on didCompleteFetch
+    private var writeFailed = false        // a flush failed; do not commit the window
     private let documentsDir = FileManager.default
         .urls(for: .documentDirectory, in: .userDomainMask)[0]
 
@@ -151,6 +156,7 @@ class SensorKitFetcher: NSObject {
 
         print("\(logTag): Fetching from \(fetchStart) to \(fetchEnd)")
         pendingFetchEnd = fetchEnd.timeIntervalSinceReferenceDate
+        writeFailed = false
         reader.fetch(request)
     }
 
@@ -168,31 +174,74 @@ class SensorKitFetcher: NSObject {
         "\(filePrefix)_\(String(format: "%05d", index)).csv"
     }
 
-    /// Points at the current CSV. The file itself is created on the first
-    /// flush that has rows (see write(_:)).
+    /// Points at the current CSV, which is written under a ".part" name so the
+    /// uploader knows this fetcher still owns it. The file itself is created on
+    /// the first flush that has rows (see write(_:)).
     private func openCurrentFile() {
         fileHandle?.closeFile()
         fileHandle = nil
         currentFileURL = documentsDir
             .appendingPathComponent("to-be-processed")
-            .appendingPathComponent(csvFileName(index: fileIndex))
+            .appendingPathComponent(csvFileName(index: fileIndex) + Self.partSuffix)
         print("\(logTag): CSV file: \(currentFileURL.lastPathComponent)")
         Logger.shared.append("\(logTag): Current CSV file: \(currentFileURL.lastPathComponent)")
     }
 
-    /// Appends text to the current CSV, creating it with the header first if
-    /// it does not exist yet (for example after the uploader moved it away).
-    private func write(_ text: String) {
+    /// Closes the file and publishes it under its final name. After this the
+    /// uploader owns it and the next flush starts a new ".part" file. Renaming
+    /// is atomic, so the file is never half handed over.
+    func sealCurrentFile() {
+        fileHandle?.synchronizeFile()
+        fileHandle?.closeFile()
+        fileHandle = nil
+
+        let path = currentFileURL.path
+        guard currentFileURL.pathExtension == Self.partExtension,
+              FileManager.default.fileExists(atPath: path) else { return }
+
+        let sealed = currentFileURL.deletingPathExtension()   // drops ".part"
+        do {
+            try FileManager.default.moveItem(at: currentFileURL, to: sealed)
+            fileIndex += 1                                    // next fetch writes its own file
+            print("\(logTag): Sealed \(sealed.lastPathComponent)")
+            Logger.shared.append("\(logTag): Sealed \(sealed.lastPathComponent)")
+        } catch {
+            print("\(logTag): Failed to seal \(currentFileURL.lastPathComponent): \(error)")
+            Logger.shared.append("\(logTag): Failed to seal \(currentFileURL.lastPathComponent): \(error)")
+        }
+        openCurrentFile()
+    }
+
+    /// Appends text to the current CSV, creating it with the header first if it
+    /// does not exist yet. Returns false when nothing could be written (a full
+    /// disk, for example), so the caller can keep the rows and retry the window.
+    @discardableResult
+    private func write(_ text: String) -> Bool {
         if !FileManager.default.fileExists(atPath: currentFileURL.path) {
             fileHandle?.closeFile()
             fileHandle = nil
-            try? (csvHeader + "\n").write(to: currentFileURL, atomically: false, encoding: .utf8)
+            do {
+                try (csvHeader + "\n").write(to: currentFileURL, atomically: false, encoding: .utf8)
+            } catch {
+                print("\(logTag): Could not create \(currentFileURL.lastPathComponent): \(error)")
+                return false
+            }
         }
         if fileHandle == nil {
             fileHandle = try? FileHandle(forWritingTo: currentFileURL)
             fileHandle?.seekToEndOfFile()
         }
-        if let data = text.data(using: .utf8) { fileHandle?.write(data) }
+        guard let handle = fileHandle, let data = text.data(using: .utf8) else { return false }
+        do {
+            // The throwing API: the non-throwing write(_:) raises an uncatchable
+            // Objective-C exception when the disk is full.
+            try handle.write(contentsOf: data)
+            return true
+        } catch {
+            print("\(logTag): Write failed: \(error)")
+            Logger.shared.append("\(logTag): Write failed: \(error)")
+            return false
+        }
     }
 
     private func rotateFileIfNeeded() {
@@ -215,12 +264,18 @@ class SensorKitFetcher: NSObject {
 
     private func flush() {
         guard !lineBuffer.isEmpty else { return }
-        let csv = lineBuffer.joined(separator: "\n") + "\n"
-        let count = lineBuffer.count
+        let lines = lineBuffer
         lineBuffer.removeAll(keepingCapacity: true)
-        write(csv)
-        print("\(logTag): Flushed \(count) rows -> \(currentFileURL.lastPathComponent)")
-        Logger.shared.append("\(logTag): Flushed \(count) rows -> \(currentFileURL.lastPathComponent)")
+
+        guard write(lines.joined(separator: "\n") + "\n") else {
+            // Keep the rows and remember the failure: the fetch window must not
+            // be committed, or this data is never fetched again.
+            lineBuffer = lines + lineBuffer
+            writeFailed = true
+            return
+        }
+        print("\(logTag): Flushed \(lines.count) rows -> \(currentFileURL.lastPathComponent)")
+        Logger.shared.append("\(logTag): Flushed \(lines.count) rows -> \(currentFileURL.lastPathComponent)")
         rotateFileIfNeeded()
     }
 
@@ -270,11 +325,14 @@ extension SensorKitFetcher: SRSensorReaderDelegate {
 
     func sensorReader(_ reader: SRSensorReader, didCompleteFetch fetchRequest: SRFetchRequest) {
         flush()
-        fileHandle?.synchronizeFile()   // fsync to disk
-        if let end = pendingFetchEnd {
+        sealCurrentFile()               // hands the file to the uploader
+        if let end = pendingFetchEnd, !writeFailed {
             lastFetchEnd = end
-            pendingFetchEnd = nil
+        } else if writeFailed {
+            print("\(logTag): Rows could not be written, window will be retried")
+            Logger.shared.append("\(logTag): Rows could not be written, window will be retried")
         }
+        pendingFetchEnd = nil
         print("\(logTag): Fetch complete")
         Logger.shared.append("\(logTag): Fetch complete")
     }
@@ -288,6 +346,7 @@ extension SensorKitFetcher: SRSensorReaderDelegate {
         print("\(logTag): Fetch failed: \(error)")
         Logger.shared.append("\(logTag): Fetch failed, window will be retried: \(error)")
         flush()
+        sealCurrentFile()               // a partial batch is still worth uploading
     }
 
     func sensorReader(_ reader: SRSensorReader, didChange authorizationStatus: SRAuthorizationStatus) {
