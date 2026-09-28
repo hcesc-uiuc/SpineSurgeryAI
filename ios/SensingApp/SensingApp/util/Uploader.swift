@@ -33,7 +33,6 @@ struct Uploader {
         
         //let file_prefixes = ["accelerometer_"] //, "log_"] //add more extension in future
         //let file_prefixes = ["log_"] //add more extension in future
-        let todaysDateString = getTodaysDateString()
         let file_prefixes = ["locations_", "accelerometer_", "healthkit_", "sqlite_", "sensorkit_"]
         //let kinds = ["location", "accelerometer", "healthkit"]
         let kinds = [
@@ -48,14 +47,12 @@ struct Uploader {
             let matchingFiles = filesWithPrefix(in: toBeProcessedURL, prefix: file_prefix)
             let numberOfFiles = matchingFiles.count
             for (index, file) in matchingFiles.enumerated() {
-                
-                // Skip today's file — it may still be open for writing
-                let nameWithoutExtension = file.deletingPathExtension().lastPathComponent
-                if nameWithoutExtension.hasSuffix(todaysDateString) {
-                    print("\(file.lastPathComponent) is today's file, skipping")
-                    continue
-                }
-                
+
+                // Files a writer still owns never reach here: filesWithPrefix
+                // returns sealed files only (see Uploader.isSealed). The old
+                // "skip today's file" name check only ever matched locations_
+                // and healthkit_, never sensorkit_, accelerometer_ or sqlite_.
+
                 // A SensorKit CSV with only its header has nothing to upload yet;
                 // leave it for the fetcher to append to.
                 if file_prefix == "sensorkit_" && file.pathExtension == "csv" && !Uploader.hasDataRows(file) {
@@ -291,23 +288,53 @@ struct Uploader {
         return lines.dropFirst().contains { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
     }
 
+    /// Sealed files with this prefix, oldest first. A writer still owning a file
+    /// (a ".part" name, a SQLite sidecar, the open database) is never returned,
+    /// so the uploader can never read or move a file that is being written.
     func filesWithPrefix(in directory: URL, prefix: String) -> [URL] {
         let fileManager = FileManager.default
-        
+
         do {
             let fileURLs = try fileManager.contentsOfDirectory(
                 at: directory,
-                includingPropertiesForKeys: nil,
+                includingPropertiesForKeys: [.contentModificationDateKey],
                 options: [.skipsHiddenFiles]
             )
-            
-            // Filter by prefix
-            return fileURLs.filter { $0.lastPathComponent.hasPrefix(prefix) }
-            
+
+            return fileURLs
+                .filter { $0.lastPathComponent.hasPrefix(prefix) }
+                .filter { Uploader.isSealed($0) }
+                // Oldest first: contentsOfDirectory has no order, so without this
+                // the oldest file in a backlog can stay last forever.
+                .sorted { (Uploader.modified($0) ?? .distantPast) < (Uploader.modified($1) ?? .distantPast) }
+
         } catch {
             print("Error reading directory: \(error)")
             return []
         }
+    }
+
+    static func modified(_ url: URL) -> Date? {
+        try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
+    }
+
+    /// True when no writer owns this file any more.
+    ///
+    /// - ".part" is a writer's working file (see SensorKitFetcher.sealCurrentFile).
+    /// - "-wal"/"-shm" belong to an open SQLite database and are meaningless alone.
+    /// - dbFileName is the database the app is writing to right now.
+    /// - `grace` covers files written by builds that predate sealing: they carry
+    ///   final names even while open, so a recently touched one is left alone.
+    static func isSealed(_ url: URL,
+                         now: Date = Date(),
+                         grace: TimeInterval = 120,
+                         defaults: UserDefaults = .standard) -> Bool {
+        let name = url.lastPathComponent
+        if url.pathExtension == SensorKitFetcher.partExtension { return false }
+        if name.hasSuffix("-wal") || name.hasSuffix("-shm") { return false }
+        if name == defaults.string(forKey: "dbFileName") { return false }
+        guard let modified = modified(url) else { return true }
+        return now.timeIntervalSince(modified) > grace
     }
     
     func fileSize(from url: URL) -> Int? {
