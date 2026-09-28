@@ -23,6 +23,7 @@ final class SensorKitWristDetectionFetcher: SensorKitFetcher {
     init() {
         super.init(
             sensor: .onWristState,
+            kind: .wristDetection,
             filePrefix: "sensorkit_wristdetection_watch",
             csvHeader: "timestamp_unix,on_wrist,wrist_location,crown_orientation",
             devicePreference: .watch,
