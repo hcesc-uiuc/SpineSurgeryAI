@@ -446,7 +446,13 @@ class BackgroundScheduler {
         // e.g. upload SQLite DB, sync data, etc.
         if self.isOnWiFi() {
             Logger.shared.append("BGUploadProcessingTask: On Wifi. Starting upload")
-            
+
+            // Seal the database first: rotating closes and checkpoints the current
+            // file so it can be uploaded on its own, and starts a new one. Without
+            // this the uploader would skip it (it is the open dbFileName) and no
+            // SQLite data would ever leave the device.
+            SQLiteSaver.shared.flushDataToDb(forceNewFile: true)
+
             //we are waiting for upload to finish
             //wait() will block, until signal() unblocks it.
             let semaphore = DispatchSemaphore(value: 0)

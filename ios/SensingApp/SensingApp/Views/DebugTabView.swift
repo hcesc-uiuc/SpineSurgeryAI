@@ -121,6 +121,8 @@ struct DebugTabView: View {
             
             Button("Upload All Files") {
                 Task {
+                    // Same as the background task: seal the database before uploading.
+                    SQLiteSaver.shared.flushDataToDb(forceNewFile: true)
                     await Uploader.shared.uploadFolder()
                 }
             }.padding(.top, 20)

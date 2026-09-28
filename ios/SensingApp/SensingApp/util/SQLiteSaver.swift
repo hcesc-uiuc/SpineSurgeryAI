@@ -91,11 +91,26 @@ final class SQLiteSaver {
     
     init() {
 
-        //if last file doesn't exist, then add a new file
-        let filename = UserDefaults.standard.string(forKey: "dbFileName") ?? "sqlite_\(SQLiteSaver.currentTimestampString()).db"
+        // Reuse the stored file only if it is still there: the uploader moves a
+        // rotated database to processed/, and reopening that path would silently
+        // create an empty database under a name the uploader may take again.
         let fileManager = FileManager.default
         let docsURL = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first!
-        self.databaseURL = docsURL.appendingPathComponent("to-be-processed").appendingPathComponent(filename)
+        let toBeProcessed = docsURL.appendingPathComponent("to-be-processed")
+
+        let stored = UserDefaults.standard.string(forKey: "dbFileName")
+        let storedURL = stored.map { toBeProcessed.appendingPathComponent($0) }
+        let filename: String
+        if let storedURL, fileManager.fileExists(atPath: storedURL.path) {
+            filename = storedURL.lastPathComponent
+        } else {
+            if stored != nil {
+                print("DB: stored database is gone, starting a new one")
+                Logger.shared.append("DB: stored database is gone, starting a new one")
+            }
+            filename = "sqlite_\(SQLiteSaver.currentTimestampString()).db"
+        }
+        self.databaseURL = toBeProcessed.appendingPathComponent(filename)
         
         self.buffer         = CircularBufferSQLite(capacity: self.capacity)
         
@@ -200,52 +215,49 @@ final class SQLiteSaver {
         }
     }
     
+    /// Closes the database so the file left behind is complete on its own.
+    ///
+    /// In WAL mode recent commits live in the -wal file until a checkpoint, and a
+    /// checkpoint cannot finish while a write transaction is open. So: commit,
+    /// finalize, checkpoint with TRUNCATE (moves every page into the .db and
+    /// empties the WAL), then close. Only then is the .db safe to upload on its
+    /// own — see https://www.sqlite.org/wal.html.
     func close() {
         guard let db else { return } //means database is already closed.
-        
-        // sqlite3_close does two things:
-        //
-        // 1. Flushes any pending in-memory state to the WAL file
-        // 2. Releases the file lock so other processes can access the db
-        //
-        // It does not move data from disk to some safer place — the data is
-        // already on disk after each successful sqlite3_step.
-        //
+
+        // End the long-lived write transaction opened in prepareInsertStatement;
+        // harmless when there is none.
+        sqlite3_exec(db, "COMMIT;", nil, nil, nil)
         sqlite3_finalize(insertStmt)
-        sqlite3_close(db)
+        insertStmt = nil
+
+        let cp = sqlite3_wal_checkpoint_v2(db, nil, SQLITE_CHECKPOINT_TRUNCATE, nil, nil)
+        if cp != SQLITE_OK {
+            let msg = String(cString: sqlite3_errmsg(db))
+            print("DB: checkpoint failed (\(cp)): \(msg)")
+            Logger.shared.append("DB: checkpoint failed (\(cp)): \(msg)")
+        }
+
+        // close_v2 instead of close: with an unfinalized statement, close returns
+        // SQLITE_BUSY and leaves the connection open, while we had already
+        // dropped the handle — and the old code then deleted a live -wal, losing
+        // committed rows. close_v2 defers the free until the last statement goes.
+        let rc = sqlite3_close_v2(db)
+        if rc != SQLITE_OK {
+            print("DB: close_v2 returned \(rc)")
+            Logger.shared.append("DB: close_v2 returned \(rc)")
+        }
         self.db = nil
         print("Database closed")
-        
-        deleteWALFiles()  // then safe to delete
+
+        // No WAL deletion here: a successful checkpoint plus close removes
+        // -wal/-shm itself, and deleting them by hand destroys committed rows
+        // whenever the close did not actually complete.
     }
     
     // MARK: - Helpers
     
     
-    func deleteWALFiles() {
-        let shmURL = databaseURL.deletingLastPathComponent()
-            .appendingPathComponent(databaseURL.lastPathComponent + "-shm")
-        let walURL = databaseURL.deletingLastPathComponent()
-            .appendingPathComponent(databaseURL.lastPathComponent + "-wal")
-        // print(shmURL)
-        // print(walURL)
-
-        for url in [shmURL, walURL] {
-            do {
-                if FileManager.default.fileExists(atPath: url.path) {
-                    try FileManager.default.removeItem(at: url)
-                    print("Deleted: \(url.lastPathComponent)")
-                }
-            } catch {
-                print("Failed to delete \(url.lastPathComponent): \(error)")
-            }
-        }
-        
-        //Todo: We should delete any remaining WAL files?
-        //  Think, we should open all the related SQL files to make sure
-        //  The WAL's are merged?
-    }
-
     func lastError() -> String {
         guard let db else { return "No database connection" }
         return String(cString: sqlite3_errmsg(db))
@@ -409,8 +421,13 @@ final class SQLiteSaver {
         index = 0 //means no data to flush yet.
         
         // If the filesize is larger than "maxFileSizeMB", we create new file.
-        print("File size \(fileSizeMB(at: self.databaseURL)), \(self.databaseURL.lastPathComponent)")
-        if fileSizeMB(at: self.databaseURL) > maxFileSizeMB ||
+        // Count the -wal too: in WAL mode most rows sit there until a checkpoint,
+        // so measuring the .db alone made size-based rotation almost never fire.
+        let walURL = self.databaseURL.deletingLastPathComponent()
+            .appendingPathComponent(self.databaseURL.lastPathComponent + "-wal")
+        let totalSizeMB = fileSizeMB(at: self.databaseURL) + fileSizeMB(at: walURL)
+        print("File size \(totalSizeMB) (db + wal), \(self.databaseURL.lastPathComponent)")
+        if totalSizeMB > maxFileSizeMB ||
             forceNewFile == true {
             
             if forceNewFile == false{
