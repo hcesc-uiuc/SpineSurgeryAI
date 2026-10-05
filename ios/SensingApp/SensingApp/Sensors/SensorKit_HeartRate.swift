@@ -28,6 +28,7 @@ private struct HeartRateSample {
 
 class SensorKitHeartRateFetcher: NSObject {
     static let shared = SensorKitHeartRateFetcher()
+    private var stamp = SensorKitStamp(.watchHeartRate)   // newest sample time → SensorStatusStore
 
     private let reader = SRSensorReader(sensor: .heartRate)
 
@@ -240,6 +241,7 @@ extension SensorKitHeartRateFetcher: SRSensorReaderDelegate {
         guard let samples = result.sample as? [CMHighFrequencyHeartRateData] else {
             return true
         }
+        stamp.saw(result)
 
         print("SK-HR: Writing \(samples.count) samples of heart rate data")
         Logger.shared.append("SK-HR: Writing \(samples.count) samples of heart rate data")
@@ -259,6 +261,7 @@ extension SensorKitHeartRateFetcher: SRSensorReaderDelegate {
     func sensorReader(_ reader: SRSensorReader, didCompleteFetch fetchRequest: SRFetchRequest) {
         flushBuffer()
         fileHandle?.synchronizeFile()  // fsync to disk
+        stamp.save()
         print("SK-HR: Fetch complete")
         Logger.shared.append("SK-HR: Fetch complete")
     }

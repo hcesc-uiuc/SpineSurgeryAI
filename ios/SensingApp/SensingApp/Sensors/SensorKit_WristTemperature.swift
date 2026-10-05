@@ -29,6 +29,7 @@ import Foundation
 
 class SensorKitWristTemperatureFetcher: NSObject {
     static let shared = SensorKitWristTemperatureFetcher()
+    private var stamp = SensorKitStamp(.wristTemperature)   // newest sample time → SensorStatusStore
 
     private let reader = SRSensorReader(sensor: .wristTemperature)
 
@@ -215,6 +216,7 @@ extension SensorKitWristTemperatureFetcher: SRSensorReaderDelegate {
         guard let session = result.sample as? SRWristTemperatureSession else {
             return true
         }
+        stamp.saw(result)
 
         let allTemps = Array(session.temperatures)
         print("SK-WristTemp: Writing \(allTemps.count) samples of wrist temperature data")
@@ -232,6 +234,7 @@ extension SensorKitWristTemperatureFetcher: SRSensorReaderDelegate {
 
     func sensorReader(_ reader: SRSensorReader, didCompleteFetch fetchRequest: SRFetchRequest) {
         fileHandle?.synchronizeFile()  // fsync to disk
+        stamp.save()
         print("SK-WristTemp: Fetch complete")
         Logger.shared.append("SK-WristTemp: Fetch complete")
     }

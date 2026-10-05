@@ -2,70 +2,41 @@
 //  SensorStatusStore.swift
 //  SensingApp
 //
-//  The ONE store behind every sensor reading the app displays — the Sensors tab
-//  ("What We Collect") and the Home stat tiles.
+//  The one store behind every sensor reading the app shows (Sensors tab, Home tiles).
+//  Every data type follows the same three steps:
 //
-//  Storage is UserDefaults. Nothing else. There is no sensor database.
+//    1. RECORD   a recorder gets data and calls
+//                SensorStatusStore.shared.record(kind, value:, numeric:, at: <newest sample time>)
+//                SensorKit readers do it through SensorKitStamp at the end of each fetch.
+//    2. STORE    one SensorLog per kind, all in UserDefaults "sensorLogs":
+//                the latest reading plus the 10 before it. Every change is logged.
+//    3. DISPLAY  SensorFeed (Sensors tab) and HomeView read latest(for:) / homeTile(for:).
 //
-//  ── Where a displayed reading comes from ────────────────────────────────────
-//  Two sources, in strict precedence order:
+//  Testing: a file dropped into Documents/ (or picked in Debug) goes through
+//  recordImport and shows on the same screens. It stays there until cleared;
+//  live readings that arrive meanwhile go into the history.
 //
-//    1. AN IMPORTED FILE — a dev dropped a data file into the app's Documents
-//       folder (visible in Files / Finder) or picked one in the Debug tab.
-//       An import WINS until it is cleared, so a demo value cannot be silently
-//       overwritten by a live HealthKit refresh two seconds later.
-//    2. A REAL STAMP — recorders stamp the store as they save data
-//       (AcclerometerRecorder, AdaptiveLocationManager, the SensorKit watch
-//       fetcher, survey submit), and refreshHealthKitSamples() stamps the
-//       genuine latest sample for each Apple Health row.
-//
-//  ── Keys, per sensor ────────────────────────────────────────────────────────
-//    sensorLast_<kind>_value    String?  the rendered reading, "72 bpm"
-//    sensorLast_<kind>_numeric  Double?  the same reading as a number
-//    sensorLast_<kind>_date     Date     when it was recorded
-//    sensorLast_<kind>_source   String?  "import" — absent means a live stamp
-//    sensorImport_<kind>        Data?    JSON metadata about the imported file
-//
-//  `numeric` exists because Home tiles need a NUMBER. Recovering one by parsing
-//  the display string back apart is locale-dependent — NumberFormatter renders
-//  8420 as "8.420" in de_DE, which parses back as 8.42 — so the raw value is
-//  stored alongside the text rather than reconstructed from it.
-//
-//  CONTRACT: `numeric` is always expressed in the sensor's own unit
-//  (SensorKind.unit) — km for distance, percent for blood oxygen, hours for
-//  sleep — so a live stamp and an imported file are directly comparable.
+//  `numeric` is always in SensorKind.unit, so live and imported readings compare directly.
 //
 
 import Foundation
 import HealthKit
+import SensorKit
+import UIKit
 
 // MARK: - Sensors
 
-/// One case per row on the Sensors tab.
+/// One case per data type the app collects.
 nonisolated enum SensorKind: String, CaseIterable {
-    // Motion & activity
-    case accelerometer
-    case gyroscope
-    // Location
-    case location
-    // Apple Health
-    case heartRate
-    case heartRateVariability
-    case steps
-    // distance & flights have no Sensors-tab row of their own — they exist so the
-    // Home stat tiles that show them can be driven by the same store.
-    case distance
-    case flights
-    case bloodOxygen
-    case activeEnergy
-    case sleep
+    // Phone motion & location
+    case accelerometer, gyroscope, location
+    // Phone use & surroundings (SensorKit)
+    case deviceUsage, phoneUsage, messagesUsage, keyboard, ambientLight, pressure
+    // Apple Health (distance and flights feed Home tiles only)
+    case heartRate, heartRateVariability, steps, distance, flights, bloodOxygen, activeEnergy, sleep
     // Apple Watch (SensorKit)
-    case watchAccelerometer
-    case watchHeartPPG
-    case ecg
-    case wristTemperature
-    case ambientLight
-    // Daily survey
+    case watchAccelerometer, watchHeartRate, watchPPG, wristTemperature, wristDetection, watchSleep
+    // Daily check-in
     case survey
 }
 
@@ -73,32 +44,37 @@ nonisolated enum SensorKind: String, CaseIterable {
 
 nonisolated extension SensorKind {
 
-    /// Human name used in the import picker and the loaded-sensor list.
     var displayName: String {
         switch self {
         case .accelerometer:        return "Accelerometer"
         case .gyroscope:            return "Gyroscope"
         case .location:             return "Location"
+        case .deviceUsage:          return "Phone Use"
+        case .phoneUsage:           return "Calls"
+        case .messagesUsage:        return "Messages"
+        case .keyboard:             return "Typing"
+        case .ambientLight:         return "Ambient Light"
+        case .pressure:             return "Air Pressure"
         case .heartRate:            return "Heart Rate"
         case .heartRateVariability: return "Heart Rate Variability"
         case .steps:                return "Steps"
         case .distance:             return "Walking Distance"
+        case .flights:              return "Flights Climbed"
         case .bloodOxygen:          return "Blood Oxygen"
         case .activeEnergy:         return "Active Energy"
-        case .flights:              return "Flights Climbed"
         case .sleep:                return "Sleep"
         case .watchAccelerometer:   return "Watch Accelerometer"
-        case .watchHeartPPG:        return "Watch Heart & PPG"
-        case .ecg:                  return "ECG"
+        case .watchHeartRate:       return "Watch Heart Rate"
+        case .watchPPG:             return "Watch PPG"
         case .wristTemperature:     return "Wrist Temperature"
-        case .ambientLight:         return "Ambient Light"
+        case .wristDetection:       return "Watch Worn"
+        case .watchSleep:           return "Watch Sleep"
         case .survey:               return "Recovery Check-in"
         }
     }
 
     /// Unit appended to a bare imported number ("72" → "72 bpm").
-    /// nil = timestamp-only sensor: the file's value column is ignored and the
-    /// row shows only when it was recorded.
+    /// nil = timestamp-only sensor: the row shows only when it was recorded.
     var unit: String? {
         switch self {
         case .heartRate:            return "bpm"
@@ -113,21 +89,10 @@ nonisolated extension SensorKind {
         }
     }
 
-    /// True when the sensor carries a numeric reading worth displaying.
     var isNumeric: Bool { unit != nil }
 
-    /// True when the reading accumulates over a day, so the meaningful figure is
-    /// a DAILY TOTAL rather than the most recent single measurement.
-    ///
-    /// This is what keeps the two sources honest. For the live path,
-    /// stampDailyTotal below already stores a day total. An imported file holding
-    /// one row per hour would otherwise contribute only its LAST row, so the same
-    /// "Steps" label would silently mean "today so far" from Apple Health and
-    /// "the last hour" from a file. Imported cumulative series are therefore
-    /// summed over the day of their newest row — which also leaves a file that
-    /// already holds daily totals correct, since that day has one row.
-    ///
-    /// Sleep is NOT cumulative: it is already stored as a per-night aggregate.
+    /// Readings that add up over a day, so the figure shown is the day total.
+    /// Sleep is not: it is already stored per night.
     var isCumulative: Bool {
         switch self {
         case .steps, .distance, .activeEnergy, .flights: return true
@@ -135,7 +100,6 @@ nonisolated extension SensorKind {
         }
     }
 
-    /// Render a raw number the way this sensor should read.
     func formatted(_ value: Double) -> String {
         guard let unit else { return "" }
         switch self {
@@ -156,22 +120,34 @@ nonisolated extension SensorKind {
 
 // MARK: - Model
 
-/// Where a stored value came from. Home captions imported tiles with the file name.
-nonisolated enum SensorSource {
-    case live                 // HealthKit, a recorder, or a check-in
-    case imported(String)     // file name
+nonisolated struct SensorReading: Codable, Equatable, CustomStringConvertible {
+    var value: String?          // "72 bpm"; nil for timestamp-only sensors
+    var numeric: Double?        // the same number, in SensorKind.unit
+    var date: Date              // newest sample time
+    var importedFrom: String?   // file name, when it came from an import
+
+    var description: String {
+        "\(value ?? "recorded") @ \(date.formatted(date: .abbreviated, time: .shortened))"
+    }
 }
 
-nonisolated struct SensorStatusEntry {
-    let value: String?      // nil = timestamp-only sensor (motion, location, watch)
-    /// The same reading as a number, in SensorKind.unit. nil for timestamp-only sensors.
-    let numeric: Double?
-    let date: Date
-    let source: SensorSource
+nonisolated struct SensorLog: Codable {
+    var latest: SensorReading?
+    var previous: [SensorReading] = []   // newest first, at most 10
+    var importInfo: SensorImportInfo?    // set while an imported file is on screen
+
+    /// Makes `reading` the latest; the old latest moves into the history.
+    mutating func push(_ reading: SensorReading) {
+        if let latest { addToHistory(latest) }
+        latest = reading
+    }
+
+    mutating func addToHistory(_ reading: SensorReading) {
+        previous = Array(([reading] + previous).prefix(10))
+    }
 }
 
-/// What a file contributed, kept so the Debug tab can list what is loaded and
-/// offer to clear it. Small enough to live in UserDefaults as JSON.
+/// What an imported file contributed. Shown in the Debug import list.
 nonisolated struct SensorImportInfo: Codable, Identifiable {
     let kindRaw: String
     let filename: String
@@ -189,158 +165,187 @@ nonisolated struct SensorImportInfo: Codable, Identifiable {
 
 nonisolated final class SensorStatusStore: @unchecked Sendable {
     static let shared = SensorStatusStore()
-    private init() {}
+    private init() {
+        // Returning to the app always re-queries Health; the 15-min rule is for tab switches.
+        NotificationCenter.default.addObserver(
+            forName: UIApplication.willEnterForegroundNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            self?.lastHealthQuery = nil
+            self?.logLine("Store: app back from background, next refresh re-queries Apple Health")
+        }
+    }
 
     private let defaults = UserDefaults.standard
+    private let key = "sensorLogs"
+    private let lock = NSLock()           // recorders write from background threads
+    private var lastHealthQuery: Date?    // main thread only (see refresh)
 
-    private func valueKey(_ kind: SensorKind)   -> String { "sensorLast_\(kind.rawValue)_value" }
-    private func numericKey(_ kind: SensorKind) -> String { "sensorLast_\(kind.rawValue)_numeric" }
-    private func dateKey(_ kind: SensorKind)    -> String { "sensorLast_\(kind.rawValue)_date" }
-    private func sourceKey(_ kind: SensorKind)  -> String { "sensorLast_\(kind.rawValue)_source" }
-    private func importKey(_ kind: SensorKind)  -> String { "sensorImport_\(kind.rawValue)" }
+    // MARK: Step 3 — reading
 
-    private static let importedMarker = "import"
+    func log(for kind: SensorKind) -> SensorLog? { loadAll()[kind.rawValue] }
 
-    /// True when the stored reading came from a file rather than a live stamp.
-    func isImported(_ kind: SensorKind) -> Bool {
-        defaults.string(forKey: sourceKey(kind)) == Self.importedMarker
+    func latest(for kind: SensorKind) -> SensorReading? { log(for: kind)?.latest }
+
+    func allLatest() -> [SensorKind: SensorReading] {
+        var result: [SensorKind: SensorReading] = [:]
+        for (raw, log) in loadAll() {
+            if let kind = SensorKind(rawValue: raw), let latest = log.latest { result[kind] = latest }
+        }
+        return result
     }
 
-    // MARK: Writing — live stamps
+    func loadedImports() -> [SensorImportInfo] {
+        loadAll().values.compactMap(\.importInfo).sorted { $0.importedAt > $1.importedAt }
+    }
 
-    /// Stamp a sensor as recorded. Safe to call from any thread (UserDefaults
-    /// is thread-safe). Keeps only the newest stamp — older dates are ignored,
-    /// so out-of-order batches (e.g. SensorKit) can stamp freely.
-    ///
-    /// `numeric` is the same reading as a plain number, in SensorKind.unit. Pass
-    /// it whenever a number is available; Home tiles read it directly instead of
-    /// parsing `value` back apart, which is locale-dependent.
-    ///
-    /// NO-OP while an import is loaded for this sensor. That is the whole point
-    /// of an import: a dev drops a file, and the value stays put until they
-    /// clear it, instead of being overwritten by the next HealthKit refresh.
+    /// Value + caption for a Home tile. The caption appears only when the reading is
+    /// imported or not from today, so a stale value can't pass for a fresh one.
+    func homeTile(for kind: SensorKind) -> (value: Double, caption: String?)? {
+        guard let reading = latest(for: kind), let value = reading.numeric else { return nil }
+        let day = Calendar.current.isDateInToday(reading.date)
+            ? nil : Self.shortDayFormatter.string(from: reading.date)
+        let file = reading.importedFrom.map(shortName)
+        let caption = [file, day].compactMap { $0 }.joined(separator: " · ")
+        return (value, caption.isEmpty ? nil : caption)
+    }
+
+    // MARK: Step 1 — writing
+
+    /// A live reading. Ignored if it is older than, or the same as, the latest.
+    /// While an import is on screen it goes into the history instead.
     func record(_ kind: SensorKind, value: String? = nil, numeric: Double? = nil, at date: Date = Date()) {
-        guard !isImported(kind) else { return }
-        if let existing = defaults.object(forKey: dateKey(kind)) as? Date, existing > date { return }
-        write(kind, value: value, numeric: numeric, date: date)
-        defaults.removeObject(forKey: sourceKey(kind))
-    }
-
-    // MARK: Writing — imports
-
-    /// Store the one reading a file boils down to, and mark the sensor imported.
-    ///
-    /// Deliberately skips the newest-wins guard that `record` applies: an
-    /// imported file is frequently OLDER than the live stamp it is replacing
-    /// (that is normal for test data), and it must still take effect.
-    func recordImport(_ kind: SensorKind,
-                      value: String?,
-                      numeric: Double?,
-                      at date: Date,
-                      info: SensorImportInfo) {
-        write(kind, value: value, numeric: numeric, date: date)
-        defaults.set(Self.importedMarker, forKey: sourceKey(kind))
-        if let data = try? JSONEncoder().encode(info) {
-            defaults.set(data, forKey: importKey(kind))
+        let reading = SensorReading(value: value, numeric: numeric, date: date)
+        update(kind) { log in
+            if log.importInfo != nil {
+                guard !log.previous.contains(reading) else { return nil }
+                log.addToHistory(reading)
+                return "← \(reading) (history only, an import is on screen)"
+            }
+            if let latest = log.latest, latest == reading || latest.date > date { return nil }
+            let was = log.latest
+            log.push(reading)
+            return "← \(reading) (was \(was?.description ?? "empty"))"
         }
     }
 
-    private func write(_ kind: SensorKind, value: String?, numeric: Double?, date: Date) {
-        defaults.set(date, forKey: dateKey(kind))
-        if let value {
-            defaults.set(value, forKey: valueKey(kind))
-        } else {
-            defaults.removeObject(forKey: valueKey(kind))
-        }
-        if let numeric {
-            defaults.set(numeric, forKey: numericKey(kind))
-        } else {
-            defaults.removeObject(forKey: numericKey(kind))
+    /// An imported file's reading. Always shown, even if older than the live one.
+    func recordImport(_ kind: SensorKind, value: String?, numeric: Double?, at date: Date, info: SensorImportInfo) {
+        let reading = SensorReading(value: value, numeric: numeric, date: date, importedFrom: info.filename)
+        update(kind) { log in
+            log.push(reading)
+            log.importInfo = info
+            return "← \(reading) (imported from \(info.filename))"
         }
     }
 
-    /// Forget an imported reading entirely. The row falls back to whatever the
-    /// live sources next produce — for Apple Health rows that is the very next
-    /// refresh; for recorder rows, the next time that recorder runs.
+    /// Takes an import off screen; the newest live reading in the history comes back.
     func clearImport(_ kind: SensorKind) {
-        guard isImported(kind) else { return }
-        defaults.removeObject(forKey: valueKey(kind))
-        defaults.removeObject(forKey: numericKey(kind))
-        defaults.removeObject(forKey: dateKey(kind))
-        defaults.removeObject(forKey: sourceKey(kind))
-        defaults.removeObject(forKey: importKey(kind))
+        update(kind) { log in
+            guard log.importInfo != nil else { return nil }
+            log.importInfo = nil
+            let live = log.previous.firstIndex { $0.importedFrom == nil }.map { log.previous.remove(at: $0) }
+            if let imported = log.latest { log.addToHistory(imported) }
+            log.latest = live
+            return "import cleared, showing \(live?.description ?? "nothing")"
+        }
     }
 
     func clearAllImports() {
         for kind in SensorKind.allCases { clearImport(kind) }
     }
 
-    /// Metadata for every sensor currently showing imported data.
-    func loadedImports() -> [SensorImportInfo] {
-        SensorKind.allCases.compactMap { importInfo(for: $0) }
-            .sorted { $0.importedAt > $1.importedAt }
+    // MARK: Step 2 — storage
+
+    private func loadAll() -> [String: SensorLog] {
+        guard let data = defaults.data(forKey: key),
+              let all = try? JSONDecoder().decode([String: SensorLog].self, from: data) else { return [:] }
+        return all
     }
 
-    func importInfo(for kind: SensorKind) -> SensorImportInfo? {
-        guard isImported(kind), let data = defaults.data(forKey: importKey(kind)) else { return nil }
-        return try? JSONDecoder().decode(SensorImportInfo.self, from: data)
+    /// Read-modify-write of one sensor's log. `change` returns a note for the
+    /// log file, or nil when nothing changed.
+    private func update(_ kind: SensorKind, _ change: (inout SensorLog) -> String?) {
+        lock.lock()
+        defer { lock.unlock() }
+        var all = loadAll()
+        var log = all[kind.rawValue] ?? SensorLog()
+        guard let note = change(&log) else { return }
+        all[kind.rawValue] = log
+        if let data = try? JSONEncoder().encode(all) { defaults.set(data, forKey: key) }
+
+        logLine("Store: \(kind.rawValue) \(note)")
     }
 
-    // MARK: Reading
-
-    /// The stored reading (imported or live), or nil if nothing was ever recorded.
-    func entry(for kind: SensorKind) -> SensorStatusEntry? {
-        guard let date = defaults.object(forKey: dateKey(kind)) as? Date else { return nil }
-        let source: SensorSource = isImported(kind)
-            ? .imported(importInfo(for: kind)?.filename ?? "an imported file")
-            : .live
-        return SensorStatusEntry(value: defaults.string(forKey: valueKey(kind)),
-                                 numeric: defaults.object(forKey: numericKey(kind)) as? Double,
-                                 date: date,
-                                 source: source)
+    private func logLine(_ line: String) {
+        print(line)
+        DispatchQueue.main.async { Logger.shared.append(line) }
     }
 
-    /// Value + caption for a Home stat tile (the Sensors tab uses the value too).
-    /// The caption appears only when the reading is noteworthy — imported, or not
-    /// from today — so a stale reading is impossible to mistake for a fresh one.
-    func homeTile(for kind: SensorKind) -> (value: Double, caption: String?)? {
-        guard let entry = entry(for: kind), let value = entry.numeric else { return nil }
+    // MARK: Refresh (Home + Sensors tab)
 
-        let isToday = Calendar.current.isDateInToday(entry.date)
-        var caption: String?
-        switch entry.source {
-        case .imported(let name):
-            caption = isToday ? shortName(name) : "\(shortName(name)) · \(Self.shortDayFormatter.string(from: entry.date))"
-        case .live:
-            caption = isToday ? nil : Self.shortDayFormatter.string(from: entry.date)
+    /// Step 1 for dropped files and Apple Health: loads any new file in Documents/,
+    /// then re-queries Health if the last query was 15+ minutes ago, `force`, or the
+    /// app has come back from the background since.
+    /// Call from the main thread; `completion` runs on main.
+    func refresh(force: Bool = false, completion: @escaping () -> Void) {
+        let healthDue = force || lastHealthQuery.map { Date().timeIntervalSince($0) >= 15 * 60 } ?? true
+        if healthDue { lastHealthQuery = Date() }
+        logLine(healthDue ? "Store: querying Apple Health" : "Store: Apple Health queried < 15 min ago, skipping")
+
+        DispatchQueue.global(qos: .userInitiated).async {
+            SensorFileImporter.autoIngestInbox()
+            if healthDue {
+                self.refreshHealthKitSamples(completion: completion)
+            } else {
+                DispatchQueue.main.async(execute: completion)
+            }
         }
-        return (value, caption)
     }
 
-    /// Tiles are narrow — keep the filename readable rather than complete.
+    // MARK: Formatting
+
+    /// Tiles are narrow: keep the file name readable rather than complete.
     private func shortName(_ filename: String) -> String {
         let stem = (filename as NSString).deletingPathExtension
         return stem.count > 14 ? String(stem.prefix(13)) + "…" : stem
     }
 
-    // "Jul 22" — compact enough for a stat tile caption.
-    private static let shortDayFormatter: DateFormatter = {
+    private static let shortDayFormatter: DateFormatter = {   // "Jul 22"
         let f = DateFormatter()
         f.setLocalizedDateFormatFromTemplate("MMMd")
         return f
     }()
 }
 
+// MARK: - SensorKit → store
+
+/// Each SensorKit reader keeps one: `saw(result)` in didFetchResult and `save()`
+/// in didCompleteFetch, which records the newest sample time of that fetch.
+nonisolated struct SensorKitStamp {
+    let kind: SensorKind
+    private var newest: Date?
+
+    init(_ kind: SensorKind) { self.kind = kind }
+
+    mutating func saw(_ result: SRFetchResult<AnyObject>) {
+        let date = Date(timeIntervalSinceReferenceDate: result.timestamp.toCFAbsoluteTime())
+        newest = max(newest ?? date, date)
+    }
+
+    mutating func save() {
+        if let newest { SensorStatusStore.shared.record(kind, at: newest) }
+        newest = nil
+    }
+}
+
 // MARK: - HealthKit latest-sample refresh
 
 extension SensorStatusStore {
 
-    /// Queries HealthKit for the genuine latest reading of each Apple Health row
-    /// and stamps the store. Read-only; sensors the user hasn't authorized simply
-    /// return no samples and keep their previous stamp.
-    /// Sensors currently showing an imported file are left alone by `record`.
+    /// One-shot queries for the latest reading of each Apple Health row. Types the
+    /// user hasn't authorized return nothing and keep their previous reading.
     /// `completion` fires on the main queue after all queries finish.
-    func refreshHealthKitSamples(completion: (() -> Void)? = nil) {
+    fileprivate func refreshHealthKitSamples(completion: (() -> Void)? = nil) {
         guard HKHealthStore.isHealthDataAvailable() else {
             DispatchQueue.main.async { completion?() }
             return

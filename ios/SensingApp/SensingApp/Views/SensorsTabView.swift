@@ -43,100 +43,46 @@ struct SensorsTabView: View {
                 ScrollView {
                     VStack(spacing: 24) {
 
-                        sensorSection(title: "MOTION & ACTIVITY") {
-                            sensorRow(
-                                icon: "move.3d", color: sage, name: "Accelerometer",
-                                detail: "Movement and orientation of your phone.",
-                                liveValue: feed.accelerometer,
-                                recorded: .accelerometer,
-                                badge: feed.isAccelerometerAvailable ? nil : "No hardware (Simulator)"
-                            )
-                            Divider().padding(.leading, 64)
-                            sensorRow(
-                                icon: "gyroscope", color: sage, name: "Gyroscope",
-                                detail: "Rotation and turning of your phone.",
-                                liveValue: feed.gyroscope,
-                                badge: feed.isGyroscopeAvailable ? nil : "No hardware (Simulator)"
-                            )
-                        }
+                        sensorSection("MOTION & ACTIVITY", color: sage, rows: [
+                            Row(.accelerometer, "move.3d", "Movement and orientation of your phone."),
+                            Row(.gyroscope, "gyroscope", "Rotation and turning of your phone.")
+                        ])
 
-                        sensorSection(title: "LOCATION") {
-                            sensorRow(
-                                icon: "location.fill", color: warmBlue, name: "Location",
-                                detail: "Approximate location, including in the background.",
-                                liveValue: feed.location,
-                                recorded: .location
-                            )
-                        }
+                        sensorSection("LOCATION", color: warmBlue, rows: [
+                            Row(.location, "location.fill", "Approximate location, including in the background.")
+                        ])
 
-                        sensorSection(
-                            title: "FROM THE APPLE HEALTH APP",
-                            trailing: {
-                                Button {
-                                    feed.refresh()
-                                } label: {
-                                    Image(systemName: "arrow.clockwise")
-                                        .font(.system(.caption).weight(.semibold))
-                                        .foregroundStyle(terracotta)
-                                }
-                                .accessibilityLabel("Refresh Apple Health data")
-                            }
-                        ) {
-                            healthRow(.heartRate, icon: "heart.fill",
-                                      name: "Heart Rate",
-                                      detail: "Beats per minute over time.")
-                            Divider().padding(.leading, 64)
-                            healthRow(.heartRateVariability, icon: "waveform.path.ecg",
-                                      name: "Heart Rate Variability",
-                                      detail: "Variation between heartbeats.")
-                            Divider().padding(.leading, 64)
-                            healthRow(.steps, icon: "figure.walk",
-                                      name: "Steps & Walking",
-                                      detail: "Steps, walking speed, asymmetry, and steadiness.")
-                            Divider().padding(.leading, 64)
-                            healthRow(.bloodOxygen, icon: "lungs.fill",
-                                      name: "Blood Oxygen",
-                                      detail: "Oxygen saturation when available.")
-                            Divider().padding(.leading, 64)
-                            healthRow(.activeEnergy, icon: "flame.fill",
-                                      name: "Active Energy",
-                                      detail: "Calories burned during activity.")
-                            Divider().padding(.leading, 64)
-                            healthRow(.sleep, icon: "bed.double.fill",
-                                      name: "Sleep",
-                                      detail: "Time asleep and sleep stages.")
-                        }
+                        sensorSection("PHONE USE & SURROUNDINGS", color: warmBlue, rows: [
+                            // Hidden until Rabbi confirms we collect device usage.
+                            // Row(.deviceUsage, "iphone", "Screen wakes, unlocks, and time in apps."),
+                            Row(.phoneUsage, "phone.fill", "Number and length of calls, never their content."),
+                            Row(.messagesUsage, "message.fill", "Number of messages, never their content."),
+                            Row(.keyboard, "keyboard", "Typing speed and word counts, never the text."),
+                            Row(.ambientLight, "sun.max.fill", "Light levels around your phone."),
+                            Row(.pressure, "barometer", "Air pressure, used to estimate elevation.")
+                        ])
 
-                        // Only the Watch accelerometer has a fetcher (SensorKit),
-                        // so it alone shows a Last recorded time.
-                        sensorSection(title: "APPLE WATCH (Coming Soon)") {
-                            sensorRow(icon: "applewatch", color: purple, name: "Watch Accelerometer",
-                                      detail: "High-rate motion from your Apple Watch.",
-                                      recorded: .watchAccelerometer)
-                            Divider().padding(.leading, 64)
-                            sensorRow(icon: "heart.fill", color: purple, name: "Watch Heart & PPG",
-                                      detail: "Heart rate and optical (PPG) signals.",
-                                      badge: "When available")
-                            Divider().padding(.leading, 64)
-                            sensorRow(icon: "waveform.path.ecg.rectangle", color: purple, name: "ECG",
-                                      detail: "Electrocardiogram readings.",
-                                      badge: "When available")
-                            Divider().padding(.leading, 64)
-                            sensorRow(icon: "thermometer.medium", color: purple, name: "Wrist Temperature",
-                                      detail: "Skin temperature at the wrist.",
-                                      badge: "When available")
-                            Divider().padding(.leading, 64)
-                            sensorRow(icon: "sun.max.fill", color: purple, name: "Ambient Light",
-                                      detail: "Surrounding light levels.",
-                                      badge: "When available")
-                        }
+                        sensorSection("FROM THE APPLE HEALTH APP", color: terracotta, rows: [
+                            Row(.heartRate, "heart.fill", "Beats per minute over time."),
+                            Row(.heartRateVariability, "waveform.path.ecg", "Variation between heartbeats."),
+                            Row(.steps, "figure.walk", "Steps, walking speed, asymmetry, and steadiness."),
+                            Row(.bloodOxygen, "lungs.fill", "Oxygen saturation when available."),
+                            Row(.activeEnergy, "flame.fill", "Calories burned during activity."),
+                            Row(.sleep, "bed.double.fill", "Time asleep and sleep stages.")
+                        ])
 
-                        sensorSection(title: "DAILY SURVEY") {
-                            sensorRow(icon: "list.clipboard.fill", color: terracotta,
-                                      name: "Recovery Check-in",
-                                      detail: "Pain, function, medications, sleep, and falls.",
-                                      recorded: .survey)
-                        }
+                        sensorSection("APPLE WATCH", color: purple, rows: [
+                            Row(.watchAccelerometer, "applewatch", "Movement of your wrist."),
+                            Row(.watchHeartRate, "heart.fill", "Heart rate measured by the watch."),
+                            Row(.watchPPG, "waveform.path", "Optical heart signal (PPG)."),
+                            Row(.wristTemperature, "thermometer.medium", "Skin temperature at the wrist during sleep."),
+                            Row(.wristDetection, "applewatch.radiowaves.left.and.right", "Whether the watch is being worn."),
+                            Row(.watchSleep, "moon.zzz.fill", "Sleep sessions detected by the watch.")
+                        ])
+
+                        sensorSection("DAILY SURVEY", color: terracotta, rows: [
+                            Row(.survey, "list.clipboard.fill", "Pain, function, medications, sleep, and falls.")
+                        ])
 
                         dayFooter
 
@@ -187,22 +133,29 @@ struct SensorsTabView: View {
 
     // MARK: - Section / Row Builders
 
-    private func sensorSection<TrailingContent: View>(
-        title: String,
-        @ViewBuilder trailing: () -> TrailingContent = { EmptyView() },
-        @ViewBuilder rows: () -> some View
-    ) -> some View {
+    /// One row per SensorKind: name, one-line description, live or stored value,
+    /// and "Last recorded".
+    private struct Row: Identifiable {
+        let kind: SensorKind
+        let icon: String
+        let detail: String
+        var id: SensorKind { kind }
+        init(_ kind: SensorKind, _ icon: String, _ detail: String) {
+            self.kind = kind; self.icon = icon; self.detail = detail
+        }
+    }
+
+    private func sensorSection(_ title: String, color: Color, rows: [Row]) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text(title)
-                    .font(.journey(.caption, weight: .semibold))
-                    .foregroundStyle(Color(red: 0.55, green: 0.47, blue: 0.44))
-                    .padding(.leading, 4)
-                Spacer()
-                trailing()
-            }
+            Text(title)
+                .font(.journey(.caption, weight: .semibold))
+                .foregroundStyle(Color(red: 0.55, green: 0.47, blue: 0.44))
+                .padding(.leading, 4)
             VStack(spacing: 0) {
-                rows()
+                ForEach(rows) { row in
+                    if row.kind != rows.first?.kind { Divider().padding(.leading, 64) }
+                    sensorRow(row, color: color)
+                }
             }
             .background(
                 RoundedRectangle(cornerRadius: 20)
@@ -212,42 +165,35 @@ struct SensorsTabView: View {
         }
     }
 
-    private func sensorRow(
-        icon: String, color: Color, name: String, detail: String,
-        liveValue: String? = nil,
-        recorded: SensorKind? = nil,
-        badge: String? = nil
-    ) -> some View {
+    private func sensorRow(_ row: Row, color: Color) -> some View {
         HStack(spacing: 12) {
             ZStack {
                 RoundedRectangle(cornerRadius: 9)
                     .fill(color.opacity(0.15))
                     .frame(width: 34, height: 34)
-                Image(systemName: icon)
+                Image(systemName: row.icon)
                     .font(.system(.callout))
                     .foregroundStyle(color)
             }
             VStack(alignment: .leading, spacing: 2) {
-                Text(name)
+                Text(row.kind.displayName)
                     .font(.journey(.callout, weight: .semibold))
                     .foregroundStyle(Color(red: 0.28, green: 0.22, blue: 0.20))
-                Text(detail)
+                Text(row.detail)
                     .font(.journey(.footnote))
                     .foregroundStyle(Color(red: 0.50, green: 0.42, blue: 0.39))
-                if let liveValue {
-                    Text(liveValue)
+                if let value = feed.valueText(for: row.kind) {
+                    Text(value)
                         .font(.journeyMono(.footnote))
                         .foregroundStyle(color)
                         .lineLimit(2)
                 }
-                if let recorded {
-                    Text(feed.lastRecordedText(for: recorded))
-                        .font(.journey(.caption))
-                        .foregroundStyle(Color(red: 0.55, green: 0.47, blue: 0.44))
-                }
+                Text(feed.lastRecordedText(for: row.kind))
+                    .font(.journey(.caption))
+                    .foregroundStyle(Color(red: 0.55, green: 0.47, blue: 0.44))
             }
             Spacer()
-            if let badge {
+            if let badge = badge(for: row.kind) {
                 Text(badge)
                     .font(.journey(.caption2, weight: .semibold))
                     .foregroundStyle(color)
@@ -262,10 +208,13 @@ struct SensorsTabView: View {
         .contentShape(Rectangle())
     }
 
-    /// `name` is passed explicitly rather than taken from the enum: the raw
-    /// values are internal shorthand and this list is read by older patients.
-    private func healthRow(_ kind: SensorKind, icon: String, name: String, detail: String) -> some View {
-        sensorRow(icon: icon, color: terracotta, name: name, detail: detail,
-                  liveValue: feed.health[kind], recorded: kind)
+    private func badge(for kind: SensorKind) -> String? {
+        switch kind {
+        case .accelerometer where !feed.isAccelerometerAvailable,
+             .gyroscope where !feed.isGyroscopeAvailable:
+            return "No hardware (Simulator)"
+        default:
+            return nil
+        }
     }
 }

@@ -28,6 +28,7 @@ enum SensorKitRegistry {
     /// Sensors read by the older standalone fetchers (not SensorKitFetcher
     /// subclasses). They still need authorization.
     static let legacySensors: Set<SRSensor> = [
+        .accelerometer,
         .photoplethysmogram,
         .ambientLightSensor,
         .deviceUsageReport,

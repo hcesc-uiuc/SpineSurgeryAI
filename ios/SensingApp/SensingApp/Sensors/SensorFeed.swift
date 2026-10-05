@@ -8,10 +8,9 @@
 //  AdaptiveLocationManager, the SensorKit fetchers, HealthkitRecorder) are
 //  separate and keep collecting whether or not this is running.
 //
-//  Combines MotionManager and LocationManager into one file.
-//
-//  Health values come from SensorStatusStore's one-shot queries, not
-//  HealthKitManager, whose init registers background observers that wake the app.
+//  Everything else (Health values, "Last recorded" times) is step 3 of the
+//  flow in SensorStatusStore: read from the store, never measured here.
+//  Not HealthKitManager: its init registers background observers that wake the app.
 //
 
 import Foundation
@@ -26,8 +25,7 @@ final class SensorFeed: NSObject, ObservableObject, CLLocationManagerDelegate {
     @Published private(set) var accelerometer: String?
     @Published private(set) var gyroscope: String?
     @Published private(set) var location: String?
-    @Published private(set) var health: [SensorKind: String] = [:]
-    @Published private(set) var lastRecorded: [SensorKind: Date] = [:]
+    @Published private(set) var readings: [SensorKind: SensorReading] = [:]
 
     private let motion = CMMotionManager()
     private let locationManager = CLLocationManager()
@@ -35,14 +33,6 @@ final class SensorFeed: NSObject, ObservableObject, CLLocationManagerDelegate {
 
     var isAccelerometerAvailable: Bool { motion.isAccelerometerAvailable }
     var isGyroscopeAvailable: Bool { motion.isGyroAvailable }
-
-    static let healthKinds: [SensorKind] = [
-        .heartRate, .heartRateVariability, .steps, .bloodOxygen, .activeEnergy, .sleep
-    ]
-
-    /// Rows with a real recorder behind them, so a "Last recorded" line means something.
-    private static let recordedKinds: [SensorKind] =
-        [.accelerometer, .location, .watchAccelerometer, .survey] + healthKinds
 
     private override init() {
         super.init()
@@ -101,29 +91,17 @@ final class SensorFeed: NSObject, ObservableObject, CLLocationManagerDelegate {
         location = nil
     }
 
-    /// Shows the saved values at once, then re-queries Apple Health and updates.
+    /// Shows the stored readings at once, then again after the store refreshes
+    /// (Health at most every 15 min, and always after returning from background).
     func refresh() {
         loadFromStore()
-        SensorStatusStore.shared.refreshHealthKitSamples { [weak self] in
+        SensorStatusStore.shared.refresh { [weak self] in
             self?.loadFromStore()
         }
     }
 
     private func loadFromStore() {
-        let store = SensorStatusStore.shared
-        var values: [SensorKind: String] = [:]
-        for kind in Self.healthKinds {
-            if let tile = store.homeTile(for: kind) {
-                values[kind] = kind.formatted(tile.value)
-            }
-        }
-        health = values
-
-        var dates: [SensorKind: Date] = [:]
-        for kind in Self.recordedKinds {
-            dates[kind] = store.entry(for: kind)?.date
-        }
-        lastRecorded = dates
+        readings = SensorStatusStore.shared.allLatest()
     }
 
     // MARK: - CLLocationManagerDelegate
@@ -140,9 +118,19 @@ final class SensorFeed: NSObject, ObservableObject, CLLocationManagerDelegate {
 
     // MARK: - Formatting
 
+    /// Live preview for the phone motion/location rows, else the stored value.
+    func valueText(for kind: SensorKind) -> String? {
+        switch kind {
+        case .accelerometer: return accelerometer
+        case .gyroscope:     return gyroscope
+        case .location:      return location
+        default:             return readings[kind]?.value
+        }
+    }
+
     /// "Last recorded: Today, 3:45 PM" / "Yesterday, 9:10 PM" / "Sep 8, 2:00 PM".
     func lastRecordedText(for kind: SensorKind) -> String {
-        guard let date = lastRecorded[kind] else { return "Not recorded yet" }
+        guard let date = readings[kind]?.date else { return "Not recorded yet" }
         let calendar = Calendar.current
         let day: String
         if calendar.isDateInToday(date) {

@@ -17,6 +17,7 @@ struct DebugTabView: View {
     @State private var showDeniedAlert   = false
     @State private var showSettingsAlert = false
     @State private var showImportData    = false
+    @State private var healthCheckResult: String?
     @StateObject var HKManager = HealthKitManager()
     @Environment(\.scenePhase) var scenePhase
     let motionActivityManager = CMMotionActivityManager()
@@ -134,6 +135,11 @@ struct DebugTabView: View {
                     HealthkitRecorder.shared.getHealthKitData()
                 }
             }.padding(.top, 20)
+
+            // Proves reading Health doesn't use data up. Writes no file.
+            Button("Check HealthKit reads keep data") {
+                runHealthReadCheck()
+            }.padding(.top, 10)
             
             if CLLocationManager().authorizationStatus != .authorizedAlways {
                 Button("Always allow location") {
@@ -155,6 +161,12 @@ struct DebugTabView: View {
                isPresented: $showDeniedAlert,
                actions: {},
                message: { Text("Enable Motion & Fitness in Settings.") }
+        )
+        .alert("HealthKit read check",
+               isPresented: Binding(get: { healthCheckResult != nil },
+                                    set: { if !$0 { healthCheckResult = nil } }),
+               actions: {},
+               message: { Text(healthCheckResult ?? "") }
         )
         .alert("Location Access Required", isPresented: $showSettingsAlert) {
             Button("Open Settings") {
@@ -237,6 +249,83 @@ struct DebugTabView: View {
         }()
         let durationMs = Int(p.duration * 1000)
         return "[\(dateStr)] |ID:\(p.id.uuidString)| TYPE:\(p.type) | VAL:\(displayValue) \(p.unit) | UNIX_START:\(unixStartStr) | UNIX_END:\(unixEndStr) | DUR:\(durationMs)ms | SRC:\(p.sourceName) | BID:\(p.bundleID) | DEV:\(p.deviceName ?? "NA") | MOD:\(p.deviceModel ?? "NA") | SW:\(p.softwareVer ?? "NA") | ID:\(p.id.uuidString) | META:{\(metaStr)}"
+    }
+
+    // ============================================================
+    // MARK: - HealthKit read check
+    // ============================================================
+
+    /// Read 1 (Rabbi's getHealthKitData query) → Home-tile query → read 2.
+    /// Every sample from read 1 should still be in read 2. The only allowed
+    /// misses are samples that slid out of the rolling 24 h window meanwhile.
+    private func runHealthReadCheck() {
+        let manager = HealthkitRecorder.shared.HKManager
+        healthCheckLog("started")
+
+        manager.refreshWithNewRange(days: 1) { first in
+            let firstSleep = Set(manager.sleepData.map(\.id))
+            healthCheckLog("read 1: \(first.count) samples + \(firstSleep.count) sleep")
+
+            SensorStatusStore.shared.refresh(force: true) {
+                healthCheckLog("Home-tile query done")
+                let secondStart = Date()
+
+                manager.refreshWithNewRange(days: 1) { second in
+                    let secondIDs = Set(second.map(\.id))
+                    let secondSleep = Set(manager.sleepData.map(\.id))
+                    let windowStart = Calendar.current.date(byAdding: .day, value: -1, to: secondStart)!
+                        .addingTimeInterval(60)
+                    let missing = first.filter { !secondIDs.contains($0.id) }
+                    let lost = missing.filter { $0.startDate > windowStart }
+                    let lostSleep = firstSleep.subtracting(secondSleep)
+
+                    var lines = [lost.isEmpty && lostSleep.isEmpty
+                                 ? "PASS: nothing from read 1 is missing in read 2."
+                                 : "FAIL: \(lost.count) samples + \(lostSleep.count) sleep missing in read 2."]
+                    if missing.count > lost.count {
+                        lines.append("\(missing.count - lost.count) aged out of the 24 h window (expected).")
+                    }
+                    lines.append("")
+                    let firstByType = Dictionary(grouping: first, by: \.type).mapValues(\.count)
+                    let secondByType = Dictionary(grouping: second, by: \.type).mapValues(\.count)
+                    for metric in SupportedMetric.allCases where metric != .sleep {
+                        let a = firstByType[metric.rawValue] ?? 0, b = secondByType[metric.rawValue] ?? 0
+                        lines.append("\(metric.rawValue): \(a) → \(b)")
+                    }
+                    lines.append("Sleep: \(firstSleep.count) → \(secondSleep.count)")
+                    lines.append("(0 → 0 = no data in the last 24 h, or not authorized)")
+                    lines.append("")
+                    lines.append(contentsOf: healthKitFileSummary())
+
+                    lines.forEach { healthCheckLog($0) }
+                    healthCheckResult = lines.joined(separator: "\n")
+                }
+            }
+        }
+    }
+
+    /// healthkit_ files saved by getHealthKitData, with line (sample) counts.
+    private func healthKitFileSummary() -> [String] {
+        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        var lines: [String] = []
+        for folder in ["to-be-processed", "processed"] {
+            let dir = docs.appendingPathComponent(folder)
+            let files = ((try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? [])
+                .filter { $0.lastPathComponent.hasPrefix("healthkit_") }
+                .sorted { $0.lastPathComponent < $1.lastPathComponent }
+            lines.append("\(folder)/: \(files.isEmpty ? "no healthkit files" : "")")
+            for file in files {
+                let count = (try? String(contentsOf: file, encoding: .utf8))?
+                    .split(separator: "\n").count ?? 0
+                lines.append("  \(file.lastPathComponent): \(count) lines")
+            }
+        }
+        return lines
+    }
+
+    private func healthCheckLog(_ line: String) {
+        print("HKCheck: \(line)")
+        Logger.shared.append("HKCheck: \(line)")
     }
 
     // ============================================================

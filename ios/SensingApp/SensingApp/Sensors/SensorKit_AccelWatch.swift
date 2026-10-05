@@ -54,6 +54,7 @@ import Foundation
 
 class SensorKitAccelerometerFetcher: NSObject {
     static let shared = SensorKitAccelerometerFetcher()
+    private var stamp = SensorKitStamp(.watchAccelerometer)   // newest sample time → SensorStatusStore
     
     private let reader = SRSensorReader(sensor: .accelerometer)
     
@@ -362,6 +363,7 @@ extension SensorKitAccelerometerFetcher: SRSensorReaderDelegate {
         guard let samples = result.sample as? [CMRecordedAccelerometerData] else {
             return true
         }
+        stamp.saw(result)
         
         print("SK: Writing \(samples.count) samples of accelerometer data")
         Logger.shared.append("SK: Writing \(samples.count) samples of accelerometer data")
@@ -391,6 +393,7 @@ extension SensorKitAccelerometerFetcher: SRSensorReaderDelegate {
          */
         flushBuffer()
         fileHandle?.synchronizeFile()  // fsync to disk
+        stamp.save()
         print("Fetch complete. Files in documents:")
         listCSVFiles()
     }

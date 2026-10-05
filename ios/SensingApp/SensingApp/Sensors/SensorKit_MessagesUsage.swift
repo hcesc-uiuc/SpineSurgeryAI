@@ -15,6 +15,7 @@ final class SensorKitMessagesUsageFetcher: SensorKitFetcher {
     init() {
         super.init(
             sensor: .messagesUsageReport,
+            kind: .messagesUsage,
             filePrefix: "sensorkit_messages_phone",
             csvHeader: "timestamp_unix,duration_s,outgoing_messages,incoming_messages,unique_contacts",
             devicePreference: .iPhone,

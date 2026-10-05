@@ -159,7 +159,7 @@ struct HomeView: View {
             // At launch the scene is not active yet and the .active change below
             // does the load, so it runs once instead of twice.
             if scenePhase == .active {
-                loadTodayHealthStats()
+                loadTodayHealthStats(reason: "Home appeared")
                 loadWeeklyProgress()
             }
         }
@@ -169,7 +169,7 @@ struct HomeView: View {
         .onChange(of: scenePhase) { _, newPhase in
             if newPhase == .active && isVisible {
                 rollDayIfNeeded()
-                loadTodayHealthStats()
+                loadTodayHealthStats(reason: "app is active")
                 loadWeeklyProgress()
             }
         }
@@ -341,22 +341,28 @@ struct HomeView: View {
         weeklyProgress = result
     }
 
-    // Home tiles read from SensorStatusStore, which resolves every metric in one
-    // place: an imported file wins, else the live HealthKit stamp, else nothing.
-    // The six HealthKit queries that used to live here were a second, duplicate
-    // source of truth for the same six numbers.
-    private func loadTodayHealthStats() {
-        applySensorStore()                                   // cached stamps + imports, instantly
-        Task {
-            // Pick up anything dropped into the Documents folder since we were
-            // last on screen. Blocking file I/O, so it runs off the main actor;
-            // captures nothing, so it is safe to detach.
-            await Task.detached { _ = SensorFileImporter.autoIngestInbox() }.value
+    // Home tiles read from SensorStatusStore (step 3 of its flow): stored values
+    // at once, then again after new dropped files / Health samples are in.
+    private func loadTodayHealthStats(reason: String) {
+        homeLog("refreshing tiles (\(reason))")
+        applySensorStore()
+        SensorStatusStore.shared.refresh {
             applySensorStore()
-            SensorStatusStore.shared.refreshHealthKitSamples {   // then the live samples
-                applySensorStore()
-            }
+            homeLog("tiles updated: \(tileSummary())")
         }
+    }
+
+    private func tileSummary() -> String {
+        func show(_ v: Int?) -> String { v.map(String.init) ?? "–" }
+        let sleep = lastNightSleepHours.map { String(format: "%.1f", $0) } ?? "–"
+        return "steps \(show(todaySteps)), distance \(show(todayDistanceMeters.map { Int($0) })) m, "
+            + "HR \(show(latestHeartRate)), \(show(todayActiveEnergy)) kcal, "
+            + "flights \(show(todayFlights)), sleep \(sleep) h"
+    }
+
+    private func homeLog(_ line: String) {
+        print("Home: \(line)")
+        Logger.shared.append("Home: \(line)")
     }
 
     /// Pull each tile's value and caption out of the store. A caption appears

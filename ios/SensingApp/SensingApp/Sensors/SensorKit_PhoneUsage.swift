@@ -14,6 +14,7 @@ final class SensorKitPhoneUsageFetcher: SensorKitFetcher {
     init() {
         super.init(
             sensor: .phoneUsageReport,
+            kind: .phoneUsage,
             filePrefix: "sensorkit_phoneusage_phone",
             csvHeader: "timestamp_unix,duration_s,incoming_calls,outgoing_calls,call_duration_s,unique_contacts",
             devicePreference: .iPhone,

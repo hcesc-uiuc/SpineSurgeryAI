@@ -54,6 +54,7 @@ class SensorKitFetcher: NSObject {
     private var fileHandle: FileHandle?
     private var currentFileURL: URL
     private var pendingFetchEnd: Double?   // committed to lastFetchEnd on didCompleteFetch
+    private var stamp: SensorKitStamp       // newest sample time → SensorStatusStore
     private let documentsDir = FileManager.default
         .urls(for: .documentDirectory, in: .userDomainMask)[0]
 
@@ -67,6 +68,7 @@ class SensorKitFetcher: NSObject {
     }
 
     init(sensor: SRSensor,
+         kind: SensorKind,
          filePrefix: String,
          csvHeader: String,
          devicePreference: SensorKitDevicePreference,
@@ -86,6 +88,7 @@ class SensorKitFetcher: NSObject {
         self.batchSize        = batchSize
         self.maxFileSize      = maxFileSizeMB * 1024 * 1024
         self.currentFileURL   = documentsDir   // placeholder; set in openCurrentFile()
+        self.stamp            = SensorKitStamp(kind)
         super.init()
         reader.delegate = self
     }
@@ -265,6 +268,7 @@ extension SensorKitFetcher: SRSensorReaderDelegate {
                       fetching fetchRequest: SRFetchRequest,
                       didFetchResult result: SRFetchResult<AnyObject>) -> Bool {
         buffer(rows(from: result))   // subclass decides how to turn the result into lines
+        stamp.saw(result)
         return true
     }
 
@@ -275,6 +279,7 @@ extension SensorKitFetcher: SRSensorReaderDelegate {
             lastFetchEnd = end
             pendingFetchEnd = nil
         }
+        stamp.save()
         print("\(logTag): Fetch complete")
         Logger.shared.append("\(logTag): Fetch complete")
     }
