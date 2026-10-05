@@ -24,7 +24,11 @@ struct MainAppView: View {
     
     @StateObject private var appState         = AppState()
     @StateObject private var sensorKitManager = SensorKitManager()
-    
+
+    // Server-set survey schedule + study id; observed so the check-in tab icon
+    // updates once the schedule is pulled on login.
+    @ObservedObject private var profileStore  = ProfileStore.shared
+
     @State private var isSurveyPresented = false
     
     @Environment(\.scenePhase) var scenePhase
@@ -93,6 +97,10 @@ struct MainAppView: View {
         .onAppear {
             guard !hasStartedCollection else { return }
             hasStartedCollection = true
+            // Load the synced user profile — or restore it from the study
+            // server on a fresh device (day count, calendar history,
+            // check-in state). Local copy wins when one exists.
+            Task { await ProfileStore.shared.bootstrap(authManager: authManager, appState: appState) }
             // All permissions have been granted — begin data collection.
             AcclerometerRecorder.shared.startRecording()
             // HealthkitRecorder.shared.getHealthKitData()
@@ -136,17 +144,18 @@ struct MainAppView: View {
     //   completed today        -> filled checkmark (clearly "done")
     //   scheduled & still due   -> filled clipboard (weighted, draws the eye)
     //   nothing scheduled today -> outline clipboard (quiet/inactive)
-    /// Whether there is a check-in to fill in right now. Mirrors the condition
-    /// HomeView uses to enable its check-in card, so the two entry points can
-    /// never disagree about whether the survey is open for business.
-    private var canOpenCheckIn: Bool {
-        !appState.isCompletedToday && appState.isSurveyScheduledToday
-    }
-
     private var surveyTabIcon: String {
         if appState.isCompletedToday { return "checkmark.circle.fill" }
-        if appState.isSurveyScheduledToday { return "list.clipboard.fill" }
+        if profileStore.isCheckInDueToday() { return "list.clipboard.fill" }
         return "list.clipboard"
+    }
+
+    /// Whether there is a check-in to fill in right now. Mirrors the condition
+    /// HomeView uses to enable its check-in card, so the two entry points can
+    /// never disagree about whether the survey is open for business. A paused
+    /// or ended study (server schedule) blocks it too.
+    private var canOpenCheckIn: Bool {
+        !appState.isCompletedToday && profileStore.isCheckInDueToday()
     }
 
     // ============================================================

@@ -130,6 +130,15 @@ final class SurveyLocalStore {
         Set(completedSurveyDateStrings(for: userID))
     }
 
+    /// Merge completion dates restored from the synced user profile
+    /// (ProfileStore hydration on a new device). Idempotent.
+    func mergeCompletedDates(_ dateStrings: [String], for userID: String) {
+        guard !dateStrings.isEmpty else { return }
+        let key = completedSurveyDatesKeyPrefix + userID
+        let merged = Set(completedSurveyDateStrings(for: userID)).union(dateStrings)
+        UserDefaults.standard.set(merged.sorted(), forKey: key)
+    }
+
     private static let dayFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.calendar = Calendar.current
@@ -922,7 +931,15 @@ struct SurgerySurveyView: View {
 
                 SensorStatusStore.shared.record(.survey)
 
+                // Mirror into the synced user profile so this completion
+                // restores on any device the participant signs in on.
+                ProfileStore.shared.recordSurveyCompletion(date: Date(), painScore: painNRS)
+
                 appState.markCompletedToday()
+
+                // Drops tonight's reminder; must run after markCompletedToday.
+                ProfileStore.shared.refreshCheckInReminders(appState: appState)
+
                 isSubmitting = false
                 dismiss()
             } catch {

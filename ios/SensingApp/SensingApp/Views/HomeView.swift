@@ -38,6 +38,13 @@ struct HomeView: View {
 
     private var checkInComplete: Bool { appState.isCompletedToday }
 
+    // Server-set survey schedule; observed so the check-in card reflects a
+    // coordinator pausing/rescheduling the study on the web.
+    @ObservedObject private var profileStore = ProfileStore.shared
+
+    /// Whether a check-in is scheduled today. Paused/ended or a weekly off-day → false.
+    private var checkInDueToday: Bool { profileStore.isCheckInDueToday(on: todayStart) }
+
     @State private var appeared = false
     // Tabs stay alive in the TabView, so this view hears scene-phase changes
     // even when another tab is showing. onAppear covers the return to Home.
@@ -110,11 +117,13 @@ struct HomeView: View {
                             dailyCheckInCard
                         }
                         .buttonStyle(.plain)
-                        .disabled(checkInComplete)
+                        .disabled(checkInComplete || !checkInDueToday)
                         .accessibilityLabel(checkInComplete
                                             ? "Daily check-in complete"
-                                            : "Daily check-in due")
-                        .accessibilityHint(checkInComplete
+                                            : (checkInDueToday
+                                               ? "Daily check-in due"
+                                               : "No check-in today. \(notScheduledSubtitle)"))
+                        .accessibilityHint(checkInComplete || !checkInDueToday
                                            ? ""
                                            : "Opens today's check-in. Takes about two minutes.")
                         .opacity(appeared ? 1 : 0)
@@ -155,6 +164,9 @@ struct HomeView: View {
             appeared = true
             isVisible = true
             if firstOpenTimestamp == 0 { firstOpenTimestamp = Date().timeIntervalSince1970 }
+            // Mirror the Day-N anchor into the synced profile (no-op if the
+            // profile already carries one, e.g. restored from the server).
+            ProfileStore.shared.recordFirstOpen(firstOpenTimestamp)
             rollDayIfNeeded()
             // At launch the scene is not active yet and the .active change below
             // does the load, so it runs once instead of twice.
@@ -454,35 +466,48 @@ struct HomeView: View {
         .padding(.horizontal, 24)
     }
 
+    // Three visual states, driven by completion + the server survey schedule:
+    //   complete      — done today (green checkmark)
+    //   due           — a check-in is scheduled today and not yet done (terracotta)
+    //   not scheduled — paused / ended / a weekly off-day (muted, no chevron)
     private var dailyCheckInCard: some View {
-        HStack(spacing: 16) {
+        let sage       = Color(red: 0.42, green: 0.62, blue: 0.55)
+        let terracotta = Color(red: 0.80, green: 0.55, blue: 0.45)
+        let muted      = Color(red: 0.60, green: 0.55, blue: 0.50)
+
+        let accent: Color = checkInComplete ? sage : (checkInDueToday ? terracotta : muted)
+        let icon: String = checkInComplete
+            ? "checkmark.circle.fill"
+            : (checkInDueToday ? "pencil.and.list.clipboard" : "calendar")
+        let title: String = checkInComplete
+            ? "Check-in complete!"
+            : (checkInDueToday ? "Daily check-in due" : "No check-in today")
+        let subtitle: String = checkInComplete
+            ? "Great work today. See you next time."
+            : (checkInDueToday ? "Takes about 2 minutes to complete." : notScheduledSubtitle)
+
+        return HStack(spacing: 16) {
             ZStack {
                 Circle()
-                    .fill(checkInComplete
-                          ? Color(red: 0.42, green: 0.62, blue: 0.55).opacity(0.15)
-                          : Color(red: 0.80, green: 0.55, blue: 0.45).opacity(0.15))
+                    .fill(accent.opacity(0.15))
                     .frame(width: 52, height: 52)
-                Image(systemName: checkInComplete ? "checkmark.circle.fill" : "pencil.and.list.clipboard")
+                Image(systemName: icon)
                     .font(.system(.title))
-                    .foregroundStyle(checkInComplete
-                                     ? Color(red: 0.42, green: 0.62, blue: 0.55)
-                                     : Color(red: 0.80, green: 0.55, blue: 0.45))
+                    .foregroundStyle(accent)
             }
             VStack(alignment: .leading, spacing: 3) {
-                Text(checkInComplete ? "Check-in complete!" : "Daily check-in due")
+                Text(title)
                     .font(.journey(.callout, weight: .semibold))
                     .foregroundStyle(Color(red: 0.28, green: 0.22, blue: 0.20))
-                Text(checkInComplete
-                     ? "Great work today. See you tomorrow."
-                     : "Takes about 2 minutes to complete.")
+                Text(subtitle)
                     .font(.journey(.footnote))
                     .foregroundStyle(Color(red: 0.50, green: 0.42, blue: 0.39))
             }
             Spacer()
-            if !checkInComplete {
+            if !checkInComplete && checkInDueToday {
                 Image(systemName: "chevron.right")
                     .font(.system(.subheadline).weight(.semibold))
-                    .foregroundStyle(Color(red: 0.80, green: 0.55, blue: 0.45))
+                    .foregroundStyle(terracotta)
             }
         }
         .padding(20)
@@ -492,6 +517,21 @@ struct HomeView: View {
                 .shadow(color: Color(red: 0.60, green: 0.45, blue: 0.40).opacity(0.10), radius: 12, y: 4)
         )
         .padding(.horizontal, 24)
+    }
+
+    /// Subtitle for the "no check-in today" state, tailored to why.
+    private var notScheduledSubtitle: String {
+        switch profileStore.surveySchedule.cadence {
+        case .paused: return "Your check-ins are paused."
+        case .ended:  return "Your study is complete. Thank you!"
+        case .weekly:
+            // Off-day only (a due day shows the "due" state), so the named day
+            // is always the next one — this week or next.
+            let schedule = profileStore.surveySchedule
+            let day = schedule.checkInWeekday(firstOpenDate: profileStore.profile?.firstOpenDate)
+            return "Your next check-in is on \(calendar.weekdaySymbols[day - 1])."
+        case .daily:  return "No check-in scheduled today."
+        }
     }
 
     private let statColumns = [GridItem(.flexible(), spacing: 10),

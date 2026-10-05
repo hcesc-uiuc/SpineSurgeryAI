@@ -47,12 +47,11 @@ struct SensingAppApp: App {
                 .environmentObject(authManager)
                 .onAppear {
                     SurveyUploader.shared.configure(authManager: authManager)  // ← ADD THIS
-                    SurveyNotificationManager.shared
-                        .scheduleDailyReminder(
-                            hour: 20,
-                            minute: 0,
-                            appState: appState
-                        )
+                    // Arm reminders from the cached schedule (no network needed);
+                    // bootstrap re-arms them after sign-in / session restore.
+                    if authManager.isAuthenticated {
+                        ProfileStore.shared.refreshCheckInReminders(appState: appState)
+                    }
                 }
         }
         // Using @StateObject instead of passing LocationManager.shared directly

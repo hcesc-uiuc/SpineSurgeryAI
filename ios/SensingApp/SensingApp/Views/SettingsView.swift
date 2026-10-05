@@ -14,6 +14,10 @@ struct SettingsView: View {
     @State private var showingLogoutAlert = false
     @State private var showingPrivacySheet = false
     @State private var showingHelpSheet = false
+
+    // Drives the Study Profile card (account check + backup status).
+    @ObservedObject private var profileStore = ProfileStore.shared
+    @AppStorage("journey_first_open_date") private var firstOpenTimestamp: Double = 0
     var body: some View {
         NavigationStack {
             ZStack {
@@ -56,6 +60,8 @@ struct SettingsView: View {
                                 .fill(Color(red: 0.99, green: 0.97, blue: 0.95))
                                 .shadow(color: Color(red: 0.60, green: 0.45, blue: 0.40).opacity(0.10), radius: 12, y: 4)
                         )
+
+                        studyProfileCard
 
                         VStack(spacing: 0) {
                             Button {
@@ -126,6 +132,100 @@ struct SettingsView: View {
             }
         }
         .preferredColorScheme(.light)
+    }
+
+    // MARK: - Study Profile card
+    //
+    // Read-only account summary backed by the synced UserProfile: lets a
+    // participant confirm their enrollment restored correctly on any device,
+    // and gives coordinators something concrete to check when troubleshooting.
+    private var studyProfileCard: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("Study Profile")
+                .font(.journey(.footnote, weight: .semibold))
+                .foregroundStyle(Color(red: 0.55, green: 0.47, blue: 0.44))
+                .padding(.horizontal, 16)
+                .padding(.top, 14)
+                .padding(.bottom, 6)
+                .accessibilityAddTraits(.isHeader)
+
+            ForEach(Array(studyProfileRows.enumerated()), id: \.offset) { index, row in
+                if index > 0 { Divider().padding(.leading, 56) }
+                infoRow(icon: row.icon, label: row.label, value: row.value, color: row.color)
+            }
+        }
+        .padding(.bottom, 4)
+        .background(
+            RoundedRectangle(cornerRadius: 20)
+                .fill(Color(red: 0.99, green: 0.97, blue: 0.95))
+                .shadow(color: Color(red: 0.60, green: 0.45, blue: 0.40).opacity(0.10), radius: 12, y: 4)
+        )
+    }
+
+    private var studyProfileRows: [(icon: String, label: String, value: String, color: Color)] {
+        let pid = ParticipantID.current
+        let completed = profileStore.profile?.surveyHistory.filter(\.completed).count ?? 0
+        return [
+            ("person.text.rectangle", "Study ID", profileStore.profile?.studyId ?? "—",
+             Color(red: 0.80, green: 0.42, blue: 0.30)),
+            // First 8 hex of the anonymous hash, enough to match on the dashboard.
+            ("number", "Participant code", pid == "unidentified" ? "—" : pid.prefix(8).uppercased(),
+             Color(red: 0.80, green: 0.55, blue: 0.45)),
+            ("calendar", "Joined study", joinedDateText, Color(red: 0.42, green: 0.62, blue: 0.55)),
+            ("figure.walk", "Recovery day", recoveryDayText, Color(red: 0.55, green: 0.48, blue: 0.75)),
+            ("clock.arrow.circlepath", "Check-in schedule", profileStore.surveySchedule.displayText,
+             Color(red: 0.50, green: 0.60, blue: 0.45)),
+            ("checkmark.circle", "Check-ins completed", "\(completed)", Color(red: 0.38, green: 0.55, blue: 0.75)),
+            ("icloud", "Backup", syncStatusText, Color(red: 0.60, green: 0.55, blue: 0.50)),
+        ]
+    }
+
+    private var joinedDateText: String {
+        let timestamp = profileStore.profile?.enrolledAt
+            ?? profileStore.profile?.firstOpenDate
+            ?? (firstOpenTimestamp != 0 ? firstOpenTimestamp : nil)
+        guard let timestamp else { return "—" }
+        return Date(timeIntervalSince1970: timestamp)
+            .formatted(.dateTime.month(.abbreviated).day().year())
+    }
+
+    // Same arithmetic as Home's Day pill (RecoveryDay); reading firstOpenTimestamp
+    // keeps this view invalidated when the anchor changes.
+    private var recoveryDayText: String {
+        _ = firstOpenTimestamp
+        return "Day \(RecoveryDay.day(asOf: Date()))"
+    }
+
+    private var syncStatusText: String {
+        if let synced = profileStore.lastSyncedAt {
+            return "Backed up \(synced.formatted(.relative(presentation: .named)))"
+        }
+        return "Saved on this device"
+    }
+
+    private func infoRow(icon: String, label: String, value: String, color: Color) -> some View {
+        HStack(spacing: 14) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(color.opacity(0.15))
+                    .frame(width: 34, height: 34)
+                Image(systemName: icon)
+                    .font(.system(.callout))
+                    .foregroundStyle(color)
+            }
+            Text(label)
+                .font(.journey(.callout))
+                .foregroundStyle(Color(red: 0.28, green: 0.22, blue: 0.20))
+            Spacer()
+            Text(value)
+                .font(.journey(.subheadline, weight: .medium))
+                .foregroundStyle(Color(red: 0.55, green: 0.47, blue: 0.44))
+                .multilineTextAlignment(.trailing)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 11)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(label): \(value)")
     }
 
     private var privacySheet: some View {

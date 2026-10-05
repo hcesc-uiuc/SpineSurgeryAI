@@ -77,6 +77,38 @@ extension SQLiteSaver {
         return true
     }
 
+    // MARK: - Restore insert (profile sync)
+
+    /// Inserts a completed check-in for a past "yyyy-MM-dd" day unless that day
+    /// already has a row, so restoring the same history twice is harmless.
+    /// Stamped at local noon so month queries bucket it correctly.
+    func insertSurveyIfMissing(dateString: String, painScore: Int?) {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        guard let db, let day = formatter.date(from: dateString) else { return }
+        let noon = Calendar.current.date(bySettingHour: 12, minute: 0, second: 0, of: day) ?? day
+
+        let sql = """
+            INSERT INTO surveys (timestamp_unix, date_string, pain_score, completed)
+            SELECT ?1, ?2, ?3, 1
+            WHERE NOT EXISTS (SELECT 1 FROM surveys WHERE date_string = ?2);
+        """
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+            print("insertSurveyIfMissing prepare failed: \(lastError())")
+            return
+        }
+        defer { sqlite3_finalize(stmt) }
+
+        sqlite3_bind_double(stmt, 1, noon.timeIntervalSince1970)
+        sqlite3_bind_text(stmt, 2, dateString, -1, SQLITE_TRANSIENT_S)
+        if let painScore { sqlite3_bind_int(stmt, 3, Int32(painScore)) } else { sqlite3_bind_null(stmt, 3) }
+
+        if sqlite3_step(stmt) != SQLITE_DONE {
+            print("insertSurveyIfMissing step failed: \(lastError())")
+        }
+    }
+
     // MARK: - Fetch for a given month
 
     struct SurveyRecord {
