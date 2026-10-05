@@ -156,7 +156,7 @@ class SensorKitDeviceUsageFetcher: NSObject {
     }
 
     private func rotateFileIfNeeded() {
-        guard let size = try? currentFileURL.resourceValues(forKeys: [.fileSizeKey]).fileSize else { return }
+        guard let size = FileManager.default.currentSize(of: currentFileURL) else { return }
         if size >= maxFileSize {
             fileHandle?.closeFile()
             fileIndex += 1

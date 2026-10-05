@@ -89,6 +89,10 @@ class AppDelegate: NSObject, UIApplicationDelegate {
             print("Ready to use: \(folderURL)")
         }
         sealOrphanedPartFiles()
+        if let docsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
+            SQLiteSaver.foldLeftoverWALFiles(in: docsURL.appendingPathComponent("to-be-processed"),
+                                             activeName: UserDefaults.standard.string(forKey: "dbFileName"))
+        }
 
         //forcing sqlite files to initialize
         //        _ = SQLiteSaver.shared
@@ -210,15 +214,12 @@ class AppDelegate: NSObject, UIApplicationDelegate {
                                                          includingPropertiesForKeys: nil,
                                                          options: [.skipsHiddenFiles])) ?? []
         for url in urls where url.pathExtension == SensorKitFetcher.partExtension {
-            let sealed = url.deletingPathExtension()
             do {
-                if fileManager.fileExists(atPath: sealed.path) {
-                    try fileManager.removeItem(at: url)   // already sealed by a later run
-                } else {
-                    try fileManager.moveItem(at: url, to: sealed)
-                    print("Sealed orphaned \(sealed.lastPathComponent)")
-                    Logger.shared.append("Sealed orphaned \(sealed.lastPathComponent)")
-                }
+                // seal() picks a free name if the final one is taken; deleting
+                // the .part in that case would throw its rows away.
+                let sealed = try fileManager.seal(url)
+                print("Sealed orphaned \(sealed.lastPathComponent)")
+                Logger.shared.append("Sealed orphaned \(sealed.lastPathComponent)")
             } catch {
                 print("Failed to seal orphaned \(url.lastPathComponent): \(error)")
             }

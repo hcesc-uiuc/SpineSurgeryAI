@@ -323,8 +323,11 @@ struct Uploader {
     /// - ".part" is a writer's working file (see SensorKitFetcher.sealCurrentFile).
     /// - "-wal"/"-shm" belong to an open SQLite database and are meaningless alone.
     /// - dbFileName is the database the app is writing to right now.
-    /// - `grace` covers files written by builds that predate sealing: they carry
-    ///   final names even while open, so a recently touched one is left alone.
+    /// - Any other .db was closed by rotation (checkpoint + close), so it is sealed
+    ///   at once — it is rotated right before each upload — unless a -wal is still
+    ///   next to it, meaning rows not yet folded in (see foldLeftoverWALFiles).
+    /// - `grace` covers writers that do not seal yet: they keep final names while
+    ///   open, so a recently touched file is left alone.
     static func isSealed(_ url: URL,
                          now: Date = Date(),
                          grace: TimeInterval = 120,
@@ -333,6 +336,9 @@ struct Uploader {
         if url.pathExtension == SensorKitFetcher.partExtension { return false }
         if name.hasSuffix("-wal") || name.hasSuffix("-shm") { return false }
         if name == defaults.string(forKey: "dbFileName") { return false }
+        if url.pathExtension == "db" {
+            return !FileManager.default.fileExists(atPath: url.path + "-wal")
+        }
         guard let modified = modified(url) else { return true }
         return now.timeIntervalSince(modified) > grace
     }

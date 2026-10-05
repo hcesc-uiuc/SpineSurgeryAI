@@ -182,6 +182,11 @@ final class SQLiteSaver {
         // will be recovered automatically on the next open even if the app
         // crashes immediately after.
         sqlite3_exec(db, "PRAGMA journal_mode = WAL;",  nil, nil, nil)
+        // Apple's SQLite keeps -wal/-shm after close by default (persistent WAL).
+        // Turn that off so a clean close leaves the .db alone; otherwise the
+        // empty sidecars pile up in to-be-processed, never uploaded or moved.
+        var persistWAL: Int32 = 0
+        sqlite3_file_control(db, "main", SQLITE_FCNTL_PERSIST_WAL, &persistWAL)
         // With synchronous = NORMAL SQLite syncs at the most critical moments
         // — enough to survive a crash, though not a power loss mid-write.
         sqlite3_exec(db, "PRAGMA synchronous = NORMAL;", nil, nil, nil)
@@ -255,6 +260,38 @@ final class SQLiteSaver {
         // whenever the close did not actually complete.
     }
     
+    /// Folds leftover -wal/-shm files into closed databases.
+    ///
+    /// Builds before persistent WAL was turned off left sidecars next to every
+    /// rotated database, and a crash can leave a -wal that still holds committed
+    /// rows. Opening, checkpointing and closing each such database moves those
+    /// rows into the .db and removes the sidecars, so it can be uploaded alone.
+    /// The active database is skipped; its own connection owns its sidecars.
+    static func foldLeftoverWALFiles(in directory: URL, activeName: String?) {
+        let fileManager = FileManager.default
+        let names = (try? fileManager.contentsOfDirectory(atPath: directory.path)) ?? []
+        for name in names where name.hasSuffix(".db") && name != activeName {
+            let path = directory.appendingPathComponent(name).path
+            guard fileManager.fileExists(atPath: path + "-wal")
+                || fileManager.fileExists(atPath: path + "-shm") else { continue }
+
+            var db: OpaquePointer?
+            guard sqlite3_open(path, &db) == SQLITE_OK else {
+                sqlite3_close(db)
+                continue
+            }
+            // A fresh connection does not open the WAL until it reads; without
+            // this the checkpoint below is a silent no-op.
+            sqlite3_exec(db, "SELECT count(*) FROM sqlite_master;", nil, nil, nil)
+            var persistWAL: Int32 = 0
+            sqlite3_file_control(db, "main", SQLITE_FCNTL_PERSIST_WAL, &persistWAL)
+            let cp = sqlite3_wal_checkpoint_v2(db, nil, SQLITE_CHECKPOINT_TRUNCATE, nil, nil)
+            sqlite3_close_v2(db)
+            print("DB: folded leftover WAL into \(name) (checkpoint \(cp))")
+            Logger.shared.append("DB: folded leftover WAL into \(name) (checkpoint \(cp))")
+        }
+    }
+
     // MARK: - Helpers
     
     
@@ -411,7 +448,7 @@ final class SQLiteSaver {
     
     /// Returns file size in MB, or 0 if the file doesn't exist yet.
     private func fileSizeMB(at url: URL) -> Double {
-        let bytes = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+        let bytes = FileManager.default.currentSize(of: url) ?? 0
         return Double(bytes) / (1024 * 1024)
     }
     

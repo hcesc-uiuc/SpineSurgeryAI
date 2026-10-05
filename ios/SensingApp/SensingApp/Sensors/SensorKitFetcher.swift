@@ -199,9 +199,8 @@ class SensorKitFetcher: NSObject {
         guard currentFileURL.pathExtension == Self.partExtension,
               FileManager.default.fileExists(atPath: path) else { return }
 
-        let sealed = currentFileURL.deletingPathExtension()   // drops ".part"
         do {
-            try FileManager.default.moveItem(at: currentFileURL, to: sealed)
+            let sealed = try FileManager.default.seal(currentFileURL)
             fileIndex += 1                                    // next fetch writes its own file
             print("\(logTag): Sealed \(sealed.lastPathComponent)")
             Logger.shared.append("\(logTag): Sealed \(sealed.lastPathComponent)")
@@ -245,10 +244,10 @@ class SensorKitFetcher: NSObject {
     }
 
     private func rotateFileIfNeeded() {
-        guard let size = try? currentFileURL.resourceValues(forKeys: [.fileSizeKey]).fileSize else { return }
+        guard let size = FileManager.default.currentSize(of: currentFileURL) else { return }
         if size >= maxFileSize {
-            fileIndex += 1
-            openCurrentFile()
+            // Seal, not just switch files: a full file left as ".part" is never uploaded.
+            sealCurrentFile()
             print("\(logTag): Rotated to file index \(fileIndex)")
             Logger.shared.append("\(logTag): Rotated to file index \(fileIndex)")
         }
