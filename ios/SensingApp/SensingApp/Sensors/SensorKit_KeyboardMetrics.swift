@@ -16,6 +16,7 @@ final class SensorKitKeyboardMetricsFetcher: SensorKitFetcher {
     init() {
         super.init(
             sensor: .keyboardMetrics,
+            kind: .keyboard,
             filePrefix: "sensorkit_keyboard_phone",
             csvHeader: "timestamp_unix,duration_s,version,width_mm,height_mm,total_words,total_taps,total_drags,total_deletes,total_emojis,total_paths,total_autocorrections,total_typing_duration_s",
             devicePreference: .iPhone,

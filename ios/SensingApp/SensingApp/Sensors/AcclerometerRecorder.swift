@@ -39,6 +39,7 @@ class AcclerometerRecorder {
         
         //----
         var counter = 0
+        var newestSample: Date?
         let writer = PreallocatedCSVBuffer(filename: "accelerometer_demo_\(currentTimestampString()).csv", capacity: 100000)
         if let dataList = recorder.accelerometerData(from: past, to: now) {
             for case let data as CMRecordedAccelerometerData in dataList {
@@ -62,13 +63,14 @@ class AcclerometerRecorder {
                 
                 //
                 counter = counter + 1
+                newestSample = data.startDate
             }
         }
         writer.flush()
         writer.closeFile()
 
-        if counter > 0 {
-            SensorStatusStore.shared.record(.accelerometer, at: now)
+        if let newestSample {   // Step 1 → SensorStatusStore
+            SensorStatusStore.shared.record(.accelerometer, at: newestSample)
         }
     }
 
@@ -108,7 +110,7 @@ class AcclerometerRecorder {
         */
         
         //saving data to a csv folder
-        var rowCount = 0
+        var newestSample: Date?
         let writer = PreallocatedCSVBuffer(filename: "accelerometer_\(currentTimestampString()).csv", capacity: 100000)
         if let dataList = recorder.accelerometerData(from: past, to: now) {
             for case let data as CMRecordedAccelerometerData in dataList {
@@ -127,14 +129,14 @@ class AcclerometerRecorder {
 
                 //csv file write
                 writer.addRowStr(rowOfData: "\(unixTime),\(accel.x),\(accel.y),\(accel.z)")
-                rowCount += 1
+                newestSample = data.startDate
             }
         }
         writer.flush()
         writer.closeFile()
 
-        if rowCount > 0 {
-            SensorStatusStore.shared.record(.accelerometer, at: now)
+        if let newestSample {   // Step 1 → SensorStatusStore
+            SensorStatusStore.shared.record(.accelerometer, at: newestSample)
         }
         
         //save last save date
