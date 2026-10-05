@@ -13,6 +13,20 @@ import FirebaseCore
 struct SensingAppApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @StateObject private var appState = AppState()
+    
+    // This call starts location tracking after checking
+    // authorization
+    //
+    //    App launches
+    //      └─ SensingAppApp body evaluated
+    //           └─ @StateObject var locationManager = AdaptiveLocationManager.shared
+    //                └─ AdaptiveLocationManager.init()
+    //                     └─ locationManager.delegate = self
+    //                          └─ iOS calls locationManagerDidChangeAuthorization(_:)  ← automatic
+    //                               ├─ .authorizedAlways   → startTracking()
+    //                               ├─ .authorizedWhenInUse → startTracking()
+    //                               ├─ .denied             → stopTracking()
+    //                               └─ .notDetermined      → (wait for user)
     @StateObject private var locationManager = AdaptiveLocationManager.shared
     // @StateObject private var sensorKitManager = SensorKitManager()
     
@@ -64,19 +78,72 @@ struct SensingAppApp: App {
 
 
 class AppDelegate: NSObject, UIApplicationDelegate {
+    /*
+     This function is executed every time when we launch the app for the first
+     or by "geo-fence" trick.
+     
+     The launch sequence from a killed state (by iOS) using geo-fence are the following:
+     1. application(_:willFinishLaunchingWithOptions:) — if implemented in App​Delegate
+     2. application(_:didFinishLaunchingWithOptions:) — we access AdaptiveLocationManager.shared
+        unconditionally, which forces the singleton init() to run now (before scene connects).
+     3. AdaptiveLocationManager.init() sets location​Manager​.delegate = self,
+        causing iOS to immediately call...
+     4. locationManagerDidChangeAuthorization — which calls start​Tracking() if already authorized
+     5. didExitRegion — fires on the delegate
+     Note: UIApplication.LaunchOptionsKey.location (previously used to detect location-triggered
+     relaunches) is deprecated in iOS 26. The CLLocationManagerDelegate approach above is the
+     Apple-recommended replacement and covers all launch types including background relaunches.
+
+     Note on BFU (before first unlock)
+     - After a phone restart, the geo-fence stays activated
+       However, until the phone is unlocked by the user,
+       the geo-fence is not delivered even if the user changes
+       location under BFU. However, after phone lock, the
+       geo-fence change is delivered. The only caveat is when
+       the geo-fence exit happens, we lose that exact timestamp.
+     
+     Known bug:
+     - Spine surgery patients may not move outside of home
+       so if they do not leave the house, the geo-fence is never
+       triggered after a restart.
+     - We need to create a pulse from the app.
+        - Either from silent notification
+        - Or when a background task is triggered
+        - Or when healthkit background delivery is triggered.
+     
+     */
+    
     func application(
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
         print("App launched")
+        
+        
 
-        // If iOS relaunched us in the background to deliver a location event
-        // (geofence exit / significant change), resume location tracking. Sensor
-        // recording is started unconditionally below, so it resumes regardless.
-        if launchOptions?[.location] != nil {
-            print("Relaunched by location event — resuming tracking")
-            Logger.shared.append("Relaunched by location event — resuming tracking")
-            AdaptiveLocationManager.shared.startTracking()
+        // Detect geofence-triggered relaunch for logging purposes.
+        // UIApplication.LaunchOptionsKey.location is deprecated in iOS 26 with no
+        // direct replacement at didFinishLaunching time. We access the key via its
+        // raw string value to avoid the compiler warning. On iOS 26+ the geofence
+        // event is also captured in didExitRegion once CLLocationManagerDelegate fires.
+        let locationLaunchKey = UIApplication.LaunchOptionsKey(rawValue: "UIApplicationLaunchOptionsLocationKey")
+        if launchOptions?[locationLaunchKey] != nil {
+            print("Relaunched by geofence/location event")
+            Logger.shared.append("Relaunched by geofence/location event")
+            
+            // Force AdaptiveLocationManager to initialize now, before the SwiftUI scene
+            // connects. This is critical for geofence-triggered background relaunches:
+            // setting delegate = self in init() causes iOS to call
+            // locationManagerDidChangeAuthorization immediately, which calls startTracking()
+            // if already authorized — well before the scene or any @StateObject exists.
+            //
+            // This call ensure after geo-fence relaunch that tracking starts.
+            // with check if authorization exists
+            //
+            _ = AdaptiveLocationManager.shared
+            
+        } else {
+            Logger.shared.append("didFinishLaunchingWithOptions — normal launch")
         }
 
         if let folderURL = createFolder(named: "logs") {

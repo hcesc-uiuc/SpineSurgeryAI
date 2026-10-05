@@ -218,9 +218,11 @@ class AdaptiveLocationManager: NSObject, ObservableObject, CLLocationManagerDele
     // terminates it. Exiting the region wakes the app (works even when killed),
     // at which point we re-arm the fence around the new location and resume.
     private let geofenceIdentifier = "edu.uiuc.cs.hcesc.SensingApp.stationaryGeofence"
-    private let geofenceRadius: CLLocationDistance = 200
+    private let geofenceRadius: CLLocationDistance = 150
     private let geofenceLastLatKey = "geofence_last_lat"
     private let geofenceLastLngKey = "geofence_last_lng"
+    
+    private var isTracking = false
     
     //private let locationLogger = LocationFileLogger()
 
@@ -274,8 +276,25 @@ class AdaptiveLocationManager: NSObject, ObservableObject, CLLocationManagerDele
 
         // Hints to iOS what kind of movement to expect.
         // iOS uses this to tune internal power optimizations and auto-pause logic.
-        // .fitness = walking/running. Wrong type = bad pause decisions = wasted battery.
-        locationManager.activityType = .fitness
+        // .other gives iOS the most flexibility to pause when stationary — appropriate
+        // for a research app tracking general daily movement in post-surgery patients
+        // who are mostly sedentary. .fitness (walking/running) was previously used but
+        // caused iOS to rarely trigger auto-pause since the motion pattern never matched
+        // the expected fitness activity, keeping the blue icon on indefinitely.
+        //
+        // Removes .ftiness for auto-pause
+        // iOS auto-pause is not purely time-based.
+        // It uses the activity​Type to calibrate its motion model.
+        // With .fitness, iOS waits for a pattern it recognizes as "finished a workout"
+        // — sustained movement followed by a clear stop. A patient sitting
+        // on their couch all day never produces that pattern,
+        // so iOS never commits to pausing.
+        //
+        // With .other, iOS applies a more generic stationary detection —
+        // essentially "no significant movement for a while" — which will
+        // fire much sooner for sedentary users.
+
+        locationManager.activityType = .other
         
         print("AdaptiveLocationManager init called")
     }
@@ -294,6 +313,18 @@ class AdaptiveLocationManager: NSObject, ObservableObject, CLLocationManagerDele
     // MARK: - Start / Stop
 
     func startTracking() {
+        
+        // Note start tracking is also called
+        // if the "didExitRegion" is called by "geo-fencing"
+        // We arm a new geo-fence.
+        //
+        // Calling "startUpdatingLocation" twice does not matter
+        // as iOS ignores double calls.
+        // "currentMode = .highAccuracy" will set the tracking to
+        // more precise mode, which is alright, as participant
+        // likely is moving.
+        //
+        
         // Always begin in high accuracy mode.
         // The didSet on currentMode calls applyMode() automatically,
         // configuring CLLocationManager before updates begin.
@@ -306,7 +337,25 @@ class AdaptiveLocationManager: NSObject, ObservableObject, CLLocationManagerDele
 
         // Significant location changes + the stationary geofence are the two
         // mechanisms that relaunch the app after iOS has terminated it.
-        locationManager.startMonitoringSignificantLocationChanges()
+        
+        
+        //
+        // Sep 29, 2026: 'Geo-fence' and 'startMonitoringSignificantLocationChanges'
+        //
+        // Both startMonitoringSignificantLocationChanges and geo-fences
+        // restart the app after the app is killed bv iOS. While
+        // having two mechanisms to launch the app give backups, but
+        // startMonitoringSignificantLocationChanges shows a blue location
+        // icon at the top all the time. Also, startMonitoringSignificantLocationChanges
+        // is triggered after 500+ meter in movement (cell-tower changes).
+        // Geo-fence is activated when we set the X meters.
+        // We made the choice that "Geo-fence" is enough.
+        //
+        //
+        //
+        // Disabling "startMonitoringSignificantLocationChanges" 
+        // locationManager.startMonitoringSignificantLocationChanges()
+        
         if let location = locationManager.location {
             armStationaryGeofence(at: location.coordinate)
         }
@@ -314,6 +363,8 @@ class AdaptiveLocationManager: NSObject, ObservableObject, CLLocationManagerDele
     }
 
     func stopTracking() {
+        isTracking = false
+        
         // Tells CLLocationManager to stop requesting fixes.
         // GPS chip may power down — iOS manages hardware lifecycle.
         locationManager.stopUpdatingLocation()
@@ -421,7 +472,7 @@ class AdaptiveLocationManager: NSObject, ObservableObject, CLLocationManagerDele
 
             // Only wake the app if the user moves 500m+.
             // Sitting in an office or home produces zero callbacks.
-            locationManager.distanceFilter = 15
+            locationManager.distanceFilter = 150
             Logger.shared.append("Location: Mode set to low accuracy");
         }
     }
@@ -523,6 +574,19 @@ class AdaptiveLocationManager: NSObject, ObservableObject, CLLocationManagerDele
         formatter.dateFormat = "hh:mm a"
         
         for location in locations {
+
+            // In lowPower mode, cell/WiFi fixes can have very high horizontal error
+            // (200m–1km+). A noisy fix that exceeds the distanceFilter (150m) looks
+            // like real movement and resets the stationary timer, preventing iOS
+            // auto-pause from ever firing (keeping the blue icon on indefinitely).
+            // Skip fixes worse than 200m accuracy in lowPower mode — they are noise,
+            // not real movement. In highAccuracy mode we accept all fixes.
+            if currentMode == .lowPower && location.horizontalAccuracy > 200 {
+                let unixTime = Int64(location.timestamp.timeIntervalSince1970 * 1000)
+                LocationFileLogger.shared.log("\(unixTime), skipped — lowPower noise accuracy=\(Int(location.horizontalAccuracy))m")
+                Logger.shared.append("\(unixTime), skipped — lowPower noise accuracy=\(Int(location.horizontalAccuracy))m")
+                continue
+            }
 
             // ISO8601 timestamp from the GPS fix itself —
             // this is when the position was computed, not when our code ran.
@@ -647,6 +711,44 @@ class AdaptiveLocationManager: NSObject, ObservableObject, CLLocationManagerDele
     // Called automatically by iOS when its motion sensors detect movement
     // after an auto-pause. This is your signal to upgrade back to high accuracy
     // so you do not miss movement detail in the first moments of activity.
+    /*
+     Is locationManagerDidResumeLocationUpdates called when the app is in the background?
+     ---------------------
+     Yes. Because you have allows​Background​Location​Updates = true
+     and pauses​Location​Updates​Automatically = true, iOS delivers
+     this callback to your app while it is in the background. The
+     app does not need to be in the foreground.
+     
+     Is it called if the app is NOT running / iOS has killed it?
+     ---------------------
+     No. This is the critical limitation.
+
+     location​Manager​Did​Resume​Location​Updates is a delegate callback
+     — it requires your app process to be alive to receive it. If iOS
+     has terminated your app (memory pressure, user swipe-kill, etc.),
+     this method is never called. The callback is simply lost.
+    
+     
+     This is exactly why your stationary geofence exists. The relaunch matrix looks like this:
+
+     +-------------------------------+----------------------------------+------------------------------------------------+
+     | Scenario                      | didResumeLocationUpdates fires?  | Relaunch mechanism                             |
+     +-------------------------------+----------------------------------+------------------------------------------------+
+     | App in foreground             | Yes                              | Direct callback                                |
+     | App in background (suspended) | Yes                              | iOS wakes the app to deliver it                |
+     | App killed by iOS             | No                               | Geofence exit -> didExitRegion relaunches app  |
+     | App killed by user swipe      | No                               | Geofence exit -> didExitRegion relaunches app  |
+     +-------------------------------+----------------------------------+------------------------------------------------+
+     
+     So for the killed-app case, your recovery path is:
+     1. User starts moving → exits the 150m stationary geofence
+     2. iOS relaunches the app in the background
+     3. did​Exit​Region fires → calls start​Tracking() → re-arms the geofence and restarts GPS
+     
+     location​Manager​Did​Resume​Location​Updates and the geofence are complementary —
+     the former handles the app-alive case, the latter handles the app-dead case.
+     
+     */
     func locationManagerDidResumeLocationUpdates(_ manager: CLLocationManager) {
         print("iOS resumed location — user is moving again")
         
@@ -655,6 +757,7 @@ class AdaptiveLocationManager: NSObject, ObservableObject, CLLocationManagerDele
         Logger.shared.append(entry)
         
         // Upgrade immediately — didSet triggers applyMode(), GPS turns back on.
+        // The mode is automatically applied everytime highAccuracy is set.
         currentMode = .highAccuracy
     }
 
