@@ -1,50 +1,174 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Compliance Dashboard</title>
-    <style>
-        body { font-family: Arial, sans-serif; margin: 2rem; }
-        table { border-collapse: collapse; width: 60%; margin-top: 1rem; }
-        th, td { border: 1px solid #ddd; padding: 8px; text-align: center; }
-        th { background-color: #f2f2f2; }
-    </style>
-</head>
-<body>
-    <a href="{{ url_for('dashboard_page.dashboard') }}" 
-     style="display:inline-block; padding:10px 20px; background:#007bff; color:white; 
-            text-decoration:none; border-radius:5px;">
-      Home
-  </a>
-    <h1>Participant Compliance Summary</h1>
-    <table>
-        <tr>
-            <th>Participant</th>
-            <th>HeartRate Days (7)</th>
-            <th>Survey Days (7)</th>
-        </tr>
-        <td>{{ data.external_id }}</td>
-        <td>{{ data.hr_days_7 }}</td>
-        <td>{{ data.survey_days_7 }}</td>
-    </table>
-    <p>
-        {{data}}
-    </p>
-    <h2>Heart Rate Table</h2>
-  <table border="1" cellpadding="5">
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h2><a href="/totalcompliance" target="_blank">Participant Compliance Summary</a></h2>
+  <a href="{{ url_for('dashboard_page.dashboard') }}" class="btn btn-outline-primary">Back to Dashboard</a>
+</div>
+
+<!-- Compliance Overview -->
+<table class="table table-striped mt-3">
+  <thead>
+    <tr>
+      <th>Participant</th>
+      <th>Heart Rate Days (7)</th>
+      <th>Survey Days (7)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><a href="/heatmap/{{ data.external_id }}" target="_blank">{{ data.external_id }}</a></td>
+      <td>{{ data.accel_1of3 }}</td>
+      <td>{{ data.survey_days_7 }}</td>
+    </tr>
+  </tbody>
+</table>
+
+<iframe id="heatmapFrame" width="100%" height="600" frameborder="0" style="display:none;"></iframe>
+
+<!-- Survey Table -->
+<h3 class="mt-5">Survey Table</h3>
+<table class="table table-bordered">
+  <thead class="table-light">
     <tr>
       <th>ID</th>
       <th>Participant</th>
       <th>Timestamp</th>
+      <th>Uploaded At</th>
       <th>Object URL</th>
     </tr>
-    {% for row in table %}
+  </thead>
+  <tbody>
+    {% for row in survey %}
     <tr>
       <td>{{ row.id }}</td>
       <td>{{ row.participant_id }}</td>
       <td>{{ row.ts }}</td>
-      <td>{{ row.object_url }}</td>
+      <td>{{row.uploaded_at}}</td>
+      <td><a href="{{ row.object_url }}" target="_blank">{{ row.object_url }}</a></td>
     </tr>
     {% endfor %}
-  </table>
-</body>
-</html>
+  </tbody>
+</table>
+
+<!-- Accel Table -->
+<h3 class="mt-5">Accel Table</h3>
+<table class="table table-bordered">
+  <thead class="table-light">
+    <tr>
+      <th>ID</th>
+      <th>Participant</th>
+      <th>Timestamp</th>
+      <th>Uploaded At</th>
+      <th>Object URL</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in accel %}
+    <tr>
+      <td>{{ row.id }}</td>
+      <td>{{ row.participant_id }}</td>
+      <td>{{ row.ts }}</td>
+      <td>{{row.uploaded_at}}</td>
+      <td><a href="{{ row.object_url }}" target="_blank">{{ row.object_url }}</a></td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<!-- Gyroscope Table -->
+<h3 class="mt-5">Gyroscope Table</h3>
+<table class="table table-bordered">
+  <thead class="table-light">
+    <tr>
+      <th>ID</th>
+      <th>Participant</th>
+      <th>Timestamp</th>
+      <th>Uploaded At</th>
+      <th>Object URL</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in gyro %}
+    <tr>
+      <td>{{ row.id }}</td>
+      <td>{{ row.participant_id }}</td>
+      <td>{{ row.ts }}</td>
+      <td>{{row.uploaded_at}}</td>
+      <td><a href="{{ row.object_url }}" target="_blank">{{ row.object_url }}</a></td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<!-- Heart Rate Table -->
+<h3 class="mt-5">Heart Rate Table</h3>
+<table class="table table-bordered">
+  <thead class="table-light">
+    <tr>
+      <th>ID</th>
+      <th>Participant</th>
+      <th>Timestamp</th>
+      <th>Uploaded At</th>
+      <th>Object URL</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in hr %}
+    <tr>
+      <td>{{ row.id }}</td>
+      <td>{{ row.participant_id }}</td>
+      <td>{{ row.ts }}</td>
+      <td>{{row.uploaded_at}}</td>
+      <td><a href="{{ row.object_url }}" target="_blank">{{ row.object_url }}</a></td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<!-- Ingestion Health -->
+<h3 class="mt-5">Ingestion Health (Last Windows)</h3>
+<table class="table table-hover">
+  <thead class="table-light">
+    <tr>
+      <th>Modality</th>
+      <th>Window Start</th>
+      <th>Window End</th>
+      <th>Expected Samples</th>
+      <th>Actual Samples</th>
+      <th>% Expected</th>
+      <th>Completeness</th>
+      <th>Gap Fraction</th>
+      <th>Usable?</th>
+      <th>Status</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in ingestion_rows %}
+    <tr>
+      <td>{{ row.modality }}</td>
+      <td>{{ row.window_start }}</td>
+      <td>{{ row.window_end }}</td>
+      <td>{{ row.expected_count }}</td>
+      <td>{{ row.actual_count }}</td>
+      <td>{{ "%.1f" | format(row.pct_expected or 0) }}%</td>
+      <td>{{ "%.3f" | format(row.completeness or 0) }}</td>
+      <td>{{ "%.3f" | format(row.gap_fraction or 0) }}</td>
+      <td>
+        {% if row.is_usable %}
+          <span class="badge bg-success">Yes</span>
+        {% else %}
+          <span class="badge bg-danger">No</span>
+        {% endif %}
+      </td>
+      <td>
+        {% if row.status == "OK" %}
+          <span class="badge bg-success">OK</span>
+        {% else %}
+          <span class="badge bg-warning">{{ row.status }}</span>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

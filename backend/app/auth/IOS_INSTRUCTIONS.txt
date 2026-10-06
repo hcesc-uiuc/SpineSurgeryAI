@@ -1,0 +1,259 @@
+iOS Integration Guide — Apple Sign In with JWT Auth
+====================================================
+
+OVERVIEW
+--------
+The backend handles Apple identity token verification and issues two tokens:
+  - access_token  : short-lived JWT (15 min), used for all API calls
+  - refresh_token : long-lived (1 year), used to get new access tokens
+
+You store both on the device and manage their lifecycle.
+
+
+====================================================
+STEP 1 — ADD SIGN IN WITH APPLE CAPABILITY
+====================================================
+
+In Xcode:
+  1. Select your project target
+  2. Go to Signing & Capabilities
+  3. Click + Capability
+  4. Add "Sign in with Apple"
+
+
+====================================================
+STEP 2 — TRIGGER APPLE SIGN IN
+====================================================
+
+Import AuthenticationServices and present the Apple login sheet.
+
+  import AuthenticationServices
+
+  let request = ASAuthorizationAppleIDProvider().createRequest()
+  request.requestedScopes = [.fullName, .email]
+
+  let controller = ASAuthorizationController(authorizationRequests: [request])
+  controller.delegate = self
+  controller.presentationContextProvider = self
+  controller.performRequests()
+
+
+====================================================
+STEP 3 — HANDLE THE APPLE RESPONSE
+====================================================
+
+In your ASAuthorizationControllerDelegate:
+
+  func authorizationController(
+      controller: ASAuthorizationController,
+      didCompleteWithAuthorization authorization: ASAuthorization
+  ) {
+      guard let credential = authorization.credential
+            as? ASAuthorizationAppleIDCredential else { return }
+
+      // Get the identity token (one-time JWT from Apple)
+      guard let tokenData = credential.identityToken,
+            let identityToken = String(data: tokenData, encoding: .utf8)
+      else { return }
+
+      // Get full name — Apple only sends this on the VERY FIRST login.
+      // Save it now or it's gone forever.
+      let fullName = [
+          credential.fullName?.givenName,
+          credential.fullName?.familyName
+      ].compactMap { $0 }.joined(separator: " ")
+
+      // Send to your backend
+      Task {
+          await login(identityToken: identityToken, fullName: fullName)
+      }
+  }
+
+
+====================================================
+STEP 4 — CALL THE BACKEND LOGIN ENDPOINT
+====================================================
+
+  func login(identityToken: String, fullName: String) async {
+      let url = URL(string: "https://your-server.com/auth/login")!
+      var request = URLRequest(url: url)
+      request.httpMethod = "POST"
+      request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+      let body: [String: String] = [
+          "identity_token": identityToken,
+          "full_name": fullName
+      ]
+      request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+
+      let (data, _) = try! await URLSession.shared.data(for: request)
+      let response = try! JSONDecoder().decode(AuthResponse.self, from: data)
+
+      // Save both tokens securely
+      saveToKeychain(key: "access_token",  value: response.accessToken)
+      saveToKeychain(key: "refresh_token", value: response.refreshToken)
+  }
+
+  struct AuthResponse: Decodable {
+      let accessToken: String
+      let refreshToken: String
+      enum CodingKeys: String, CodingKey {
+          case accessToken  = "access_token"
+          case refreshToken = "refresh_token"
+      }
+  }
+
+
+====================================================
+STEP 5 — STORE TOKENS IN KEYCHAIN (NOT UserDefaults)
+====================================================
+
+Never store tokens in UserDefaults — use the Keychain.
+Use a Keychain wrapper library or Apple's Security framework directly.
+
+  func saveToKeychain(key: String, value: String) {
+      let data = value.data(using: .utf8)!
+      let query: [CFString: Any] = [
+          kSecClass:           kSecClassGenericPassword,
+          kSecAttrAccount:     key,
+          kSecValueData:       data,
+          kSecAttrAccessible:  kSecAttrAccessibleAfterFirstUnlock
+      ]
+      SecItemDelete(query as CFDictionary)
+      SecItemAdd(query as CFDictionary, nil)
+  }
+
+  func loadFromKeychain(key: String) -> String? {
+      let query: [CFString: Any] = [
+          kSecClass:        kSecClassGenericPassword,
+          kSecAttrAccount:  key,
+          kSecReturnData:   true,
+          kSecMatchLimit:   kSecMatchLimitOne
+      ]
+      var result: AnyObject?
+      SecItemCopyMatching(query as CFDictionary, &result)
+      guard let data = result as? Data else { return nil }
+      return String(data: data, encoding: .utf8)
+  }
+
+
+====================================================
+STEP 6 — ATTACH ACCESS TOKEN TO ALL API REQUESTS
+====================================================
+
+Every request to a protected endpoint must include the access token:
+
+  var request = URLRequest(url: url)
+  let token = loadFromKeychain(key: "access_token") ?? ""
+  request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+
+====================================================
+STEP 7 — REFRESH THE ACCESS TOKEN WHEN IT EXPIRES
+====================================================
+
+The access token expires after 15 minutes. When any API call returns 401,
+call the refresh endpoint to get a new one.
+
+  func refreshAccessToken() async throws {
+      let url = URL(string: "https://your-server.com/auth/refresh")!
+      var request = URLRequest(url: url)
+      request.httpMethod = "POST"
+      request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+      let refreshToken = loadFromKeychain(key: "refresh_token") ?? ""
+      let body = ["refresh_token": refreshToken]
+      request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+
+      let (data, _) = try await URLSession.shared.data(for: request)
+      let response = try JSONDecoder().decode([String: String].self, from: data)
+
+      if let newToken = response["access_token"] {
+          saveToKeychain(key: "access_token", value: newToken)
+      } else {
+          // Refresh token is expired or revoked — force user to log in again
+          forceLogout()
+      }
+  }
+
+Recommended pattern — wrap all API calls:
+
+  func apiCall(url: URL) async -> Data? {
+      var req = URLRequest(url: url)
+      req.setValue("Bearer \(loadFromKeychain(key: "access_token") ?? "")",
+                   forHTTPHeaderField: "Authorization")
+
+      let (data, response) = try! await URLSession.shared.data(for: req)
+
+      if (response as? HTTPURLResponse)?.statusCode == 401 {
+          try? await refreshAccessToken()
+          // Retry once with the new token
+          req.setValue("Bearer \(loadFromKeychain(key: "access_token") ?? "")",
+                       forHTTPHeaderField: "Authorization")
+          let (retryData, _) = try! await URLSession.shared.data(for: req)
+          return retryData
+      }
+      return data
+  }
+
+
+====================================================
+STEP 8 — LOGOUT
+====================================================
+
+  func logout() async {
+      let url = URL(string: "https://your-server.com/auth/logout")!
+      var request = URLRequest(url: url)
+      request.httpMethod = "POST"
+      request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+      let refreshToken = loadFromKeychain(key: "refresh_token") ?? ""
+      let body = ["refresh_token": refreshToken]
+      request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+
+      _ = try? await URLSession.shared.data(for: request)
+
+      // Clear tokens from Keychain
+      deleteFromKeychain(key: "access_token")
+      deleteFromKeychain(key: "refresh_token")
+  }
+
+
+====================================================
+BACKEND ENDPOINTS REFERENCE
+====================================================
+
+  POST /auth/login
+    Body:    { "identity_token": "...", "full_name": "..." }
+    Returns: { "access_token": "...", "refresh_token": "..." }
+    Errors:  400 missing_identity_token / 401 invalid_identity_token
+
+  POST /auth/refresh
+    Body:    { "refresh_token": "..." }
+    Returns: { "access_token": "..." }
+    Errors:  400 missing_refresh_token / 401 invalid_grant
+
+  POST /auth/logout
+    Body:    { "refresh_token": "..." }
+    Returns: { "ok": true }
+
+  All protected routes:
+    Header:  Authorization: Bearer <access_token>
+    Errors:  401 missing_token / token_expired / invalid_token
+
+
+====================================================
+IMPORTANT NOTES
+====================================================
+
+  - full_name is ONLY sent by Apple on the very first login ever.
+    Always pass it to the backend on login even if it looks empty.
+    If you miss it, you cannot retrieve it again.
+
+  - email may be a private relay address (e.g. xyz@privaterelay.appleid.com)
+    if the user chose to hide their email. This is normal.
+
+  - Store tokens in Keychain, never UserDefaults or in-memory only.
+
+  - If /auth/refresh returns 401, the session is fully expired.
+    Delete both tokens and send the user back to the login screen.

@@ -19,6 +19,11 @@ from psycopg2.extras import DictCursor
 from dataclasses import dataclass
 import requests
 
+from datetime import datetime, timedelta, timezone
+
+# window clipping!
+LAST_WINDOW_END = None
+
 load_dotenv()
 
 AWS_ACCESS_KEY_ID = os.getenv("AWS_KEY")
@@ -54,8 +59,8 @@ TODO: INSERT DATA INTO JUPITER NOTEBOOK
 #Checking Interval (15 Minutes preset -> move to config.py in review)
 CHECKING_INTERVAL_SECONDS = 900
 
-#% of data there needs to be in order to satisfy data requirements
-DATA_COMPLETENESS_THRESHOLD = 90
+#% of data there needs to be in order to satisfy data requirements (fraction)
+DATA_COMPLETENESS_THRESHOLD = 0.9
 
 #Gap > 5x normal time interval counts as "missing"
 MAX_GAP_FACTOR           = 5.0      
@@ -70,32 +75,34 @@ class UploadRecord:
     external_id: str   # participant external_id
     ts: str            # timestamp as string
     object_url: str    # HTTP/S URL (or S3 key if you change downloader)
+    row_id: int        # database row id for updating ts
 
 
 """
     Fetch accel/gyro/hr uploads that were uploaded x seconds ago (checking_interval_seconds)
+    Now also returns the row id for updating timestamps
 """
 def fetch_recent_uploads(db: DB) -> List[UploadRecord]:
     
     sql_query = """
-        SELECT 'accel' AS kind, p.external_id, a.ts, a.object_url
+        SELECT 'accel' AS kind, p.external_id, a.ts, a.object_url, a.id AS row_id
         FROM accelerometer a
         JOIN participants p ON p.id = a.participant_id
-        WHERE a.ts >= now() - %s * INTERVAL '1 minute'
+        WHERE a.uploaded_at >= now() - %s * INTERVAL '1 second'
 
         UNION ALL
 
-        SELECT 'gyro' AS kind, p.external_id, g.ts, g.object_url
+        SELECT 'gyro' AS kind, p.external_id, g.ts, g.object_url, g.id AS row_id
         FROM gyroscope g
         JOIN participants p ON p.id = g.participant_id
-        WHERE g.ts >= now() - %s * INTERVAL '1 minute'
+        WHERE g.uploaded_at >= now() - %s * INTERVAL '1 second'
 
         UNION ALL
 
-        SELECT 'hr' AS kind, p.external_id, h.ts, h.object_url
+        SELECT 'hr' AS kind, p.external_id, h.ts, h.object_url, h.id AS row_id
         FROM heart_rate h
         JOIN participants p ON p.id = h.participant_id
-        WHERE h.ts >= now() - %s * INTERVAL '1 minute'
+        WHERE h.uploaded_at >= now() - %s * INTERVAL '1 second'
 
         ORDER BY ts;
     """
@@ -114,6 +121,7 @@ def fetch_recent_uploads(db: DB) -> List[UploadRecord]:
                     external_id=row["external_id"],
                     ts=str(row["ts"]),
                     object_url=row["object_url"],
+                    row_id=row["row_id"],
                 )
             )
 
@@ -134,6 +142,67 @@ def download_object_content(url_or_key: str) -> bytes:
     resp = s3.get_object(Bucket=S3_BUCKET, Key=url_or_key)
     return resp["Body"].read()
 
+
+"""
+    Extract the first and last recording timestamps from the uploaded data.
+    Returns (first_ts_ms, last_ts_ms) or (None, None) if parsing fails.
+    
+    Timestamps in the file are expected to be in milliseconds (Unix epoch).
+"""
+def extract_recording_timestamps(content_bytes: bytes) -> tuple[Optional[int], Optional[int]]:
+    text = content_bytes.decode("utf-8", errors="replace").strip()
+    
+    if not text:
+        return None, None
+    
+    timestamps_ms: List[int] = []
+    
+    # Try CSV first
+    try:
+        f = io.StringIO(text)
+        reader = csv.DictReader(f)
+        if reader.fieldnames and "timestamp" in reader.fieldnames:
+            for row in reader:
+                ts_str = row.get("timestamp")
+                if ts_str is None or ts_str == "":
+                    continue
+                try:
+                    ts = int(float(ts_str))
+                    timestamps_ms.append(ts)
+                except ValueError:
+                    continue
+    except Exception:
+        pass
+    
+    # If no timestamps, try JSON
+    if not timestamps_ms:
+        try:
+            data = json.loads(text)
+            if isinstance(data, list):
+                for item in data:
+                    if isinstance(item, dict) and "timestamp" in item:
+                        try:
+                            ts = int(item["timestamp"])
+                            timestamps_ms.append(ts)
+                        except (TypeError, ValueError):
+                            continue
+        except Exception:
+            pass
+    
+    if not timestamps_ms:
+        return None, None
+    
+    return min(timestamps_ms), max(timestamps_ms)
+
+
+"""
+    Convert milliseconds timestamp to ISO 8601 string for Postgres TIMESTAMPTZ.
+"""
+def ms_to_iso8601(ms: int) -> str:
+    dt = datetime.fromtimestamp(ms / 1000.0, tz=timezone.utc)
+    return dt.isoformat()
+
+
 """
     Analyzer for CSV files (accereromter currently)
 
@@ -141,7 +210,7 @@ def download_object_content(url_or_key: str) -> bytes:
 
     Returns sampling_rate_hz, expected_samples, actual_samples,
       completeness, total_gap_seconds, gap_fraction, is_usable
-    """
+"""
 def analyze_uploaded_data(kind: str, content_bytes: bytes) -> Dict[str, Any]:
     
     text = content_bytes.decode("utf-8", errors="replace").strip()
@@ -175,8 +244,7 @@ def analyze_uploaded_data(kind: str, content_bytes: bytes) -> Dict[str, Any]:
                 if ts_str is None or ts_str == "":
                     continue
                 try:
-                    ts = int(Decimal(ts_str))
-                    print(ts_str)
+                    ts = int(float(ts_str))
                 except ValueError:
                     continue
                 timestamps_ms.append(ts)
@@ -280,6 +348,16 @@ def analyze_uploaded_data(kind: str, content_bytes: bytes) -> Dict[str, Any]:
 Runs function once for main loop (helper function)
 """
 def run_once(db: DB):
+    global LAST_WINDOW_END
+
+    end = datetime.now()
+    if LAST_WINDOW_END is None:
+        start = end - timedelta(seconds=CHECKING_INTERVAL_SECONDS)
+    else:
+        start = LAST_WINDOW_END
+
+    LAST_WINDOW_END = end
+    
     print(
         f"[checker] Looking for accel/gyro/hr uploads in last {CHECKING_INTERVAL_SECONDS / 60} minutes...",
         flush=True,
@@ -310,15 +388,34 @@ def run_once(db: DB):
             content = download_object_content(upload.object_url)
             print(f"[checker] Downloaded {len(content)} bytes", flush=True)
 
+            # update file size and store as (MB)
+            db.update_file_size(upload.kind, upload.row_id, round(len(content) / 1_000_000, 2))
+
+            # Extract the actual recording timestamp from the data
+            print("[checker] Extracting recording timestamps...", flush=True)
+            first_ts_ms, last_ts_ms = extract_recording_timestamps(content)
+            
+            if first_ts_ms is not None:
+                # Update the ts field with the actual recording start time
+                recording_start_iso = ms_to_iso8601(first_ts_ms)
+                print(f"[checker] Updating ts to recording time: {recording_start_iso}", flush=True)
+                db.update_recording_timestamp(upload.kind, upload.row_id, recording_start_iso)
+            else:
+                print("[checker] Could not extract recording timestamp from data", flush=True)
+
             print("[checker] Analyzing data...", flush=True)
             analysis = analyze_uploaded_data(upload.kind, content)
 
+            db.insert_ingestion_health(
+                modality=upload.kind,
+                external_participant_identifier=upload.external_id,
+                window_start=start,
+                window_end=end,
+                analysis=analysis,
+                status="OK" if analysis["is_usable"] else "LOW",
+            )
+
             print(f"[checker] Results: {analysis}", flush=True)
-
-            print(f"[checker]: Results: " + str(analysis))
-
-            # INSERT DATA INTO JUPITER NOTEBOOK HERE!!! (currently only prints data)
-            
 
         except Exception as e:
             print(
@@ -366,10 +463,6 @@ def main_loop():
 def debug():
     db = DB() 
     run_once(db)
-    # content = download_object_content("uploads/20251114T000314_accelerometer_2025-10-22_06-20-03.csv")
-    # analysis = analyze_uploaded_data("e", content)
-
-    # print(f"[checker]: Results: " + str(analysis))
 
 
 if __name__ == "__main__":

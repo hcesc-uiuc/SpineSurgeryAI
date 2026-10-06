@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import json
+import time
 from contextlib import contextmanager
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
@@ -9,7 +10,7 @@ from dotenv import load_dotenv
 import psycopg2
 from psycopg2 import sql
 from psycopg2.extras import DictCursor, execute_values
-from psycopg2.pool import SimpleConnectionPool
+from psycopg2.pool import ThreadedConnectionPool
 
 
 # Database class *** Create only 1 instance and reference it
@@ -18,7 +19,7 @@ class DB:
         self,
         database_url_connection_string: Optional[str] = None, # This is just the SQL Database URL
         minimum_connections_in_pool_count: int = 1,
-        maximum_connections_in_pool_count: int = 5,
+        maximum_connections_in_pool_count: int = 10,  # > gunicorn threads per worker (4)
     ):
         load_dotenv()
         self.database_url_connection_string = (
@@ -28,7 +29,7 @@ class DB:
             raise RuntimeError(
                 "Set DATABASE_URL env var to a URL"
             )
-        self.connection_pool_manager: SimpleConnectionPool = SimpleConnectionPool(
+        self.connection_pool_manager: ThreadedConnectionPool = ThreadedConnectionPool(
             minimum_connections_in_pool_count,
             maximum_connections_in_pool_count,
             dsn=self.database_url_connection_string,
@@ -111,19 +112,36 @@ class DB:
         """Insert accelerometer objects (timestamp + URL). Returns inserted row count.
 
         Accepts rows as:
-        - dict: {"ts": <str/datetime/unix>, "url": <str>}
-        - tuple: (<ts>, <url>)
+        - dict: {"url": <str>, "ts": <str/datetime/unix> (optional, defaults to placeholder)}
+        - tuple: (<url>,) or (<ts>, <url>)
+        
+        If ts is not provided, it defaults to Unix epoch (1970-01-01) as a placeholder.
+        The checker will later update ts to the actual recording time from the data file.
         """
+        # Placeholder timestamp - obviously wrong so it's clear the checker hasn't processed it yet
+        PLACEHOLDER_TS = "1970-01-01T00:00:00+00:00"
+        
         participant_id_integer = self.create_participant_if_missing(external_participant_identifier)
         accelerometer_payload_rows_list: List[Tuple[int, str, str]] = []  # (participant_id, iso8601_ts, url)
 
         for single_accel_record in accelerometer_data_rows_sequence:
             if isinstance(single_accel_record, dict):
-                timestamp_iso8601_string = self.normalize_timestamp_to_iso8601(single_accel_record["ts"])
                 object_url_string = single_accel_record.get("url")
+                # ts is optional - default to placeholder if not provided
+                if "ts" in single_accel_record:
+                    timestamp_iso8601_string = self.normalize_timestamp_to_iso8601(single_accel_record["ts"])
+                else:
+                    timestamp_iso8601_string = PLACEHOLDER_TS
             else:
-                timestamp_iso8601_string = self.normalize_timestamp_to_iso8601(single_accel_record[0])
-                object_url_string = single_accel_record[1] if len(single_accel_record) > 1 else None
+                # For tuples, check length to determine format
+                if len(single_accel_record) == 1:
+                    # Just URL provided
+                    object_url_string = single_accel_record[0]
+                    timestamp_iso8601_string = PLACEHOLDER_TS
+                else:
+                    # (ts, url) format
+                    timestamp_iso8601_string = self.normalize_timestamp_to_iso8601(single_accel_record[0])
+                    object_url_string = single_accel_record[1]
 
             if not object_url_string:
                 raise ValueError("accelerometer row missing required 'url' value")
@@ -155,24 +173,37 @@ class DB:
     ) -> int:
         """Insert gyroscope objects (timestamp + URL). Returns inserted row count.
 
-        Expects each row to be either:
-        - dict: {"ts": <str/datetime/unix>, "url": <str>}
-        - tuple: (<ts>, <url>)
+        Accepts rows as:
+        - dict: {"url": <str>, "ts": <str/datetime/unix> (optional, defaults to placeholder)}
+        - tuple: (<url>,) or (<ts>, <url>)
+        
+        If ts is not provided, it defaults to Unix epoch (1970-01-01) as a placeholder.
+        The checker will later update ts to the actual recording time from the data file.
         """
+        # Placeholder timestamp - obviously wrong so it's clear the checker hasn't processed it yet
+        PLACEHOLDER_TS = "1970-01-01T00:00:00+00:00"
+        
         participant_id_integer = self.create_participant_if_missing(external_participant_identifier)
         gyroscope_payload_rows_list: List[Tuple[int, str, str]] = []  # (participant_id, iso8601_ts, S3/HTTP url)
 
         for single_gyroscope_record in gyroscope_data_rows_sequence:
             if isinstance(single_gyroscope_record, dict):
-                timestamp_iso8601_string = self.normalize_timestamp_to_iso8601(
-                    single_gyroscope_record["ts"]
-                )
                 object_url_string = single_gyroscope_record.get("url")
+                # ts is optional - default to placeholder if not provided
+                if "ts" in single_gyroscope_record:
+                    timestamp_iso8601_string = self.normalize_timestamp_to_iso8601(single_gyroscope_record["ts"])
+                else:
+                    timestamp_iso8601_string = PLACEHOLDER_TS
             else:
-                timestamp_iso8601_string = self.normalize_timestamp_to_iso8601(
-                    single_gyroscope_record[0]
-                )
-                object_url_string = single_gyroscope_record[1] if len(single_gyroscope_record) > 1 else None
+                # For tuples, check length to determine format
+                if len(single_gyroscope_record) == 1:
+                    # Just URL provided
+                    object_url_string = single_gyroscope_record[0]
+                    timestamp_iso8601_string = PLACEHOLDER_TS
+                else:
+                    # (ts, url) format
+                    timestamp_iso8601_string = self.normalize_timestamp_to_iso8601(single_gyroscope_record[0])
+                    object_url_string = single_gyroscope_record[1]
 
             if not object_url_string:
                 raise ValueError("gyroscope row missing required 'url' value")
@@ -200,21 +231,41 @@ class DB:
         self,
         external_participant_identifier: str,
         heart_rate_data_rows_sequence: Sequence[Dict[str, Any] | Tuple[Any, Any]],
-    ) -> int: #returns how many rows inserted
+    ) -> int:
+        """Insert heart rate objects (timestamp + URL). Returns inserted row count.
+
+        Accepts rows as:
+        - dict: {"url": <str>, "ts": <str/datetime/unix> (optional, defaults to placeholder)}
+        - tuple: (<url>,) or (<ts>, <url>)
+        
+        If ts is not provided, it defaults to Unix epoch (1970-01-01) as a placeholder.
+        The checker will later update ts to the actual recording time from the data file.
+        """
+        # Placeholder timestamp - obviously wrong so it's clear the checker hasn't processed it yet
+        PLACEHOLDER_TS = "1970-01-01T00:00:00+00:00"
+        
         participant_id_integer = self.create_participant_if_missing(external_participant_identifier)
         heart_rate_payload_rows_list: List[Tuple[int, str, str]] = []  # (participant_id, iso8601_ts, S3 url)
+        
         for single_heart_rate_record in heart_rate_data_rows_sequence:
             if isinstance(single_heart_rate_record, dict):
-                timestamp_iso8601_string = self.normalize_timestamp_to_iso8601(
-                    single_heart_rate_record["ts"] # timestamp
-                )
                 object_url_string = single_heart_rate_record.get("url")
-
+                # ts is optional - default to placeholder if not provided
+                if "ts" in single_heart_rate_record:
+                    timestamp_iso8601_string = self.normalize_timestamp_to_iso8601(single_heart_rate_record["ts"])
+                else:
+                    timestamp_iso8601_string = PLACEHOLDER_TS
             else:
-                timestamp_iso8601_string = self.normalize_timestamp_to_iso8601(
-                    single_heart_rate_record[0]
-                )
-                object_url_string = single_heart_rate_record[1] if len(single_heart_rate_record) > 1 else None
+                # For tuples, check length to determine format
+                if len(single_heart_rate_record) == 1:
+                    # Just URL provided
+                    object_url_string = single_heart_rate_record[0]
+                    timestamp_iso8601_string = PLACEHOLDER_TS
+                else:
+                    # (ts, url) format
+                    timestamp_iso8601_string = self.normalize_timestamp_to_iso8601(single_heart_rate_record[0])
+                    object_url_string = single_heart_rate_record[1]
+                    
             if not object_url_string:
                 raise ValueError("heart_rate row missing required 'url' value")
 
@@ -236,67 +287,239 @@ class DB:
             )
         return database_cursor.rowcount or len(heart_rate_payload_rows_list)
 
-    # fix with parser also look at HR 
     def insert_survey(
-        self,
-        external_participant_identifier: str,
-        survey_date_value_any: Any,
-        survey_payload_dictionary: Dict[str, Any],
-    ) -> None:
-        """Upsert a daily survey JSON by (participant_id, survey_date)."""
+    self,
+    external_participant_identifier: str,
+    survey_data_rows_sequence: Sequence[Dict[str, Any] | Tuple[Any, ...]],
+    ) -> int:
+        """
+        Insert survey rows (date + URL + optional payload) for a participant.
+
+        Each row can be:
+        - dict: {"survey_date": <str/date>, "url": <str>, "payload": <dict or JSON-serializable, optional>}
+        - tuple: (<survey_date>, <url>, <payload_optional>)
+
+        Upserts on (participant_id, survey_date) like before.
+        """
         import datetime as _dt
-        participant_id_integer = self.create_participant_if_missing(external_participant_identifier)
-        if isinstance(survey_date_value_any, str):
-            survey_date_iso8601_string = survey_date_value_any
-        elif isinstance(survey_date_value_any, _dt.date):
-            survey_date_iso8601_string = survey_date_value_any.isoformat()
-        else:
-            raise TypeError("survey_date must be date or ISO string")
-        upsert_daily_survey_sql = (
-            "INSERT INTO daily_survey (participant_id, survey_date, payload) "
-            "VALUES (%s, %s, %s) "
-            "ON CONFLICT (participant_id, survey_date) DO UPDATE SET payload = EXCLUDED.payload"
+
+        participant_id_integer = self.create_participant_if_missing(
+            external_participant_identifier
         )
-        with self.temporary_database_connection() as database_connection, database_connection.cursor() as database_cursor:
-            database_cursor.execute(
-                upsert_daily_survey_sql,
+
+        survey_payload_rows_list: List[Tuple[int, str, str, str]] = []  # (participant_id, survey_date_iso, object_url, payload_json)
+
+        for single_survey_record in survey_data_rows_sequence:
+            # ----- dict style -----
+            if isinstance(single_survey_record, dict):
+                raw_date = single_survey_record["survey_date"]
+                object_url_string = single_survey_record.get("url")
+                payload_obj = single_survey_record.get("payload", {})
+            # ----- tuple style -----
+            else:
+                raw_date = single_survey_record[0]
+                object_url_string = single_survey_record[1] if len(single_survey_record) > 1 else None
+                payload_obj = single_survey_record[2] if len(single_survey_record) > 2 else {}
+
+            # normalize survey_date to YYYY-MM-DD
+            if isinstance(raw_date, str):
+                survey_date_iso8601_string = raw_date
+            elif isinstance(raw_date, _dt.date):
+                survey_date_iso8601_string = raw_date.isoformat()
+            else:
+                raise TypeError("survey_date must be date or ISO string")
+
+            if not object_url_string:
+                raise ValueError("survey row missing required 'url' (object_url) value")
+
+            survey_payload_rows_list.append(
                 (
                     participant_id_integer,
                     survey_date_iso8601_string,
-                    json.dumps(survey_payload_dictionary),
+                    object_url_string,
+                    json.dumps(payload_obj),
+                )
+            )
+
+        if not survey_payload_rows_list:
+            return 0
+
+        upsert_daily_survey_sql = """
+            INSERT INTO daily_survey (
+                participant_id,
+                survey_date,
+                object_url,
+                payload
+            )
+            VALUES %s
+            ON CONFLICT (participant_id, survey_date)
+            DO UPDATE SET
+                object_url = EXCLUDED.object_url,
+                payload    = EXCLUDED.payload
+        """
+
+        with self.temporary_database_connection() as database_connection, database_connection.cursor() as database_cursor:
+            execute_values(
+                database_cursor,
+                upsert_daily_survey_sql,
+                survey_payload_rows_list,
+                page_size=1000,
+            )
+            return database_cursor.rowcount or len(survey_payload_rows_list)
+
+    # Writes metrics about data ingestion health, sent db
+    def insert_ingestion_health(
+        self,
+        modality: str,
+        external_participant_identifier: str,
+        window_start: Any,
+        window_end: Any,
+        analysis: Dict[str, Any],
+        status: Optional[str] = None,
+    ) -> None:
+        """
+        Insert or update ingestion health record for a participant/modality/window.
+
+        `analysis` is the dict returned by analyze_uploaded_data(...), e.g.:
+
+        {
+            "format": "csv",
+            "row_count": 90000,
+            "sampling_rate_hz": 100.0,
+            "expected_samples": 90000,
+            "actual_samples": 87000,
+            "completeness": 0.966,
+            "total_gap_seconds": 2.5,
+            "gap_fraction": 0.0027,
+            "is_usable": True,
+        }
+        """
+
+        participant_id_integer = self.create_participant_if_missing(
+            external_participant_identifier
+        )
+
+        expected_samples = int(analysis.get("expected_samples", 0))
+        actual_samples = int(analysis.get("actual_samples", 0))
+        completeness = float(analysis.get("completeness", 0.0))
+
+        pct_expected = completeness * 100.0 if expected_samples > 0 else 0.0
+
+        # If caller didn't pass explicit status, derive from is_usable
+        if status is None:
+            is_usable_flag = bool(analysis.get("is_usable", False))
+            status = "OK" if is_usable_flag else "LOW"
+
+        upsert_sql = """
+            INSERT INTO ingestion_health (
+                modality, participant_id, window_start, window_end,
+                expected_count, actual_count, pct_expected, status,
+                format, row_count, sampling_rate_hz,
+                completeness, total_gap_seconds, gap_fraction, is_usable
+            )
+            VALUES (%s, %s, %s, %s,
+                    %s, %s, %s, %s,
+                    %s, %s, %s,
+                    %s, %s, %s, %s)
+            ON CONFLICT (modality, participant_id, window_start)
+            DO UPDATE SET
+                actual_count      = EXCLUDED.actual_count,
+                expected_count    = EXCLUDED.expected_count,
+                pct_expected      = EXCLUDED.pct_expected,
+                status            = EXCLUDED.status,
+                format            = EXCLUDED.format,
+                row_count         = EXCLUDED.row_count,
+                sampling_rate_hz  = EXCLUDED.sampling_rate_hz,
+                completeness      = EXCLUDED.completeness,
+                total_gap_seconds = EXCLUDED.total_gap_seconds,
+                gap_fraction      = EXCLUDED.gap_fraction,
+                is_usable         = EXCLUDED.is_usable,
+                updated_at        = now();
+        """
+
+        with self.temporary_database_connection() as conn, conn.cursor() as cur:
+            cur.execute(
+                upsert_sql,
+                (
+                    modality,
+                    participant_id_integer,
+                    window_start,
+                    window_end,
+                    expected_samples,
+                    actual_samples,
+                    pct_expected,
+                    status,
+                    analysis.get("format"),
+                    int(analysis.get("row_count", 0)),
+                    float(analysis.get("sampling_rate_hz", 0.0)),
+                    float(analysis.get("completeness", 0.0)),
+                    float(analysis.get("total_gap_seconds", 0.0)),
+                    float(analysis.get("gap_fraction", 1.0)),
+                    bool(analysis.get("is_usable", False)),
                 ),
             )
 
     # ---------------------------
-    # Refresh cache for compliance periods
+    # Update helpers
     # ---------------------------
-    def refresh_summary_cache(self, use_concurrent_refresh: bool = True) -> None: # Use after flask push insert data then refresh
-        #Refresh all daily presence materialized views. If concurrent refresh fails (e.g., first population), falls back automatically.
+    def update_recording_timestamp(
+        self,
+        kind: str,
+        row_id: int,
+        recording_timestamp_iso: str,
+    ) -> bool:
+        """
+        Update the ts field for a timeseries row to reflect the actual recording time
+        (extracted from the uploaded data file).
         
-        refresh_all_materialized_views_sql_template = (
-            "REFRESH MATERIALIZED VIEW {mode} mv_accel_daily_presence;"
-            "REFRESH MATERIALIZED VIEW {mode} mv_gyro_daily_presence;"
-            "REFRESH MATERIALIZED VIEW {mode} mv_hr_daily_presence;"
-            "REFRESH MATERIALIZED VIEW {mode} mv_survey_daily_presence;"
-        )
- 
-        def execute_refresh_with_mode(mode_clause_string: str) -> None:
-            refresh_statement_sql = refresh_all_materialized_views_sql_template.format(
-                mode=mode_clause_string
-            )
-            with self.temporary_database_connection() as database_connection, database_connection.cursor() as database_cursor:
-                database_cursor.execute(refresh_statement_sql)
-                database_connection.commit()
+        Args:
+            kind: "accel", "gyro", or "hr"
+            row_id: The database row id to update
+            recording_timestamp_iso: ISO 8601 timestamp string of when data was actually recorded
+            
+        Returns:
+            True if update succeeded, False otherwise
+        """
+        # Map kind to table name
+        table_map = {
+            "accel": "accelerometer",
+            "gyro": "gyroscope",
+            "hr": "heart_rate",
+        }
+        
+        table_name = table_map.get(kind)
+        if not table_name:
+            raise ValueError(f"Unknown kind: {kind}. Expected 'accel', 'gyro', or 'hr'")
+        
+        update_sql = sql.SQL(
+            "UPDATE {table} SET ts = %s WHERE id = %s"
+        ).format(table=sql.Identifier(table_name))
+        
+        with self.temporary_database_connection() as conn, conn.cursor() as cur:
+            cur.execute(update_sql, (recording_timestamp_iso, row_id))
+            return cur.rowcount > 0
 
-        try:
-            if use_concurrent_refresh:
-                execute_refresh_with_mode("CONCURRENTLY ")
-            else:
-                execute_refresh_with_mode("")
-        except Exception:
-            execute_refresh_with_mode("")
+    def refresh_summary_cache(self, use_concurrent_refresh: bool = True) -> None:
+        views = [
+            "mv_accel_daily_presence",
+            "mv_gyro_daily_presence",
+            "mv_hr_daily_presence",
+            "mv_survey_daily_presence",
+        ]
 
-    
+        def do_refresh(mode: str):
+            for view in views:
+                stmt = f"REFRESH MATERIALIZED VIEW {mode}{view};"
+                with self.temporary_database_connection() as conn, conn.cursor() as cur:
+                    cur.execute(stmt)
+
+        if use_concurrent_refresh:
+            try:
+                do_refresh("CONCURRENTLY ")
+            except Exception:
+                do_refresh("")
+        else:
+            do_refresh("")
     # rewrite this 
     def get_dashboard(
         self,
@@ -346,10 +569,10 @@ class DB:
     def get_compliance_for(self, external_participant_identifier: str) -> Dict[str, Any]: # let postgres handle compliance, Return a compact compliance dict for accel/gyro/hr/survey for one participant
         select_compliance_sql = """
             SELECT p.external_id,
-                   ac.days_3  AS accel_days_3, ac.days_7  AS accel_days_7, ac.meets_1_of_3 AS accel_1of3, ac.meets_4_of_7 AS accel_4of7,
-                   gc.days_3  AS gyro_days_3,  gc.days_7  AS gyro_days_7,  gc.meets_1_of_3 AS gyro_1of3,  gc.meets_4_of_7 AS gyro_4of_7,
-                   hc.days_3  AS hr_days_3,    hc.days_7  AS hr_days_7,    hc.meets_1_of_3 AS hr_1of3,    hc.meets_4_of_7 AS hr_4of_7,
-                   sc.days_3  AS survey_days_3, sc.days_7  AS survey_days_7,sc.meets_1_of_3 AS survey_1of_3,sc.meets_4_of_7 AS survey_4_of_7
+                ac.days_3  AS accel_days_3, ac.days_7  AS accel_days_7, ac.meets_1_of_3 AS accel_1of3, ac.meets_4_of_7 AS accel_4of7,
+                gc.days_3  AS gyro_days_3,  gc.days_7  AS gyro_days_7,  gc.meets_1_of_3 AS gyro_1of3,  gc.meets_4_of_7 AS gyro_4of_7,
+                hc.days_3  AS hr_days_3,    hc.days_7  AS hr_days_7,    hc.meets_1_of_3 AS hr_1of3,    hc.meets_4_of_7 AS hr_4of_7,
+                sc.days_3  AS survey_days_3, sc.days_7  AS survey_days_7,sc.meets_1_of_3 AS survey_1of_3,sc.meets_4_of_7 AS survey_4_of_7
             FROM participants p
             LEFT JOIN v_accel_compliance ac  ON ac.participant_id = p.id
             LEFT JOIN v_gyro_compliance  gc  ON gc.participant_id = p.id
@@ -364,7 +587,7 @@ class DB:
 
     def get_table(self, table_name: str) -> list[dict]: # gets all rows from a table
         # Prevent SQL injection by validating table name
-        allowed_tables = {"accelerometer", "gyroscope", "heart_rate", "daily_survey", "participants"}
+        allowed_tables = {"accelerometer", "gyroscope", "heart_rate", "daily_survey", "participants", "ingestion_health"}
         if table_name not in allowed_tables:
             raise ValueError(f"Table '{table_name}' not allowed.")
 
@@ -398,8 +621,8 @@ class DB:
             """
             SELECT d.day::text, COALESCE(pcnt, 0) AS count
             FROM generate_series(current_date - %s::int * INTERVAL '1 day' + INTERVAL '1 day',
-                                 current_date,
-                                 '1 day') AS d(day)
+                                current_date,
+                                '1 day') AS d(day)
             LEFT JOIN (
                 SELECT m.day, COUNT(*) AS pcnt
                 FROM {mv} m
@@ -443,6 +666,637 @@ class DB:
         with self.temporary_database_connection() as database_connection, database_connection.cursor() as database_cursor:
             database_cursor.execute(truncate_all_timeseries_sql)
             database_connection.commit()
+
+    # adds file size of the upload
+    def update_file_size(self, kind: str, row_id: int, file_size_megabytes: int) -> bool:
+        table_map = {"accel": "accelerometer", "gyro": "gyroscope", "hr": "heart_rate"}
+        table_name = table_map.get(kind)
+        if not table_name:
+            raise ValueError(f"Unknown kind: {kind}")
+
+        update_sql = sql.SQL("UPDATE {table} SET file_size_bytes = %s WHERE id = %s").format(
+            table=sql.Identifier(table_name)
+        )
+        with self.temporary_database_connection() as database_connection:
+            with database_connection.cursor() as database_cursor:
+                database_cursor.execute(update_sql, (file_size_megabytes, row_id))
+
+    def create_pending_uploads_table(self) -> None:
+        sql_text = """
+        CREATE TABLE IF NOT EXISTS pending_uploads (
+            upload_id      UUID PRIMARY KEY,
+            participant_id INT NOT NULL REFERENCES participants(id) ON DELETE CASCADE,
+            kind           TEXT NOT NULL CHECK (kind IN ('accel','gyro','hr','other')),
+            object_key     TEXT NOT NULL,
+            status         TEXT NOT NULL DEFAULT 'pending'
+                           CHECK (status IN ('pending','completed','failed')),
+            error_message  TEXT,
+            created_at     TIMESTAMPTZ DEFAULT now(),
+            completed_at   TIMESTAMPTZ
+        );
+        CREATE INDEX IF NOT EXISTS pending_uploads_status_created_idx
+            ON pending_uploads (status, created_at);
+
+        -- Tables created before 'other' (sensorkit/sqlite uploads) was added
+        -- still carry the old kind CHECK; widen it. No-op once it allows 'other'.
+        DO $$
+        BEGIN
+            IF EXISTS (
+                SELECT 1 FROM pg_constraint
+                WHERE conrelid = 'pending_uploads'::regclass
+                  AND conname = 'pending_uploads_kind_check'
+                  AND pg_get_constraintdef(oid) NOT LIKE '%other%'
+            ) THEN
+                ALTER TABLE pending_uploads DROP CONSTRAINT pending_uploads_kind_check;
+                ALTER TABLE pending_uploads ADD CONSTRAINT pending_uploads_kind_check
+                    CHECK (kind IN ('accel','gyro','hr','other'));
+            END IF;
+        END $$;
+        """
+        with self.temporary_database_connection() as conn, conn.cursor() as cur:
+            cur.execute(sql_text)
+
+    # ---------------------------
+    # Pending uploads helpers
+    # ---------------------------
+    def create_pending_upload(
+        self,
+        upload_id: str,
+        external_participant_identifier: str,
+        kind: str,
+        object_key: str,
+    ) -> None:
+        """Insert a pending upload record (status='pending')."""
+        participant_id_integer = self.create_participant_if_missing(external_participant_identifier)
+        sql_text = (
+            "INSERT INTO pending_uploads (upload_id, participant_id, kind, object_key) "
+            "VALUES (%s, %s, %s, %s)"
+        )
+        with self.temporary_database_connection() as conn, conn.cursor() as cur:
+            cur.execute(sql_text, (upload_id, participant_id_integer, kind, object_key))
+
+    def get_pending_upload(self, upload_id: str) -> Optional[Dict[str, Any]]:
+        """Return pending_upload row as dict (includes external_id), or None if not found."""
+        sql_text = (
+            "SELECT pu.upload_id, pu.participant_id, p.external_id, pu.kind, pu.object_key, "
+            "pu.status, pu.error_message, pu.created_at, pu.completed_at "
+            "FROM pending_uploads pu "
+            "JOIN participants p ON p.id = pu.participant_id "
+            "WHERE pu.upload_id = %s"
+        )
+        with self.temporary_database_connection() as conn, conn.cursor(cursor_factory=DictCursor) as cur:
+            cur.execute(sql_text, (upload_id,))
+            row = cur.fetchone()
+            return dict(row) if row else None
+
+    def mark_upload_completed(self, upload_id: str) -> None:
+        """Mark a pending upload as completed. Only updates if status is currently 'pending'."""
+        sql_text = (
+            "UPDATE pending_uploads SET status = 'completed', completed_at = now() "
+            "WHERE upload_id = %s AND status = 'pending'"
+        )
+        with self.temporary_database_connection() as conn, conn.cursor() as cur:
+            cur.execute(sql_text, (upload_id,))
+
+    def mark_upload_failed(self, upload_id: str, error_message: str = "") -> None:
+        """Mark a pending upload as failed. Only updates if status is currently 'pending'."""
+        sql_text = (
+            "UPDATE pending_uploads SET status = 'failed', error_message = %s, completed_at = now() "
+            "WHERE upload_id = %s AND status = 'pending'"
+        )
+        with self.temporary_database_connection() as conn, conn.cursor() as cur:
+            cur.execute(sql_text, (error_message, upload_id))
+
+    # ---------------------------
+    # Auth helpers
+    # ---------------------------
+    def create_users_table(self) -> None:
+        """Create the users table if it doesn't exist."""
+        sql_text = """
+        CREATE TABLE IF NOT EXISTS users (
+            id          SERIAL PRIMARY KEY,
+            apple_id    TEXT UNIQUE NOT NULL,
+            email       TEXT,
+            full_name   TEXT
+        );
+        """
+        with self.temporary_database_connection() as conn, conn.cursor() as cur:
+            cur.execute(sql_text)
+
+    def create_refresh_tokens_table(self) -> None:
+        """Create the refresh_tokens table if it doesn't exist."""
+        sql_text = """
+        CREATE TABLE IF NOT EXISTS refresh_tokens (
+            id          SERIAL PRIMARY KEY,
+            user_id     INTEGER NOT NULL REFERENCES users(id),
+            token_hash  TEXT UNIQUE NOT NULL,
+            expires_at  TIMESTAMP WITH TIME ZONE NOT NULL,
+            revoked     BOOLEAN DEFAULT FALSE
+        );
+        """
+        with self.temporary_database_connection() as conn, conn.cursor() as cur:
+            cur.execute(sql_text)
+
+    def get_user_by_apple_id(self, apple_id: str) -> Optional[Dict[str, Any]]:
+        """Return user dict (id, apple_id, email, full_name) or None if not found."""
+        sql_text = "SELECT id, apple_id, email, full_name FROM users WHERE apple_id = %s"
+        with self.temporary_database_connection() as conn, conn.cursor(cursor_factory=DictCursor) as cur:
+            cur.execute(sql_text, (apple_id,))
+            row = cur.fetchone()
+            return dict(row) if row else None
+
+    def create_refresh_token(self, user_id: int, token_hash: str, expires_at: Any) -> None:
+        """Insert a refresh token record (stores SHA-256 hash, not raw token)."""
+        sql_text = "INSERT INTO refresh_tokens (user_id, token_hash, expires_at) VALUES (%s, %s, %s)"
+        with self.temporary_database_connection() as conn, conn.cursor() as cur:
+            cur.execute(sql_text, (user_id, token_hash, expires_at))
+
+    def get_refresh_token_by_hash(self, token_hash: str) -> Optional[Dict[str, Any]]:
+        """Return refresh token record dict (user_id, revoked, expires_at) or None."""
+        sql_text = "SELECT id, user_id, token_hash, expires_at, revoked FROM refresh_tokens WHERE token_hash = %s"
+        with self.temporary_database_connection() as conn, conn.cursor(cursor_factory=DictCursor) as cur:
+            cur.execute(sql_text, (token_hash,))
+            row = cur.fetchone()
+            return dict(row) if row else None
+
+    def revoke_refresh_token(self, token_hash: str) -> None:
+        """Mark a refresh token as revoked by its hash."""
+        sql_text = "UPDATE refresh_tokens SET revoked = TRUE WHERE token_hash = %s"
+        with self.temporary_database_connection() as conn, conn.cursor() as cur:
+            cur.execute(sql_text, (token_hash,))
+
+    # ---------------------------
+    # Device token helpers
+    # ---------------------------
+    def create_device_tokens_table(self) -> None:
+        """Create the device_tokens table and indexes if they don't exist."""
+        sql_text = """
+        CREATE TABLE IF NOT EXISTS device_tokens (
+            id SERIAL PRIMARY KEY,
+            device_token VARCHAR(255) NOT NULL UNIQUE,
+            user_id TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_device_token ON device_tokens(device_token);
+        """
+        with self.temporary_database_connection() as conn, conn.cursor() as cur:
+            cur.execute(sql_text)
+
+    def upsert_device_token(self, device_token: str, user_id: str) -> None:
+        """Insert a device token or update its user_id/timestamp if it already exists."""
+        sql_text = """
+        INSERT INTO device_tokens (device_token, user_id)
+        VALUES (%s, %s)
+        ON CONFLICT (device_token)
+        DO UPDATE SET user_id = EXCLUDED.user_id, created_at = CURRENT_TIMESTAMP;
+        """
+        with self.temporary_database_connection() as conn, conn.cursor() as cur:
+            cur.execute(sql_text, (device_token, user_id))
+
+    def get_all_device_tokens(self) -> List[str]:
+        """Return a list of all stored device token strings."""
+        sql_text = "SELECT device_token FROM device_tokens;"
+        with self.temporary_database_connection() as conn, conn.cursor() as cur:
+            cur.execute(sql_text)
+            return [row[0] for row in cur.fetchall()]
+
+    # ---------------------------
+    # Profile sync (see PROFILE_API.md and routes/profile.py)
+    # ---------------------------
+    def create_profiles_table(self) -> None:
+        """Create the profiles table if it doesn't exist.
+
+        One raw JSON document per participant, stored verbatim (local-wins,
+        no normalization). updated_at is unix seconds; DOUBLE PRECISION
+        because REAL (float4) can't hold current unix timestamps exactly.
+        """
+        sql_text = """
+        CREATE TABLE IF NOT EXISTS profiles (
+            participant_id TEXT PRIMARY KEY,
+            profile_json   TEXT NOT NULL,
+            updated_at     DOUBLE PRECISION NOT NULL
+        );
+        """
+        with self.temporary_database_connection() as conn, conn.cursor() as cur:
+            cur.execute(sql_text)
+
+    def get_profile_json(self, participant_id: str) -> Optional[str]:
+        """Return the stored raw profile JSON string, or None if absent."""
+        sql_text = "SELECT profile_json FROM profiles WHERE participant_id = %s"
+        with self.temporary_database_connection() as conn, conn.cursor() as cur:
+            cur.execute(sql_text, (participant_id,))
+            row = cur.fetchone()
+            return row[0] if row else None
+
+    def upsert_profile_json(
+        self, participant_id: str, profile_json: str, updated_at: float
+    ) -> None:
+        """Replace the whole stored profile document (local-wins: no merge)."""
+        sql_text = """
+        INSERT INTO profiles (participant_id, profile_json, updated_at)
+        VALUES (%s, %s, %s)
+        ON CONFLICT (participant_id)
+        DO UPDATE SET profile_json = EXCLUDED.profile_json, updated_at = EXCLUDED.updated_at;
+        """
+        with self.temporary_database_connection() as conn, conn.cursor() as cur:
+            cur.execute(sql_text, (participant_id, profile_json, updated_at))
+
+    # ---------------------------
+    # Enrollment codes (gate account creation in /auth/login — PROFILE_API.md)
+    # ---------------------------
+    def create_enrollment_codes_table(self) -> None:
+        """Create the enrollment_codes table if it doesn't exist.
+
+        Coordinator-managed via manage_enrollment_codes.py. Codes are
+        single-use: used_by/used_at are set when a code enrolls an account,
+        after which it can't enroll anyone else.
+        """
+        sql_text = """
+        CREATE TABLE IF NOT EXISTS enrollment_codes (
+            code        TEXT PRIMARY KEY,
+            active      BOOLEAN NOT NULL DEFAULT TRUE,
+            used_by     INTEGER REFERENCES users(id),
+            used_at     TIMESTAMP WITH TIME ZONE
+        );
+        """
+        with self.temporary_database_connection() as conn, conn.cursor() as cur:
+            cur.execute(sql_text)
+
+    def enroll_user_with_code(
+        self, apple_id: str, code: str, participant_id: str
+    ) -> Optional[Dict[str, Any]]:
+        """Create the user, consume `code`, and assign the participant's study
+        id — all in one transaction, so every enrolled account has a study id
+        and every study id belongs to an enrolled account.
+
+        Returns the new user dict, or None (nothing written) if the code is
+        unknown, inactive, or already used. The conditional UPDATE row-locks
+        the code, so two people racing for the same code can't both get it.
+        """
+        with self.temporary_database_connection() as conn:
+            conn.autocommit = False
+            with conn, conn.cursor(cursor_factory=DictCursor) as cur:
+                cur.execute(
+                    "INSERT INTO users (apple_id) VALUES (%s) RETURNING id, apple_id, email, full_name",
+                    (apple_id,),
+                )
+                user = dict(cur.fetchone())
+                cur.execute(
+                    "UPDATE enrollment_codes SET used_by = %s, used_at = NOW() "
+                    "WHERE code = %s AND active AND used_by IS NULL RETURNING code",
+                    (user["id"], code),
+                )
+                if cur.fetchone() is None:
+                    conn.rollback()
+                    return None
+                cur.execute(self._ASSIGN_STUDY_ID_SQL, (participant_id, time.time()))
+                return user
+
+    def add_enrollment_code(self, code: str) -> bool:
+        """Insert a new active code. Returns False if the code already exists
+        (existing codes are left alone so a used code is never reissued)."""
+        sql_text = "INSERT INTO enrollment_codes (code) VALUES (%s) ON CONFLICT (code) DO NOTHING"
+        with self.temporary_database_connection() as conn, conn.cursor() as cur:
+            cur.execute(sql_text, (code,))
+            return cur.rowcount == 1
+
+    def set_enrollment_code_active(self, code: str, active: bool) -> int:
+        """Activate/deactivate a code. Returns number of rows changed (0/1)."""
+        sql_text = "UPDATE enrollment_codes SET active = %s WHERE code = %s"
+        with self.temporary_database_connection() as conn, conn.cursor() as cur:
+            cur.execute(sql_text, (active, code))
+            return cur.rowcount or 0
+
+    def list_enrollment_codes(self) -> List[Dict[str, Any]]:
+        """Return all codes ordered by code, with the study id of the
+        participant who used each one (None while unused)."""
+        sql_text = """
+        SELECT c.code, c.active, c.used_by, c.used_at, s.study_id
+        FROM enrollment_codes c
+        LEFT JOIN account_participants a ON a.user_id = c.used_by
+        LEFT JOIN study_ids s ON s.participant_id = a.participant_id
+        ORDER BY c.code
+        """
+        with self.temporary_database_connection() as conn, conn.cursor(cursor_factory=DictCursor) as cur:
+            cur.execute(sql_text)
+            return [dict(row) for row in cur.fetchall()]
+
+    # ---------------------------
+    # Coordinator roster (study_roster.py): who enrolled, and what data each
+    # participant hash has sent. accel/gyro/hr/survey come from their tables;
+    # "other" (SensorKit, SQLite, ...) only exists as completed presigned uploads.
+    # ---------------------------
+    _UPLOADS_PER_PARTICIPANT_CTE = """
+        WITH uploads AS (
+            SELECT participant_id, 'accel' AS kind, uploaded_at FROM accelerometer
+            UNION ALL SELECT participant_id, 'gyro', uploaded_at FROM gyroscope
+            UNION ALL SELECT participant_id, 'hr', uploaded_at FROM heart_rate
+            UNION ALL SELECT participant_id, 'survey', uploaded_at FROM daily_survey
+            UNION ALL SELECT participant_id, 'other', completed_at FROM pending_uploads
+                      WHERE kind = 'other' AND status = 'completed'
+        ), per_kind AS (
+            SELECT p.external_id, u.kind, count(*) AS uploads, max(u.uploaded_at) AS last_upload
+            FROM uploads u JOIN participants p ON p.id = u.participant_id
+            GROUP BY p.external_id, u.kind
+        )
+    """
+
+    def get_study_roster(self) -> List[Dict[str, Any]]:
+        """One row per (enrolled participant, data kind); kind is None for an
+        enrolled participant with no data yet. Ordered by study id."""
+        sql_text = self._UPLOADS_PER_PARTICIPANT_CTE + """
+        SELECT s.study_id, a.participant_id, c.code, c.used_at AS enrolled_at,
+               k.kind, k.uploads, k.last_upload
+        FROM account_participants a
+        LEFT JOIN study_ids s ON s.participant_id = a.participant_id
+        LEFT JOIN enrollment_codes c ON c.used_by = a.user_id
+        LEFT JOIN per_kind k ON k.external_id = a.participant_id
+        ORDER BY length(s.study_id), s.study_id, k.kind
+        """
+        with self.temporary_database_connection() as conn, conn.cursor(cursor_factory=DictCursor) as cur:
+            cur.execute(sql_text)
+            return [dict(row) for row in cur.fetchall()]
+
+    def get_unenrolled_uploads(self) -> List[Dict[str, Any]]:
+        """Data sent under participant hashes with no enrolled account —
+        strangers, test phones, or demo-mode installs. Newest first."""
+        sql_text = self._UPLOADS_PER_PARTICIPANT_CTE + """
+        SELECT k.external_id AS participant_id, k.kind, k.uploads, k.last_upload
+        FROM per_kind k
+        WHERE NOT EXISTS (
+            SELECT 1 FROM account_participants a WHERE a.participant_id = k.external_id
+        )
+        ORDER BY k.last_upload DESC
+        """
+        with self.temporary_database_connection() as conn, conn.cursor(cursor_factory=DictCursor) as cur:
+            cur.execute(sql_text)
+            return [dict(row) for row in cur.fetchall()]
+
+    # ---------------------------
+    # Sign-in hardening: enrollment attempt limit + Apple nonce replay guard
+    # ---------------------------
+    def create_enrollment_attempts_table(self) -> None:
+        sql_text = """
+        CREATE TABLE IF NOT EXISTS enrollment_attempts (
+            participant_id TEXT NOT NULL,
+            attempted_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+        CREATE INDEX IF NOT EXISTS enrollment_attempts_pid_idx
+            ON enrollment_attempts (participant_id, attempted_at);
+        """
+        with self.temporary_database_connection() as conn, conn.cursor() as cur:
+            cur.execute(sql_text)
+
+    def record_enrollment_attempt(self, participant_id: str, window_seconds: int) -> int:
+        """Log an enrollment attempt and return how many this participant made
+        in the last `window_seconds`, this one included. Logging before
+        counting keeps the limit exact even under concurrent requests."""
+        with self.temporary_database_connection() as conn, conn.cursor() as cur:
+            cur.execute("DELETE FROM enrollment_attempts WHERE attempted_at < now() - interval '1 day'")
+            cur.execute("INSERT INTO enrollment_attempts (participant_id) VALUES (%s)", (participant_id,))
+            cur.execute(
+                "SELECT count(*) FROM enrollment_attempts "
+                "WHERE participant_id = %s AND attempted_at > now() - make_interval(secs => %s)",
+                (participant_id, window_seconds),
+            )
+            return cur.fetchone()[0]
+
+    def create_apple_nonces_table(self) -> None:
+        sql_text = """
+        CREATE TABLE IF NOT EXISTS apple_nonces (
+            nonce_hash TEXT PRIMARY KEY,
+            expires_at TIMESTAMPTZ NOT NULL
+        );
+        """
+        with self.temporary_database_connection() as conn, conn.cursor() as cur:
+            cur.execute(sql_text)
+
+    def claim_apple_nonce(self, nonce_hash: str, expires_at_unix: float) -> bool:
+        """Record a nonce as used. False if it was already used (a replay).
+        Rows only need to outlive the identity token, so expired ones are pruned."""
+        with self.temporary_database_connection() as conn, conn.cursor() as cur:
+            cur.execute("DELETE FROM apple_nonces WHERE expires_at < now()")
+            cur.execute(
+                "INSERT INTO apple_nonces (nonce_hash, expires_at) VALUES (%s, to_timestamp(%s)) "
+                "ON CONFLICT (nonce_hash) DO NOTHING",
+                (nonce_hash, expires_at_unix),
+            )
+            return cur.rowcount == 1
+
+    # ---------------------------
+    # Study ids (server-authoritative — see PROFILE_API.md v2, GET /api/getstudyid)
+    #
+    # Maps the anonymous participant_id hash to a friendly, sequential study id
+    # (P01, P02, …). This map is the account↔participant kind of link the
+    # "Identity" section says to keep SILOED from the research dataset — it is
+    # its own table, never joined into the sensor/survey tables.
+    # ---------------------------
+    def create_study_ids_table(self) -> None:
+        """Create the study_ids table (+ its numbering sequence) if absent.
+
+        study_id is derived from a Postgres SEQUENCE so concurrent first-touch
+        requests for different participants can never collide on a number;
+        the participant_id PK + ON CONFLICT makes assignment idempotent per
+        participant (see get_or_assign_study_id). assigned_at is unix seconds
+        (DOUBLE PRECISION, like profiles.updated_at).
+        """
+        sql_text = """
+        CREATE SEQUENCE IF NOT EXISTS study_id_seq;
+        CREATE TABLE IF NOT EXISTS study_ids (
+            participant_id TEXT PRIMARY KEY,
+            study_id       TEXT UNIQUE NOT NULL,
+            assigned_at    DOUBLE PRECISION NOT NULL
+        );
+        """
+        with self.temporary_database_connection() as conn, conn.cursor() as cur:
+            cur.execute(sql_text)
+
+    def get_study_id(self, participant_id: str) -> Optional[str]:
+        """Return this participant's study id, or None if not yet assigned.
+
+        Read-only — never consumes a sequence value. Used by the upload route
+        to overwrite the (server-owned) study_id echoed by the phone.
+        """
+        sql_text = "SELECT study_id FROM study_ids WHERE participant_id = %s"
+        with self.temporary_database_connection() as conn, conn.cursor() as cur:
+            cur.execute(sql_text, (participant_id,))
+            row = cur.fetchone()
+            return row[0] if row else None
+
+    # Next friendly id ('P' + zero-padded sequence value); a no-op returning
+    # nothing when the participant already has one.
+    _ASSIGN_STUDY_ID_SQL = """
+        INSERT INTO study_ids (participant_id, study_id, assigned_at)
+        VALUES (%s, 'P' || lpad(nextval('study_id_seq')::text, 2, '0'), %s)
+        ON CONFLICT (participant_id) DO NOTHING
+        RETURNING study_id;
+    """
+
+    def get_or_assign_study_id(self, participant_id: str, assigned_at: float) -> str:
+        """Return this participant's study id, assigning the next one if new.
+
+        Idempotent and race-safe:
+          * Fast path — an already-assigned participant returns immediately and
+            never burns a sequence value.
+          * A new participant claims 'P' || nextval('study_id_seq'). The
+            ON CONFLICT (participant_id) DO NOTHING settles the rare case of two
+            concurrent requests for the *same* new hash — the loser's INSERT is
+            a no-op and it re-reads the winner's id. Two *different* new hashes
+            get distinct sequence numbers, so study_id never collides.
+        (A concurrent same-hash race can leave a one-off gap in the numbers;
+        harmless — ids stay unique and anonymous, and it essentially never
+        happens because the fast path short-circuits repeat requests.)
+        """
+        with self.temporary_database_connection() as conn, conn.cursor() as cur:
+            cur.execute(
+                "SELECT study_id FROM study_ids WHERE participant_id = %s",
+                (participant_id,),
+            )
+            row = cur.fetchone()
+            if row:
+                return row[0]
+
+            cur.execute(self._ASSIGN_STUDY_ID_SQL, (participant_id, assigned_at))
+            row = cur.fetchone()
+            if row:
+                return row[0]
+
+            # Lost a concurrent race for this same participant — read the
+            # winner's assignment.
+            cur.execute(
+                "SELECT study_id FROM study_ids WHERE participant_id = %s",
+                (participant_id,),
+            )
+            return cur.fetchone()[0]
+
+    def list_study_ids(self) -> List[Dict[str, Any]]:
+        """Return all participant→study_id assignments, ordered by study_id."""
+        sql_text = (
+            "SELECT participant_id, study_id, assigned_at FROM study_ids "
+            "ORDER BY study_id"
+        )
+        with self.temporary_database_connection() as conn, conn.cursor(cursor_factory=DictCursor) as cur:
+            cur.execute(sql_text)
+            return [dict(row) for row in cur.fetchall()]
+
+    # ---------------------------
+    # Survey schedule (server-authoritative — see PROFILE_API.md v2,
+    # GET /api/getsurveystatus). Coordinators set the check-in cadence per
+    # participant via manage_survey_schedule.py; the phone only reads it.
+    # ---------------------------
+    def create_survey_schedule_table(self) -> None:
+        """Create the survey_schedule table if it doesn't exist.
+
+        One row per participant. cadence is one of daily/weekly/paused/ended
+        (matches iOS SurveyCadence). weekly_day is 1=Sunday…7=Saturday
+        (Calendar.component(.weekday)), NULL except for weekly. updated_at is
+        the coordinator's last change time in unix seconds.
+        """
+        sql_text = """
+        CREATE TABLE IF NOT EXISTS survey_schedule (
+            participant_id TEXT PRIMARY KEY,
+            cadence        TEXT NOT NULL,
+            weekly_day     INTEGER,
+            note           TEXT,
+            updated_at     DOUBLE PRECISION NOT NULL
+        );
+        """
+        with self.temporary_database_connection() as conn, conn.cursor() as cur:
+            cur.execute(sql_text)
+
+    def get_survey_schedule(self, participant_id: str) -> Optional[Dict[str, Any]]:
+        """Return {cadence, weekly_day, note, updated_at} or None if unset."""
+        sql_text = (
+            "SELECT cadence, weekly_day, note, updated_at FROM survey_schedule "
+            "WHERE participant_id = %s"
+        )
+        with self.temporary_database_connection() as conn, conn.cursor(cursor_factory=DictCursor) as cur:
+            cur.execute(sql_text, (participant_id,))
+            row = cur.fetchone()
+            return dict(row) if row else None
+
+    def upsert_survey_schedule(
+        self,
+        participant_id: str,
+        cadence: str,
+        weekly_day: Optional[int],
+        note: Optional[str],
+        updated_at: float,
+    ) -> None:
+        """Set (or replace) a participant's coordinator-owned check-in schedule."""
+        sql_text = """
+        INSERT INTO survey_schedule (participant_id, cadence, weekly_day, note, updated_at)
+        VALUES (%s, %s, %s, %s, %s)
+        ON CONFLICT (participant_id)
+        DO UPDATE SET cadence = EXCLUDED.cadence,
+                      weekly_day = EXCLUDED.weekly_day,
+                      note = EXCLUDED.note,
+                      updated_at = EXCLUDED.updated_at;
+        """
+        with self.temporary_database_connection() as conn, conn.cursor() as cur:
+            cur.execute(sql_text, (participant_id, cadence, weekly_day, note, updated_at))
+
+    def list_survey_schedules(self) -> List[Dict[str, Any]]:
+        """Return all survey schedules, ordered by participant_id."""
+        sql_text = (
+            "SELECT participant_id, cadence, weekly_day, note, updated_at "
+            "FROM survey_schedule ORDER BY participant_id"
+        )
+        with self.temporary_database_connection() as conn, conn.cursor(cursor_factory=DictCursor) as cur:
+            cur.execute(sql_text)
+            return [dict(row) for row in cur.fetchall()]
+
+    # ---------------------------
+    # Account ↔ participant map (authorizes profile access when
+    # REQUIRE_PROFILE_AUTH is on — see auth/routes.py login() and
+    # routes/profile.py require_profile_access).
+    #
+    # This is the auth-account ↔ participant_id link the "Identity" section of
+    # PROFILE_API.md says to keep SILOED from the research dataset: its own
+    # table, never joined into the sensor/survey tables. Populated at login by
+    # hashing the Apple sub the same way the phone does (SHA-256 hex), so the
+    # server can verify a token's user owns a given participant hash without the
+    # phone ever sending it.
+    # ---------------------------
+    def create_account_participants_table(self) -> None:
+        """Create the account_participants map if it doesn't exist."""
+        sql_text = """
+        CREATE TABLE IF NOT EXISTS account_participants (
+            user_id        INTEGER PRIMARY KEY REFERENCES users(id),
+            participant_id TEXT UNIQUE NOT NULL,
+            linked_at      DOUBLE PRECISION NOT NULL
+        );
+        """
+        with self.temporary_database_connection() as conn, conn.cursor() as cur:
+            cur.execute(sql_text)
+
+    def link_account_participant(
+        self, user_id: int, participant_id: str, linked_at: float
+    ) -> None:
+        """Idempotently record a user's participant hash (set at every login)."""
+        sql_text = """
+        INSERT INTO account_participants (user_id, participant_id, linked_at)
+        VALUES (%s, %s, %s)
+        ON CONFLICT (user_id)
+        DO UPDATE SET participant_id = EXCLUDED.participant_id;
+        """
+        with self.temporary_database_connection() as conn, conn.cursor() as cur:
+            cur.execute(sql_text, (user_id, participant_id, linked_at))
+
+    def is_enrolled_participant(self, participant_id: str) -> bool:
+        """True if this participant hash belongs to an account that enrolled."""
+        sql_text = "SELECT 1 FROM account_participants WHERE participant_id = %s"
+        with self.temporary_database_connection() as conn, conn.cursor() as cur:
+            cur.execute(sql_text, (participant_id,))
+            return cur.fetchone() is not None
+
+    def get_participant_id_for_user(self, user_id: int) -> Optional[str]:
+        """Return the participant hash linked to this account, or None."""
+        sql_text = "SELECT participant_id FROM account_participants WHERE user_id = %s"
+        with self.temporary_database_connection() as conn, conn.cursor() as cur:
+            cur.execute(sql_text, (user_id,))
+            row = cur.fetchone()
+            return row[0] if row else None
 
 # db = DB()
 
