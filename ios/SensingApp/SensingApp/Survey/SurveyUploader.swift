@@ -160,7 +160,7 @@ final class SurveyUploader {
         // Remove this fallback once configure() is wired up at launch.
         print("SurveyUploader: authManager not configured — using unauthenticated fallback.")
 
-        guard let url = URL(string: "http://18.116.67.186/api/uploadjson/survey") else {
+        guard let url = URL(string: "\(S3UploadConfig.baseURL)/api/uploadjson/survey") else {
             throw UploadError.invalidURL
         }
 

@@ -142,9 +142,9 @@ class SecureAuthManager: ObservableObject {
 
     // MARK: - API Configuration
     //
-    // Swap this string when the backend URL is confirmed.
+    // HTTPS Lambda proxy in front of the backend (same host as S3 uploads).
     // Nothing else needs to change — all endpoints build from this.
-    var baseURL = "http://18.116.67.186"
+    var baseURL = S3UploadConfig.baseURL
 
     var session: URLSession = .shared
 

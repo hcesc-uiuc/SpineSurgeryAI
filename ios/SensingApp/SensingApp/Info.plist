@@ -13,11 +13,6 @@
 	</array>
 	<key>LSSupportsOpeningDocumentsInPlace</key>
 	<true/>
-	<key>NSAppTransportSecurity</key>
-	<dict>
-		<key>NSAllowsArbitraryLoads</key>
-		<true/>
-	</dict>
 	<key>NSHealthShareUsageDescription</key>
 	<string>This app reads your health data to track steps and heart rate.</string>
 	<key>NSHealthUpdateUsageDescription</key>

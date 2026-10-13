@@ -19,7 +19,7 @@ class UploadToServer {
     func uploadDeviceTokenToServer(deviceToken: String) async -> String{
         //var linkToPost: String = "http://ec2-18-219-220-161.us-east-2.compute.amazonaws.com:5000/uploadDeviceToken"
         
-        var linkToPost: String = "http://18.116.67.186/api/uploadDeviceToken"
+        let linkToPost: String = "\(S3UploadConfig.baseURL)/api/uploadDeviceToken"
         let body : [String: Any] = [
             "title": "Upload device token",
             "deviceToken": deviceToken,
