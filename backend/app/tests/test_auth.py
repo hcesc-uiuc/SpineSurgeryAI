@@ -238,23 +238,27 @@ class TestNonce:
         with patch('auth.routes.verify_apple_token', return_value=payload):
             return client.post('/auth/login', json=body)
 
-    def test_wrong_code_leaves_nonce_unused_for_retry(self, client, mock_db):
-        """403 on a bad code must not burn the nonce: the app retries with the
-        same Apple credential and the right code."""
+    def test_wrong_code_uses_up_the_nonce(self, client, mock_db):
+        """Each nonce authorizes one attempt, even a refused one: replaying a
+        captured first sign-in with another code must fail. The app signs in
+        with Apple again (fresh nonce) to send the code."""
         mock_db.get_user_by_apple_id.return_value = None
         mock_db.enroll_user_with_code.return_value = None
         assert self._enroll(client, '000000').status_code == 403
-        mock_db.claim_apple_nonce.assert_not_called()
-
-        mock_db.enroll_user_with_code.return_value = {'id': 7, 'apple_id': APPLE_SUB}
-        assert self._enroll(client, VALID_CODE).status_code == 200
         mock_db.claim_apple_nonce.assert_called_once_with(NONCE_HASH, 2_000_000_000)
 
-    def test_rate_limited_attempt_leaves_nonce_unused(self, client, mock_db):
+        mock_db.claim_apple_nonce.return_value = False        # now used
+        mock_db.enroll_user_with_code.return_value = {'id': 7, 'apple_id': APPLE_SUB}
+        resp = self._enroll(client, VALID_CODE)
+        assert resp.status_code == 401
+        assert resp.get_json()['error'] == 'invalid_nonce'
+        mock_db.enroll_user_with_code.assert_called_once()     # only the first try
+
+    def test_nonce_claimed_before_rate_limit(self, client, mock_db):
         mock_db.get_user_by_apple_id.return_value = None
         mock_db.record_enrollment_attempt.return_value = 6
         assert self._enroll(client, VALID_CODE).status_code == 429
-        mock_db.claim_apple_nonce.assert_not_called()
+        mock_db.claim_apple_nonce.assert_called_once()
 
     def test_replay_writes_nothing(self, client, mock_db):
         """A replayed nonce is refused before the account link or tokens."""
@@ -262,6 +266,14 @@ class TestNonce:
         resp = self._login(client, nonce_claim=NONCE_HASH, body_nonce=RAW_NONCE)
         assert resp.get_json()['error'] == 'invalid_nonce'
         mock_db.link_account_participant.assert_not_called()
+        mock_db.create_refresh_token.assert_not_called()
+
+    def test_token_with_nonce_claim_needs_the_nonce_even_with_flag_off(self, client, mock_db):
+        """A token minted for a nonce-sending build can't be used by leaving the
+        nonce out, before REQUIRE_APPLE_NONCE is turned on."""
+        resp = self._login(client, nonce_claim=NONCE_HASH)
+        assert resp.status_code == 401
+        assert resp.get_json()['error'] == 'invalid_nonce'
         mock_db.create_refresh_token.assert_not_called()
 
 

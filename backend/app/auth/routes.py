@@ -24,8 +24,7 @@ def _sha256(text: str) -> str:
 
 def _nonce_hash_if_valid(raw_nonce, apple_payload: dict):
     """Sign in with Apple nonce check: the app sent the raw nonce and Apple
-    signed SHA-256(raw nonce) into the token. Returns that hash, or None.
-    No DB write here; the nonce is claimed only once login succeeds."""
+    signed SHA-256(raw nonce) into the token. Returns that hash, or None."""
     expected = apple_payload.get('nonce')
     if not isinstance(raw_nonce, str) or not isinstance(expected, str):
         return None
@@ -62,21 +61,25 @@ def login():
     except Exception:
         return jsonify({'error': 'invalid_identity_token'}), 401
 
-    # Nonce: always checked when sent; required once REQUIRE_APPLE_NONCE is on
-    # (old builds that don't send one keep working until then).
+    db = current_app.config['DB']
+
+    # Nonce: checked whenever the app sent one or Apple signed one into the
+    # token (so a token minted with a nonce can't be used without it), and
+    # required for every login once REQUIRE_APPLE_NONCE is on. Old builds send
+    # neither and keep working until then. Each nonce authorizes exactly one
+    # attempt, claimed before anything else: the app signs in with Apple again
+    # to send an enrollment code.
     raw_nonce = body.get('nonce')
-    nonce_hash = None
-    if raw_nonce is not None or current_app.config.get('REQUIRE_APPLE_NONCE'):
+    if (raw_nonce is not None or apple_payload.get('nonce') is not None
+            or current_app.config.get('REQUIRE_APPLE_NONCE')):
         nonce_hash = _nonce_hash_if_valid(raw_nonce, apple_payload)
-        if nonce_hash is None:
+        if nonce_hash is None or not db.claim_apple_nonce(nonce_hash, apple_payload['exp']):
             return jsonify({'error': 'invalid_nonce'}), 401
 
     apple_user_id = apple_payload['sub']
     # SHA-256(apple_sub) — exactly what iOS ParticipantID.hash() computes — so
     # the server derives it rather than trusting the client.
     participant_id = _sha256(apple_user_id)
-
-    db = current_app.config['DB']
 
     user = db.get_user_by_apple_id(apple_user_id)
     if not user:
@@ -98,11 +101,6 @@ def login():
         )
         if not user:
             return jsonify({'error': 'invalid_enrollment_code'}), 403
-
-    # Claim the nonce only now: a 403/429 above leaves it unused so the app can
-    # retry with a code, while a replay of a successful login is refused here.
-    if nonce_hash and not db.claim_apple_nonce(nonce_hash, apple_payload['exp']):
-        return jsonify({'error': 'invalid_nonce'}), 401
 
     # Record the account↔participant link so profile endpoints can authorize by
     # participant hash when REQUIRE_PROFILE_AUTH is on. Idempotent: re-linked
