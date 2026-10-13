@@ -281,6 +281,11 @@ class TestStartupCheck:
         with patch('app.DB', return_value=mock_db), pytest.raises(RuntimeError, match=message):
             create_app(settings)
 
+    def test_backfills_participant_links_after_creating_the_table(self, app, mock_db):
+        """Accounts that only refresh never hit /auth/login, so startup links them."""
+        names = [c[0] for c in mock_db.method_calls]
+        assert names.index('backfill_account_participants') > names.index('create_account_participants_table')
+
 
 # ---------------------------------------------------------------------------
 # Refresh tests

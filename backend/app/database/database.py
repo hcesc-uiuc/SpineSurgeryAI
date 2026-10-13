@@ -1290,6 +1290,21 @@ class DB:
             cur.execute(sql_text, (participant_id,))
             return cur.fetchone() is not None
 
+    def backfill_account_participants(self) -> int:
+        """Link every account to SHA-256(apple_id), the same hash /auth/login
+        computes. Accounts that only ever refresh never hit login, so without
+        this they have no link and require_participant answers 403.
+        Idempotent; never overwrites an existing link. Returns rows added."""
+        sql_text = """
+        INSERT INTO account_participants (user_id, participant_id, linked_at)
+        SELECT id, encode(sha256(convert_to(apple_id, 'UTF8')), 'hex'), extract(epoch FROM now())
+        FROM users
+        ON CONFLICT DO NOTHING;
+        """
+        with self.temporary_database_connection() as conn, conn.cursor() as cur:
+            cur.execute(sql_text)
+            return cur.rowcount or 0
+
     def get_participant_id_for_user(self, user_id: int) -> Optional[str]:
         """Return the participant hash linked to this account, or None."""
         sql_text = "SELECT participant_id FROM account_participants WHERE user_id = %s"

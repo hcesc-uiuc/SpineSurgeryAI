@@ -51,6 +51,7 @@ def create_app(config_overrides=None):
         app.config["DB"].create_study_ids_table()
         app.config["DB"].create_survey_schedule_table()
         app.config["DB"].create_account_participants_table()  # references users(id)
+        app.config["DB"].backfill_account_participants()      # accounts that only refresh
         app.config["DB"].create_enrollment_attempts_table()
         app.config["DB"].create_apple_nonces_table()
 
