@@ -393,25 +393,26 @@ class SecureAuthManager: ObservableObject {
     //
     // Calls POST /auth/logout to invalidate the refresh token server-side,
     // then clears all tokens from Keychain regardless of server response.
-    func logout() {
+    //
+    // The request is built BEFORE clearTokens(): this class is @MainActor, so
+    // the Task only runs after logout() returns, when the Keychain is already
+    // empty. Reading the token inside the Task meant the revoke was never sent.
+    // Returns the in-flight revoke so tests can await it.
+    @discardableResult
+    func logout() -> Task<Void, Never>? {
+        var revoke: Task<Void, Never>?
         // ── DEMO MODE: skip network call ─────────────────────────
-        if !demoMode {
+        if !demoMode,
         // ── END DEMO MODE GUARD ─────────────────────────────────────
-            Task {
-                guard
-                    let refreshToken = readToken(key: refreshTokenKey),
-                    let url = URL(string: "\(baseURL)/auth/logout")
-                else { return }
-
-                var request        = URLRequest(url: url)
-                request.httpMethod = "POST"
-                request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-                request.httpBody = try? JSONEncoder().encode(["refresh_token": refreshToken])
-                _ = try? await session.data(for: request)
-            }
-        // ── DEMO MODE closing brace ──────────────────────────────
+           let refreshToken = readToken(key: refreshTokenKey),
+           let url = URL(string: "\(baseURL)/auth/logout") {
+            var request        = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.httpBody = try? JSONEncoder().encode(["refresh_token": refreshToken])
+            let session = self.session
+            revoke = Task { _ = try? await session.data(for: request) }
         }
-        // ── END DEMO MODE GUARD ─────────────────────────────────────
 
         UserDefaults.standard.removeObject(forKey: "demo_session_active")
         clearTokens()
@@ -419,6 +420,7 @@ class SecureAuthManager: ObservableObject {
         // on a signed-out phone. bootstrap re-arms them on the next sign-in.
         SurveyNotificationManager.shared.cancelReminder()
         isAuthenticated = false
+        return revoke
     }
 
     // MARK: - Private Helpers
