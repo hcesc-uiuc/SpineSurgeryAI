@@ -73,6 +73,12 @@ def create_app(config_overrides=None):
     @app.route("/")
     def home():
         return render_template(("home.html"))
+
+    # Docker HEALTHCHECK target. Liveness only: no DB call, so an RDS blip
+    # doesn't flap the container.
+    @app.route("/health")
+    def health():
+        return jsonify(status="ok")
     
     # add a function in database.py (temperorary solution for participant data retrieval)
     @app.route("/heatmap/<participant_id>", methods=["GET"])
