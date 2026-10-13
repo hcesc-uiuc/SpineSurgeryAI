@@ -17,6 +17,7 @@ TEST_BUNDLE_ID  = 'com.test.app'
 def mock_db():
     db = MagicMock()
     db.record_enrollment_attempt.return_value = 1  # first try in the window
+    db.count_enrollment_attempts.return_value = 1  # quiet hour across all accounts
     db.claim_apple_nonce.return_value = True       # nonce not seen before
     return db
 

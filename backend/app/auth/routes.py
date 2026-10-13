@@ -16,6 +16,10 @@ REFRESH_TOKEN_TTL = timedelta(days=365)
 # A new account gets this many enrollment-code tries per rolling window.
 ENROLLMENT_MAX_ATTEMPTS   = 5
 ENROLLMENT_WINDOW_SECONDS = 3600
+# Code tries across ALL new accounts per window. Past this, enrollment pauses
+# for everyone so a batch of Apple IDs can't share the guessing; real
+# enrollments are a handful a day.
+ENROLLMENT_GLOBAL_MAX_ATTEMPTS = 30
 
 
 def _sha256(text: str) -> str:
@@ -87,18 +91,31 @@ def login():
         # enrollment code (PROFILE_API.md). Returning users never reach this
         # branch, so they are never re-prompted; the iOS app maps 403 to its
         # "code not recognized" sheet.
+        code = body.get('enrollment_code')
+        code = code.strip() if isinstance(code, str) else ''
+        if not code:
+            # First sign-in without a code: the app now asks for one. Not a
+            # guess, so it doesn't count against the attempt limits.
+            return jsonify({'error': 'invalid_enrollment_code'}), 403
+
         attempts = db.record_enrollment_attempt(participant_id, ENROLLMENT_WINDOW_SECONDS)
         if attempts > ENROLLMENT_MAX_ATTEMPTS:
+            return jsonify({'error': 'too_many_attempts'}), 429
+        if db.count_enrollment_attempts(ENROLLMENT_WINDOW_SECONDS) > ENROLLMENT_GLOBAL_MAX_ATTEMPTS:
+            current_app.logger.warning(
+                "Enrollment paused: over %d code attempts in the last hour across all new accounts",
+                ENROLLMENT_GLOBAL_MAX_ATTEMPTS,
+            )
             return jsonify({'error': 'too_many_attempts'}), 429
 
         # Anonymization: email/full_name are deliberately NOT stored — the
         # study links data by a one-way participant hash only (PROFILE_API.md
         # "Identity").
-        code = body.get('enrollment_code')
-        user = (
-            db.enroll_user_with_code(apple_user_id, code.strip(), participant_id)
-            if isinstance(code, str) else None
-        )
+        user = db.enroll_user_with_code(apple_user_id, code, participant_id)
+        if not user:
+            # A concurrent first login for this Apple ID may have just created
+            # the account (enroll then backs off without using this code).
+            user = db.get_user_by_apple_id(apple_user_id)
         if not user:
             return jsonify({'error': 'invalid_enrollment_code'}), 403
 

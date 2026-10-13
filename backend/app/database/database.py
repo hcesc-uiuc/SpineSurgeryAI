@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from dotenv import load_dotenv
 import psycopg2
+import psycopg2.errors
 from psycopg2 import sql
 from psycopg2.extras import DictCursor, execute_values
 from psycopg2.pool import ThreadedConnectionPool
@@ -930,16 +931,22 @@ class DB:
         and every study id belongs to an enrolled account.
 
         Returns the new user dict, or None (nothing written) if the code is
-        unknown, inactive, or already used. The conditional UPDATE row-locks
-        the code, so two people racing for the same code can't both get it.
+        unknown, inactive, or already used, or if a concurrent first login
+        already created this Apple ID (the caller re-reads the user). The
+        conditional UPDATE row-locks the code, so two people racing for the
+        same code can't both get it.
         """
         with self.temporary_database_connection() as conn:
             conn.autocommit = False
             with conn, conn.cursor(cursor_factory=DictCursor) as cur:
-                cur.execute(
-                    "INSERT INTO users (apple_id) VALUES (%s) RETURNING id, apple_id, email, full_name",
-                    (apple_id,),
-                )
+                try:
+                    cur.execute(
+                        "INSERT INTO users (apple_id) VALUES (%s) RETURNING id, apple_id, email, full_name",
+                        (apple_id,),
+                    )
+                except psycopg2.errors.UniqueViolation:
+                    conn.rollback()
+                    return None
                 user = dict(cur.fetchone())
                 cur.execute(
                     "UPDATE enrollment_codes SET used_by = %s, used_at = NOW() "
@@ -1058,6 +1065,16 @@ class DB:
                 "SELECT count(*) FROM enrollment_attempts "
                 "WHERE participant_id = %s AND attempted_at > now() - make_interval(secs => %s)",
                 (participant_id, window_seconds),
+            )
+            return cur.fetchone()[0]
+
+    def count_enrollment_attempts(self, window_seconds: int) -> int:
+        """Code attempts by all new accounts in the last `window_seconds`."""
+        with self.temporary_database_connection() as conn, conn.cursor() as cur:
+            cur.execute(
+                "SELECT count(*) FROM enrollment_attempts "
+                "WHERE attempted_at > now() - make_interval(secs => %s)",
+                (window_seconds,),
             )
             return cur.fetchone()[0]
 

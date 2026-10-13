@@ -110,7 +110,8 @@ class TestEnrollmentGate:
             return client.post('/auth/login', json=body)
 
     def test_new_user_without_code_returns_403(self, client, mock_db):
-        """New Apple user with no enrollment_code → 403, no account created."""
+        """New Apple user with no enrollment_code → 403, no account created,
+        and it isn't counted as a guess."""
         mock_db.get_user_by_apple_id.return_value = None
 
         resp = self._login(client)
@@ -118,6 +119,35 @@ class TestEnrollmentGate:
         assert resp.status_code == 403
         assert resp.get_json()['error'] == 'invalid_enrollment_code'
         mock_db.enroll_user_with_code.assert_not_called()
+        mock_db.record_enrollment_attempt.assert_not_called()
+
+    def test_blank_code_not_counted(self, client, mock_db):
+        mock_db.get_user_by_apple_id.return_value = None
+        assert self._login(client, {'enrollment_code': '   '}).status_code == 403
+        mock_db.record_enrollment_attempt.assert_not_called()
+
+    def test_global_cap_pauses_enrollment(self, client, mock_db):
+        """Too many code tries across all new accounts → 429 for everyone,
+        before the code is looked at."""
+        mock_db.get_user_by_apple_id.return_value = None
+        mock_db.count_enrollment_attempts.return_value = 31
+
+        resp = self._login(client, {'enrollment_code': VALID_CODE})
+
+        assert resp.status_code == 429
+        assert resp.get_json()['error'] == 'too_many_attempts'
+        mock_db.enroll_user_with_code.assert_not_called()
+
+    def test_concurrent_first_login_continues_as_existing_user(self, client, mock_db):
+        """enroll returns None because a parallel first login created the
+        account; the request re-reads it instead of answering 403/500."""
+        mock_db.get_user_by_apple_id.side_effect = [None, {'id': 7, 'apple_id': APPLE_SUB}]
+        mock_db.enroll_user_with_code.return_value = None
+
+        resp = self._login(client, {'enrollment_code': VALID_CODE})
+
+        assert resp.status_code == 200
+        assert mock_db.get_user_by_apple_id.call_count == 2
 
     def test_unusable_code_returns_403(self, client, mock_db):
         """Unknown, revoked, or already-used code (DB claim fails) → 403."""

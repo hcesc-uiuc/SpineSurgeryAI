@@ -75,13 +75,40 @@ class TestBackfillAccountParticipants:
         assert db.get_participant_id_for_user(user_id) == "linked-at-login"
 
 
-# ---------------------------------------------------------------------------
-# One-time survey move (migrate_surveys_to_participant_hash.py)
-# ---------------------------------------------------------------------------
-
 def _pid_hash(apple_id):
     return hashlib.sha256(apple_id.encode()).hexdigest()
 
+
+class TestEnrollmentRaces:
+    @pytest.fixture
+    def enroll_db(self, db):
+        db.create_enrollment_codes_table()
+        db.create_study_ids_table()
+        db.create_enrollment_attempts_table()
+        for code in ("111111", "222222"):
+            db.add_enrollment_code(code)
+        return db
+
+    def test_second_first_login_backs_off_without_using_its_code(self, enroll_db):
+        db = enroll_db
+        first = db.enroll_user_with_code("apple.x", "111111", _pid_hash("apple.x"))
+        assert first is not None
+
+        # Same Apple ID, different code: the account already exists
+        assert db.enroll_user_with_code("apple.x", "222222", _pid_hash("apple.x")) is None
+        used = dict(_sql(db, "SELECT code, used_by FROM enrollment_codes"))
+        assert used == {"111111": first["id"], "222222": None}
+
+    def test_global_attempt_count_spans_all_accounts(self, enroll_db):
+        db = enroll_db
+        for pid in ("a", "b", "b"):
+            db.record_enrollment_attempt(pid, 3600)
+        assert db.count_enrollment_attempts(3600) == 3
+
+
+# ---------------------------------------------------------------------------
+# One-time survey move (migrate_surveys_to_participant_hash.py)
+# ---------------------------------------------------------------------------
 
 @pytest.fixture
 def survey_db(db):
