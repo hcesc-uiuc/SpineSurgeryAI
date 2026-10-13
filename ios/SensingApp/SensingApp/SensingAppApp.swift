@@ -119,7 +119,10 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         
         #endif
         
-        registerForPushNotifications()
+        // A unit-test run would post the simulator's device token to production.
+        if !RunEnvironment.isUnitTestHost {
+            registerForPushNotifications()
+        }
         // Start background location updates immediately
         // LocationManager.shared.start()
         // registering does not start the background process right away.

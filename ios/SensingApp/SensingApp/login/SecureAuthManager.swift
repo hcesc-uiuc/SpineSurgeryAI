@@ -158,7 +158,10 @@ class SecureAuthManager: ObservableObject {
             isAuthenticated = UserDefaults.standard.bool(forKey: "demo_session_active")
             return
         }
-        if KeychainManager.shared.read(key: refreshTokenKey) != nil {
+        // Not in the unit-test host: a leftover simulator session would refresh
+        // against production (and clear tokens a test just stored on failure).
+        if !RunEnvironment.isUnitTestHost,
+           KeychainManager.shared.read(key: refreshTokenKey) != nil {
             Task { await silentRefresh() }
         }
     }
