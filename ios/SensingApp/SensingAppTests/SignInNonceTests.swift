@@ -94,6 +94,32 @@ final class SignInNonceTests: XCTestCase {
         }
     }
 
+    func testThrottling429IsAServerErrorNotTheLockout() async {
+        UploadStubProtocol.handler = { _, _ in .http(429, #"{"Message": "Too Many Requests"}"#) }
+        do {
+            try await auth.login(identityToken: "apple.jwt", fullName: nil, appleUserID: "apple.user")
+            XCTFail("expected an error")
+        } catch AuthError.serverError(let status) {
+            XCTAssertEqual(status, 429)
+        } catch {
+            XCTFail("unexpected \(error)")
+        }
+    }
+
+    func testRejectedAppleIDDoesNotReplaceTheParticipantID() async {
+        UserDefaults.standard.set("current-participant", forKey: participantKey)
+        UploadStubProtocol.handler = { _, _ in .http(403, #"{"error": "invalid_enrollment_code"}"#) }
+
+        try? await auth.login(identityToken: "apple.jwt", fullName: nil, appleUserID: "unenrolled.user")
+
+        XCTAssertEqual(ParticipantID.current, "current-participant")
+    }
+
+    func testAcceptedLoginStoresTheParticipantID() async throws {
+        try await auth.login(identityToken: "apple.jwt", fullName: nil, appleUserID: "apple.user")
+        XCTAssertEqual(ParticipantID.current, ParticipantID.hash("apple.user"))
+    }
+
     private func loginBody() throws -> [String: String] {
         let sent = UploadStubProtocol.requests(path: "/auth/login")
         XCTAssertEqual(sent.count, 1)

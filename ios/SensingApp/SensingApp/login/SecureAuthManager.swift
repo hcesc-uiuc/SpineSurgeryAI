@@ -188,13 +188,9 @@ class SecureAuthManager: ObservableObject {
         nonce: String? = nil
     ) async throws {
 
-        // Derive and persist the anonymous participant hash for both demo and
-        // real paths — runs before any branch so demo sessions get one too.
-        // The patient's name is intentionally never stored or uploaded.
-        ParticipantID.store(forAppleUserID: appleUserID)
-
         // ── DEMO MODE BLOCK — DELETE BEFORE SHIPPING ─────────────
         if demoMode {
+            ParticipantID.store(forAppleUserID: appleUserID)
             UserDefaults.standard.set(true, forKey: "demo_session_active")
             isAuthenticated = true
             return
@@ -233,6 +229,12 @@ class SecureAuthManager: ObservableObject {
                 access:  tokens.accessToken,
                 refresh: tokens.refreshToken
             )
+            // Derive and persist the anonymous participant hash only once the
+            // server accepted this Apple ID (a 403 for an unenrolled one must
+            // not retag this phone's uploads), and before isAuthenticated flips
+            // so bootstrap reads the right one.
+            // The patient's name is intentionally never stored or uploaded.
+            ParticipantID.store(forAppleUserID: appleUserID)
             isAuthenticated = true
 
         case 400, 401:
@@ -243,7 +245,10 @@ class SecureAuthManager: ObservableObject {
             throw AuthError.invalidEnrollmentCode
 
         case 429:
-            throw AuthError.tooManyAttempts
+            // Only the server's enrollment limit means "wait an hour"; a 429
+            // from the Lambda proxy (throttling) is an ordinary server error.
+            let code = (try? JSONDecoder().decode(BackendErrorResponse.self, from: data))?.error
+            throw code == "too_many_attempts" ? AuthError.tooManyAttempts : AuthError.serverError(429)
 
         default:
             throw AuthError.serverError(http.statusCode)
