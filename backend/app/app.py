@@ -51,12 +51,19 @@ def create_app(config_overrides=None):
         app.config["DB"].create_study_ids_table()
         app.config["DB"].create_survey_schedule_table()
         app.config["DB"].create_account_participants_table()  # references users(id)
-        app.config["DB"].backfill_account_participants()      # accounts that only refresh
         app.config["DB"].create_enrollment_attempts_table()
         app.config["DB"].create_apple_nonces_table()
 
     except Exception as e:
         app.logger.error("\033[91m" + "Cannot connect to database" + "\033[0m" + str(e))
+
+    # Link accounts that only ever refresh (never hit /auth/login) to their
+    # participant hash. After all tables exist and in its own try, so a failure
+    # here can't skip table creation.
+    try:
+        app.config["DB"].backfill_account_participants()
+    except Exception as e:
+        app.logger.error("Participant-link backfill failed: %s", e)
 
     # Register blueprints
     app.register_blueprint(upload_bp, url_prefix="/api")

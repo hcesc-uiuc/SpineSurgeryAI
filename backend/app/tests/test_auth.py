@@ -328,10 +328,19 @@ class TestStartupCheck:
         assert resp.status_code == 200
         assert resp.get_json() == {'status': 'ok'}
 
-    def test_backfills_participant_links_after_creating_the_table(self, app, mock_db):
+    def test_backfills_participant_links_after_creating_every_table(self, app, mock_db):
         """Accounts that only refresh never hit /auth/login, so startup links them."""
         names = [c[0] for c in mock_db.method_calls]
-        assert names.index('backfill_account_participants') > names.index('create_account_participants_table')
+        last_create = max(i for i, n in enumerate(names) if n.startswith('create_'))
+        assert names.index('backfill_account_participants') > last_create
+
+    def test_failed_backfill_does_not_skip_table_creation(self, mock_db):
+        from app import create_app
+        mock_db.backfill_account_participants.side_effect = RuntimeError('boom')
+        with patch('app.DB', return_value=mock_db):
+            create_app({'JWT_SECRET': TEST_JWT_SECRET, 'APPLE_BUNDLE_ID': 'com.test.app'})
+        mock_db.create_enrollment_attempts_table.assert_called_once()
+        mock_db.create_apple_nonces_table.assert_called_once()
 
 
 # ---------------------------------------------------------------------------
