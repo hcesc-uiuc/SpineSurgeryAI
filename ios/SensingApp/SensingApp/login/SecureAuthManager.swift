@@ -98,6 +98,7 @@ private struct RefreshTokenResponse: Decodable {
 enum AuthError: LocalizedError {
     case invalidToken            // Apple identity token rejected by backend (400/401)
     case invalidEnrollmentCode   // Study enrollment code rejected by backend (403)
+    case tooManyAttempts         // Too many enrollment-code tries in the last hour (429)
     case networkError(String)    // URLSession failure — no connection etc.
     case tokenExpired            // Access token expired and refresh failed
     case noRefreshToken          // No stored session — must log in fresh
@@ -110,6 +111,8 @@ enum AuthError: LocalizedError {
             return "Sign in failed. Please try again."
         case .invalidEnrollmentCode:
             return "That study code wasn't recognized. Please check with your study coordinator."
+        case .tooManyAttempts:
+            return "Too many tries. Please wait an hour or contact your study coordinator."
         case .networkError(let msg):
             return "Network error: \(msg)"
         case .tokenExpired:
@@ -169,11 +172,10 @@ class SecureAuthManager: ObservableObject {
     //   fullName       — user's name; only present on very first Apple login.
     //                    Pass nil when empty — backend only needs it once.
     //   appleUserID    — Apple's stable per-user identifier (credential.user)
-    //   enrollmentCode — coordinator-issued study code; non-nil only on a
-    //                    first sign-in (see EnrollmentGate). Sent to the
-    //                    backend so account creation can be gated server-side
-    //                    once PROFILE_API.md is implemented; a rejected code
-    //                    comes back as 403 → AuthError.invalidEnrollmentCode.
+    //   enrollmentCode — coordinator-issued study code, sent only after the
+    //                    server said this Apple ID has no account yet (403
+    //                    without a code). A rejected code is 403 again →
+    //                    AuthError.invalidEnrollmentCode; too many tries → 429.
     //
     // Throws: AuthError
     func login(
@@ -233,6 +235,9 @@ class SecureAuthManager: ObservableObject {
         case 403:
             // New account with a missing/unknown enrollment code
             throw AuthError.invalidEnrollmentCode
+
+        case 429:
+            throw AuthError.tooManyAttempts
 
         default:
             throw AuthError.serverError(http.statusCode)

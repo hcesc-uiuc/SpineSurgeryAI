@@ -142,16 +142,7 @@ final class ProfileStore: ObservableObject {
 
     // MARK: - Enrollment
 
-    /// Whether the login screen can skip the code prompt. A brand-new phone
-    /// always asks until the backend can answer "does this account exist".
-    func isEnrolled(participantId: String) -> Bool {
-        if let profile, profile.participantId == participantId, profile.enrolledAt != nil {
-            return true
-        }
-        return UserDefaults.standard.string(forKey: pendingPidKey) == participantId
-            && UserDefaults.standard.string(forKey: pendingCodeKey) != nil
-    }
-
+    /// Called after the server accepted a code (only new accounts send one).
     func recordEnrollment(code: String, participantId: String) {
         let defaults = UserDefaults.standard
         defaults.set(code, forKey: pendingCodeKey)

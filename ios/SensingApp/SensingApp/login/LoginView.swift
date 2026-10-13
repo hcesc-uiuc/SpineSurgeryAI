@@ -74,8 +74,8 @@ struct AuthLoginView: View {
     @State private var errorMessage: String?
 
     // MARK: - Enrollment Code State
-    // First sign-in on a phone: hold the Apple credential, ask for the study
-    // code (EnrollmentGate), then finish login. Returning users skip this.
+    // The server answered 403 (no account for this Apple ID yet): hold the
+    // Apple credential, ask for the study code, then retry login with it.
     private struct PendingAppleCredential {
         let identityToken: String
         let fullName: String?
@@ -405,8 +405,8 @@ struct AuthLoginView: View {
             return
         }
 
-        guard EnrollmentGate.validate(enrollmentCodeInput) else {
-            enrollmentError = "That code wasn't recognized. Please check with your study coordinator."
+        guard EnrollmentGate.isWellFormed(enrollmentCodeInput) else {
+            enrollmentError = "Enter the 6-digit code from your study coordinator."
             return
         }
 
@@ -428,6 +428,11 @@ struct AuthLoginView: View {
             )
             pendingCredential = nil
             showEnrollmentSheet = false
+        } catch AuthError.invalidToken {
+            // Apple's identity token lasts ~10 minutes; start sign-in over.
+            pendingCredential = nil
+            showEnrollmentSheet = false
+            errorMessage = "Your sign-in expired. Please tap Sign in with Apple again."
         } catch let error as AuthError {
             enrollmentError = error.errorDescription
         } catch {
@@ -536,26 +541,22 @@ struct AuthLoginView: View {
 
             let appleUserID = credential.user
 
-            // First sign-in on this device → ask for the coordinator-issued
-            // study code before completing login (EnrollmentGate). Returning
-            // users already have an enrolled profile and go straight through.
-            let participantId = ParticipantID.hash(appleUserID)
-            guard ProfileStore.shared.isEnrolled(participantId: participantId) else {
-                pendingCredential = PendingAppleCredential(
-                    identityToken: identityToken,
-                    fullName:      fullName,
-                    appleUserID:   appleUserID
-                )
-                showEnrollmentSheet = true
-                return
-            }
-
+            // Try without a code first: the server knows whether this Apple ID
+            // already has an account, so returning participants go straight
+            // in on any phone. Only a new account (403) is asked for a code.
             do {
                 try await authManager.login(
                     identityToken: identityToken,
                     fullName:      fullName,
                     appleUserID:   appleUserID
                 )
+            } catch AuthError.invalidEnrollmentCode {
+                pendingCredential = PendingAppleCredential(
+                    identityToken: identityToken,
+                    fullName:      fullName,
+                    appleUserID:   appleUserID
+                )
+                showEnrollmentSheet = true
             } catch let error as AuthError {
                 errorMessage = error.errorDescription
             } catch {
