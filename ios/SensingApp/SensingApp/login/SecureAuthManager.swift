@@ -176,13 +176,16 @@ class SecureAuthManager: ObservableObject {
     //                    server said this Apple ID has no account yet (403
     //                    without a code). A rejected code is 403 again →
     //                    AuthError.invalidEnrollmentCode; too many tries → 429.
+    //   nonce          — raw Sign in with Apple nonce (see SignInNonce); the
+    //                    server checks Apple signed its SHA-256 into the token.
     //
     // Throws: AuthError
     func login(
         identityToken: String,
         fullName: String?,
         appleUserID: String,
-        enrollmentCode: String? = nil
+        enrollmentCode: String? = nil,
+        nonce: String? = nil
     ) async throws {
 
         // Derive and persist the anonymous participant hash for both demo and
@@ -209,6 +212,9 @@ class SecureAuthManager: ObservableObject {
         var body: [String: String] = ["identity_token": identityToken]
         if let enrollmentCode {
             body["enrollment_code"] = enrollmentCode
+        }
+        if let nonce {
+            body["nonce"] = nonce
         }
         request.httpBody = try JSONEncoder().encode(body)
 

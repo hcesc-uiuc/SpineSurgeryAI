@@ -80,7 +80,10 @@ struct AuthLoginView: View {
         let identityToken: String
         let fullName: String?
         let appleUserID: String
+        let nonce: String       // reused on the code retry; the server claims it only on success
     }
+    // Raw nonce for the sign-in in progress; Apple gets its SHA-256.
+    @State private var rawNonce = ""
     @State private var pendingCredential: PendingAppleCredential?
     @State private var showEnrollmentSheet = false
     @State private var enrollmentCodeInput = ""
@@ -177,6 +180,8 @@ struct AuthLoginView: View {
 
                         SignInWithAppleButton(.signIn) { request in
                             request.requestedScopes = [.fullName, .email]
+                            rawNonce = SignInNonce.random()
+                            request.nonce = SignInNonce.sha256(rawNonce)
                         } onCompletion: { result in
                             Task { await handleAppleSignIn(result: result) }
                         }
@@ -418,7 +423,8 @@ struct AuthLoginView: View {
                 identityToken:  credential.identityToken,
                 fullName:       credential.fullName,
                 appleUserID:    credential.appleUserID,
-                enrollmentCode: enrollmentCodeInput
+                enrollmentCode: enrollmentCodeInput,
+                nonce:          credential.nonce
             )
             // Park the accepted code; ProfileStore.bootstrap folds it into
             // the profile (after attempting a server restore) on first launch.
@@ -544,17 +550,20 @@ struct AuthLoginView: View {
             // Try without a code first: the server knows whether this Apple ID
             // already has an account, so returning participants go straight
             // in on any phone. Only a new account (403) is asked for a code.
+            let nonce = rawNonce
             do {
                 try await authManager.login(
                     identityToken: identityToken,
                     fullName:      fullName,
-                    appleUserID:   appleUserID
+                    appleUserID:   appleUserID,
+                    nonce:         nonce
                 )
             } catch AuthError.invalidEnrollmentCode {
                 pendingCredential = PendingAppleCredential(
                     identityToken: identityToken,
                     fullName:      fullName,
-                    appleUserID:   appleUserID
+                    appleUserID:   appleUserID,
+                    nonce:         nonce
                 )
                 showEnrollmentSheet = true
             } catch let error as AuthError {
