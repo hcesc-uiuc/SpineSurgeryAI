@@ -74,21 +74,18 @@ struct AuthLoginView: View {
     @State private var errorMessage: String?
 
     // MARK: - Enrollment Code State
-    // The server answered 403 (no account for this Apple ID yet): hold the
-    // Apple credential, ask for the study code, then retry login with it.
-    private struct PendingAppleCredential {
-        let identityToken: String
-        let fullName: String?
-        let appleUserID: String
-        let nonce: String       // reused on the code retry; the server claims it only on success
-    }
-    // Raw nonce for the sign-in in progress; Apple gets its SHA-256.
-    @State private var rawNonce = ""
-    @State private var pendingCredential: PendingAppleCredential?
+    // The server answered 403 (no account for this Apple ID yet): ask for the
+    // study code, then sign in with Apple again to send it. The server accepts
+    // each nonce for one attempt only, so the code needs a fresh token.
     @State private var showEnrollmentSheet = false
     @State private var enrollmentCodeInput = ""
     @State private var enrollmentError: String?
     @State private var isJoining = false
+
+    // Raw nonces of sign-ins in flight, keyed by the SHA-256 Apple signs into
+    // the token. The completion looks its own up from the token's claim, so a
+    // double tap can't pair a token with the other request's nonce.
+    @State private var pendingNonces: [String: String] = [:]
 
     // MARK: - Permissions State
     @AppStorage("permissionsComplete") private var permissionsComplete = false
@@ -179,9 +176,7 @@ struct AuthLoginView: View {
                             .padding(.bottom, 4)
 
                         SignInWithAppleButton(.signIn) { request in
-                            request.requestedScopes = [.fullName, .email]
-                            rawNonce = SignInNonce.random()
-                            request.nonce = SignInNonce.sha256(rawNonce)
+                            prepareAppleRequest(request)
                         } onCompletion: { result in
                             Task { await handleAppleSignIn(result: result) }
                         }
@@ -288,8 +283,6 @@ struct AuthLoginView: View {
         }
         .animation(.default, value: errorMessage)
         .sheet(isPresented: $showEnrollmentSheet, onDismiss: {
-            // Cancelled without joining — drop the held credential.
-            if !authManager.isAuthenticated { pendingCredential = nil }
             enrollmentCodeInput = ""
             enrollmentError = nil
         }) {
@@ -325,7 +318,7 @@ struct AuthLoginView: View {
                     Text("Enter Your Study Code")
                         .font(.journey(.title2, weight: .bold))
                         .foregroundStyle(Color(red: 0.28, green: 0.22, blue: 0.20))
-                    Text("To join the study, enter the 6-digit code given to you by your study coordinator.")
+                    Text("To join the study, enter the 6-digit code given to you by your study coordinator, then confirm with Apple once more.")
                         .font(.journey(.subheadline))
                         .foregroundStyle(Color(red: 0.50, green: 0.42, blue: 0.39))
                         .multilineTextAlignment(.center)
@@ -362,29 +355,25 @@ struct AuthLoginView: View {
                     .padding(.horizontal, 32)
                 }
 
-                Button {
-                    Task { await completeEnrollment() }
-                } label: {
-                    HStack {
-                        Spacer()
-                        if isJoining {
-                            ProgressView().tint(.white)
-                        } else {
-                            Text("Join Study")
-                                .font(.journey(.callout, weight: .semibold))
-                                .foregroundStyle(.white)
-                        }
-                        Spacer()
+                ZStack {
+                    SignInWithAppleButton(.continue) { request in
+                        prepareAppleRequest(request)
+                    } onCompletion: { result in
+                        Task { await completeEnrollment(result: result) }
                     }
+                    .signInWithAppleButtonStyle(.black)
                     .frame(height: 52)
-                    .background(
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                    .disabled(enrollmentCodeInput.count != 6 || isJoining)
+                    .opacity(enrollmentCodeInput.count == 6 ? 1.0 : 0.4)
+
+                    if isJoining {
                         RoundedRectangle(cornerRadius: 16)
-                            .fill(Color(red: 0.80, green: 0.55, blue: 0.45))
-                            .opacity(enrollmentCodeInput.count == 6 ? 1.0 : 0.4)
-                    )
+                            .fill(Color.black.opacity(0.45))
+                            .frame(height: 52)
+                        ProgressView().tint(.white)
+                    }
                 }
-                .buttonStyle(.plain)
-                .disabled(enrollmentCodeInput.count != 6 || isJoining)
                 .padding(.horizontal, 40)
 
                 Button("Cancel") {
@@ -403,15 +392,17 @@ struct AuthLoginView: View {
         .preferredColorScheme(.light)
     }
 
-    // Validate the code, then finish the login that was held pending it.
-    private func completeEnrollment() async {
-        guard let credential = pendingCredential else {
-            showEnrollmentSheet = false
-            return
-        }
-
+    // The participant typed a code and signed in with Apple again: send the
+    // fresh token and nonce with the code.
+    private func completeEnrollment(result: Result<ASAuthorization, Error>) async {
+        enrollmentError = nil
         guard EnrollmentGate.isWellFormed(enrollmentCodeInput) else {
             enrollmentError = "Enter the 6-digit code from your study coordinator."
+            return
+        }
+        let (signIn, message) = readAppleSignIn(result)
+        guard let signIn else {
+            enrollmentError = message
             return
         }
 
@@ -420,25 +411,19 @@ struct AuthLoginView: View {
 
         do {
             try await authManager.login(
-                identityToken:  credential.identityToken,
-                fullName:       credential.fullName,
-                appleUserID:    credential.appleUserID,
+                identityToken:  signIn.identityToken,
+                fullName:       signIn.fullName,
+                appleUserID:    signIn.appleUserID,
                 enrollmentCode: enrollmentCodeInput,
-                nonce:          credential.nonce
+                nonce:          signIn.nonce
             )
             // Park the accepted code; ProfileStore.bootstrap folds it into
             // the profile (after attempting a server restore) on first launch.
             ProfileStore.shared.recordEnrollment(
                 code: enrollmentCodeInput,
-                participantId: ParticipantID.hash(credential.appleUserID)
+                participantId: ParticipantID.hash(signIn.appleUserID)
             )
-            pendingCredential = nil
             showEnrollmentSheet = false
-        } catch AuthError.invalidToken {
-            // Apple's identity token lasts ~10 minutes; start sign-in over.
-            pendingCredential = nil
-            showEnrollmentSheet = false
-            errorMessage = "Your sign-in expired. Please tap Sign in with Apple again."
         } catch let error as AuthError {
             enrollmentError = error.errorDescription
         } catch {
@@ -512,65 +497,80 @@ struct AuthLoginView: View {
     }
 
     // MARK: - Apple Sign In Handler
+
+    /// Fresh nonce per Apple request: Apple gets its SHA-256, the raw value
+    /// waits in pendingNonces for the completion.
+    private func prepareAppleRequest(_ request: ASAuthorizationAppleIDRequest) {
+        request.requestedScopes = [.fullName, .email]
+        let raw = SignInNonce.random()
+        let hash = SignInNonce.sha256(raw)
+        pendingNonces[hash] = raw
+        request.nonce = hash
+    }
+
+    private struct AppleSignIn {
+        let identityToken: String
+        let fullName: String?
+        let appleUserID: String
+        let nonce: String?
+    }
+
+    /// What /auth/login needs from Apple's result, or the message to show
+    /// (nil message when the user cancelled).
+    private func readAppleSignIn(_ result: Result<ASAuthorization, Error>) -> (AppleSignIn?, String?) {
+        switch result {
+        case .failure(let error):
+            let cancelled = (error as? ASAuthorizationError)?.code == .canceled
+            return (nil, cancelled ? nil : "Sign in failed. Please try again.")
+
+        case .success(let authorization):
+            guard
+                let credential    = authorization.credential as? ASAuthorizationAppleIDCredential,
+                let tokenData     = credential.identityToken,
+                let identityToken = String(data: tokenData, encoding: .utf8)
+            else {
+                return (nil, "Sign in failed. Could not read Apple token.")
+            }
+            let fullNameString = [
+                credential.fullName?.givenName,
+                credential.fullName?.familyName
+            ].compactMap { $0 }.joined(separator: " ")
+            let nonce = SignInNonce.claim(inIdentityToken: identityToken)
+                .flatMap { pendingNonces.removeValue(forKey: $0) }
+            return (AppleSignIn(identityToken: identityToken,
+                                fullName:      fullNameString.isEmpty ? nil : fullNameString,
+                                appleUserID:   credential.user,
+                                nonce:         nonce), nil)
+        }
+    }
+
     private func handleAppleSignIn(result: Result<ASAuthorization, Error>) async {
         errorMessage = nil
         isWorking    = true
         defer { isWorking = false }
 
-        switch result {
-        case .failure(let error):
-            let asError = error as? ASAuthorizationError
-            if asError?.code != .canceled {
-                errorMessage = "Sign in failed. Please try again."
-            }
+        let (signIn, message) = readAppleSignIn(result)
+        guard let signIn else {
+            errorMessage = message
             return
+        }
 
-        case .success(let authorization):
-            guard let credential = authorization.credential as? ASAuthorizationAppleIDCredential else {
-                errorMessage = "Sign in failed. Please try again."
-                return
-            }
-
-            guard
-                let tokenData     = credential.identityToken,
-                let identityToken = String(data: tokenData, encoding: .utf8)
-            else {
-                errorMessage = "Sign in failed. Could not read Apple token."
-                return
-            }
-
-            let fullNameString = [
-                credential.fullName?.givenName,
-                credential.fullName?.familyName
-            ].compactMap { $0 }.joined(separator: " ")
-            let fullName: String? = fullNameString.isEmpty ? nil : fullNameString
-
-            let appleUserID = credential.user
-
-            // Try without a code first: the server knows whether this Apple ID
-            // already has an account, so returning participants go straight
-            // in on any phone. Only a new account (403) is asked for a code.
-            let nonce = rawNonce
-            do {
-                try await authManager.login(
-                    identityToken: identityToken,
-                    fullName:      fullName,
-                    appleUserID:   appleUserID,
-                    nonce:         nonce
-                )
-            } catch AuthError.invalidEnrollmentCode {
-                pendingCredential = PendingAppleCredential(
-                    identityToken: identityToken,
-                    fullName:      fullName,
-                    appleUserID:   appleUserID,
-                    nonce:         nonce
-                )
-                showEnrollmentSheet = true
-            } catch let error as AuthError {
-                errorMessage = error.errorDescription
-            } catch {
-                errorMessage = "Something went wrong. Please try again."
-            }
+        // Try without a code first: the server knows whether this Apple ID
+        // already has an account, so returning participants go straight
+        // in on any phone. Only a new account (403) is asked for a code.
+        do {
+            try await authManager.login(
+                identityToken: signIn.identityToken,
+                fullName:      signIn.fullName,
+                appleUserID:   signIn.appleUserID,
+                nonce:         signIn.nonce
+            )
+        } catch AuthError.invalidEnrollmentCode {
+            showEnrollmentSheet = true
+        } catch let error as AuthError {
+            errorMessage = error.errorDescription
+        } catch {
+            errorMessage = "Something went wrong. Please try again."
         }
     }
 }

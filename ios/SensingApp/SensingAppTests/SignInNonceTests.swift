@@ -56,6 +56,17 @@ final class SignInNonceTests: XCTestCase {
         XCTAssertNotEqual(a, b)
     }
 
+    func testClaimIsReadFromTheIdentityTokenPayload() {
+        // payload {"sub":"x","nonce":"ab12"} as unpadded base64url
+        let payload = Data(#"{"sub":"x","nonce":"ab12"}"#.utf8).base64EncodedString()
+            .replacingOccurrences(of: "+", with: "-").replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "=", with: "")
+        XCTAssertEqual(SignInNonce.claim(inIdentityToken: "hdr.\(payload).sig"), "ab12")
+        XCTAssertNil(SignInNonce.claim(inIdentityToken: "not-a-jwt"))
+        let noNonce = Data(#"{"sub":"x"}"#.utf8).base64EncodedString().replacingOccurrences(of: "=", with: "")
+        XCTAssertNil(SignInNonce.claim(inIdentityToken: "hdr.\(noNonce).sig"))
+    }
+
     func testLoginSendsNonceAndCode() async throws {
         try await auth.login(identityToken: "apple.jwt", fullName: nil, appleUserID: "apple.user",
                              enrollmentCode: "123456", nonce: "raw-nonce")

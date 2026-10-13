@@ -32,4 +32,20 @@ enum SignInNonce {
     static func sha256(_ raw: String) -> String {
         SHA256.hash(data: Data(raw.utf8)).map { String(format: "%02x", $0) }.joined()
     }
+
+    /// The "nonce" claim of an Apple identity token, read WITHOUT checking the
+    /// signature: only used to pick which raw nonce goes with this token. The
+    /// server verifies the token itself.
+    static func claim(inIdentityToken token: String) -> String? {
+        let parts = token.split(separator: ".")
+        guard parts.count == 3 else { return nil }
+        var base64 = parts[1]
+            .replacingOccurrences(of: "-", with: "+")
+            .replacingOccurrences(of: "_", with: "/")
+        base64 += String(repeating: "=", count: (4 - base64.count % 4) % 4)
+        guard let data = Data(base64Encoded: base64),
+              let payload = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { return nil }
+        return payload["nonce"] as? String
+    }
 }
