@@ -232,6 +232,38 @@ class TestNonce:
         mock_db.record_enrollment_attempt.assert_not_called()
         mock_db.enroll_user_with_code.assert_not_called()
 
+    def _enroll(self, client, code):
+        payload = {'sub': APPLE_SUB, 'exp': 2_000_000_000, 'nonce': NONCE_HASH}
+        body = {'identity_token': 'fake.apple.jwt', 'nonce': RAW_NONCE, 'enrollment_code': code}
+        with patch('auth.routes.verify_apple_token', return_value=payload):
+            return client.post('/auth/login', json=body)
+
+    def test_wrong_code_leaves_nonce_unused_for_retry(self, client, mock_db):
+        """403 on a bad code must not burn the nonce: the app retries with the
+        same Apple credential and the right code."""
+        mock_db.get_user_by_apple_id.return_value = None
+        mock_db.enroll_user_with_code.return_value = None
+        assert self._enroll(client, '000000').status_code == 403
+        mock_db.claim_apple_nonce.assert_not_called()
+
+        mock_db.enroll_user_with_code.return_value = {'id': 7, 'apple_id': APPLE_SUB}
+        assert self._enroll(client, VALID_CODE).status_code == 200
+        mock_db.claim_apple_nonce.assert_called_once_with(NONCE_HASH, 2_000_000_000)
+
+    def test_rate_limited_attempt_leaves_nonce_unused(self, client, mock_db):
+        mock_db.get_user_by_apple_id.return_value = None
+        mock_db.record_enrollment_attempt.return_value = 6
+        assert self._enroll(client, VALID_CODE).status_code == 429
+        mock_db.claim_apple_nonce.assert_not_called()
+
+    def test_replay_writes_nothing(self, client, mock_db):
+        """A replayed nonce is refused before the account link or tokens."""
+        mock_db.claim_apple_nonce.return_value = False
+        resp = self._login(client, nonce_claim=NONCE_HASH, body_nonce=RAW_NONCE)
+        assert resp.get_json()['error'] == 'invalid_nonce'
+        mock_db.link_account_participant.assert_not_called()
+        mock_db.create_refresh_token.assert_not_called()
+
 
 # ---------------------------------------------------------------------------
 # Startup: refuse to run without auth settings

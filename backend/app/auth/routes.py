@@ -22,15 +22,16 @@ def _sha256(text: str) -> str:
     return hashlib.sha256(text.encode()).hexdigest()
 
 
-def _nonce_ok(raw_nonce, apple_payload: dict) -> bool:
-    """Sign in with Apple nonce check: the app sent the raw nonce, Apple
-    signed SHA-256(raw nonce) into the token, and each nonce is single-use."""
+def _nonce_hash_if_valid(raw_nonce, apple_payload: dict):
+    """Sign in with Apple nonce check: the app sent the raw nonce and Apple
+    signed SHA-256(raw nonce) into the token. Returns that hash, or None.
+    No DB write here; the nonce is claimed only once login succeeds."""
     expected = apple_payload.get('nonce')
     if not isinstance(raw_nonce, str) or not isinstance(expected, str):
-        return False
+        return None
     if not hmac.compare_digest(_sha256(raw_nonce), expected):
-        return False
-    return current_app.config['DB'].claim_apple_nonce(expected, apple_payload['exp'])
+        return None
+    return expected
 
 
 def _make_access_token(user_id: int) -> str:
@@ -64,8 +65,10 @@ def login():
     # Nonce: always checked when sent; required once REQUIRE_APPLE_NONCE is on
     # (old builds that don't send one keep working until then).
     raw_nonce = body.get('nonce')
+    nonce_hash = None
     if raw_nonce is not None or current_app.config.get('REQUIRE_APPLE_NONCE'):
-        if not _nonce_ok(raw_nonce, apple_payload):
+        nonce_hash = _nonce_hash_if_valid(raw_nonce, apple_payload)
+        if nonce_hash is None:
             return jsonify({'error': 'invalid_nonce'}), 401
 
     apple_user_id = apple_payload['sub']
@@ -95,6 +98,11 @@ def login():
         )
         if not user:
             return jsonify({'error': 'invalid_enrollment_code'}), 403
+
+    # Claim the nonce only now: a 403/429 above leaves it unused so the app can
+    # retry with a code, while a replay of a successful login is refused here.
+    if nonce_hash and not db.claim_apple_nonce(nonce_hash, apple_payload['exp']):
+        return jsonify({'error': 'invalid_nonce'}), 401
 
     # Record the account↔participant link so profile endpoints can authorize by
     # participant hash when REQUIRE_PROFILE_AUTH is on. Idempotent: re-linked
