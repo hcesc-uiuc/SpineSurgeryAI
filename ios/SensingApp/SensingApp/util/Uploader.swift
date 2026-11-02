@@ -25,6 +25,8 @@ struct Uploader {
         let processedURL = documentsURL.appendingPathComponent("processed")
         
         let uploader = S3TestUploader()
+        var uploadedCount = 0
+        var failedCount = 0
         
         // Create the "processed" directory if it doesn't already exist
         if !fileManager.fileExists(atPath: processedURL.path) {
@@ -68,6 +70,7 @@ struct Uploader {
                     if kind == "accel" || kind == "other"{
                         //Direct S3 upload
                         let uploadSuccess = await uploader.runFullFlow(filenameURL: file, kind: kind)
+                        if uploadSuccess { uploadedCount += 1 } else { failedCount += 1 }
                         if uploadSuccess {
                             // Move the file to "processed/" so it isn't re-uploaded on the next run
                             let destination = Uploader.processedDestination(for: file, in: processedURL)
@@ -82,6 +85,7 @@ struct Uploader {
                     }else{
                         //we will upload directly to the uploadFile link
                         let success = await uploadFile(fileURL: file)
+                        if success { uploadedCount += 1 } else { failedCount += 1 }
                         if success {
                             // Move the file to "processed/" so it isn't re-uploaded on the next run
                             let destination = Uploader.processedDestination(for: file, in: processedURL)
@@ -110,6 +114,8 @@ struct Uploader {
                 }
             }
         }
+
+        Uploader.recordRun(uploaded: uploadedCount, failed: failedCount)
 
         let pruned = Uploader.pruneProcessed(in: processedURL)
         if pruned > 0 {
@@ -283,6 +289,18 @@ struct Uploader {
             n += 1
         }
         return candidate
+    }
+
+    /// When uploadFolder last finished, and what it did (Debug tab status).
+    static var lastRun: Date? {
+        let t = UserDefaults.standard.double(forKey: "upload_last_run")
+        return t > 0 ? Date(timeIntervalSince1970: t) : nil
+    }
+    static var lastRunSummary: String? { UserDefaults.standard.string(forKey: "upload_last_run_summary") }
+
+    static func recordRun(uploaded: Int, failed: Int, now: Date = Date()) {
+        UserDefaults.standard.set(now.timeIntervalSince1970, forKey: "upload_last_run")
+        UserDefaults.standard.set("\(uploaded) uploaded, \(failed) failed", forKey: "upload_last_run_summary")
     }
 
     /// How long an uploaded file stays in processed/ before it is deleted.

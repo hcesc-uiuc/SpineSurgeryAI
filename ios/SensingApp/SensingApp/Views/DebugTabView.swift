@@ -17,6 +17,7 @@ struct DebugTabView: View {
     @State private var showDeniedAlert   = false
     @State private var showSettingsAlert = false
     @State private var showImportData    = false
+    @State private var showSensorKitStatus = false
     @State private var healthCheckResult: String?
     @StateObject var HKManager = HealthKitManager()
     @Environment(\.scenePhase) var scenePhase
@@ -35,6 +36,13 @@ struct DebugTabView: View {
             .padding(.top, 10)
             .sheet(isPresented: $showImportData) {
                 ImportDataView()
+            }
+
+            Button("SensorKit status…") {
+                showSensorKitStatus = true
+            }
+            .sheet(isPresented: $showSensorKitStatus) {
+                SensorKitStatusView()
             }
 
             Button("Ask for sensorkit permissions") {
