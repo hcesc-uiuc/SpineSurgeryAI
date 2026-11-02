@@ -6,7 +6,7 @@ from auth.middleware import require_auth
 from functools import wraps
 import uuid
 
-from routes.s3_keys import upload_key
+from routes.s3_keys import participant_folder, upload_key
 
 #S3 imports
 from flask import Blueprint, request, jsonify
@@ -85,7 +85,7 @@ def upload():
         print("---- REQUEST END ----")
 
     # Build S3 key
-    key = upload_key(g.participant_id, "other", filename)
+    key = upload_key(participant_folder(db, g.participant_id), "other", filename)
 
     # Store the entire JSON body as the file contents
     body_bytes = json.dumps(data).encode("utf-8")
@@ -234,7 +234,7 @@ def uploads_presign():
         return jsonify(error="kind must be accel, gyro, hr, or other"), 400
 
     upload_id = str(uuid.uuid4())
-    key = upload_key(g.participant_id, kind, filename)
+    key = upload_key(participant_folder(db, g.participant_id), kind, filename)
 
     presigned_url = s3.generate_presigned_url(
         "put_object",

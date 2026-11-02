@@ -17,10 +17,17 @@ def safe_participant(participant_id):
     return safe
 
 
-def upload_key(participant_id, kind, filename):
-    """uploads/<participant>/<kind>/<UTC time>_<random>_<filename>
+def participant_folder(db, participant_id):
+    """The S3 folder for a participant: their study id (P01, P02, ...), or the
+    hash if they have none yet. Read-only, so unknown ids never use up a
+    study number."""
+    return db.get_study_id(participant_id) or participant_id
+
+
+def upload_key(folder, kind, filename):
+    """uploads/<study id>/<kind>/<UTC time>_<random>_<filename>
 
     The random part keeps two uploads of the same filename in the same second
     apart (SensorKit files reuse index 00000 after every upload)."""
-    return (f"uploads/{secure_filename(str(participant_id))}/{kind}/"
+    return (f"uploads/{secure_filename(str(folder))}/{kind}/"
             f"{datetime.utcnow():%Y%m%dT%H%M%S}_{uuid.uuid4().hex[:8]}_{secure_filename(filename)}")

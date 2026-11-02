@@ -1,13 +1,18 @@
 """noauth upload routes (used by the app today) file every S3 object under
-the participant id the app sends, and refuse uploads before login."""
+the participant's study id (hash if none yet), and refuse uploads before login."""
 import io
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from routes.s3_keys import safe_participant, upload_key
+from routes.s3_keys import participant_folder, safe_participant, upload_key
 
 PID = 'a' * 64
+
+
+@pytest.fixture(autouse=True)
+def no_study_id(mock_db):
+    mock_db.get_study_id.return_value = None
 
 
 @pytest.fixture(autouse=True)
@@ -31,6 +36,17 @@ def test_presign_key_is_under_participant_and_kind(client, mock_db):
     assert key.startswith(f'uploads/{PID}/other/')
     assert key.endswith('_sensorkit_ppg_watch_00000.csv')
     assert mock_db.create_pending_upload.call_args[0][1:] == (PID, 'other', key)
+
+
+def test_presign_key_uses_study_id(client, mock_db):
+    mock_db.get_study_id.return_value = 'P01'
+
+    resp = _presign(client, participantId=PID)
+
+    key = resp.get_json()['key']
+    assert key.startswith('uploads/P01/other/')
+    mock_db.get_study_id.assert_called_once_with(PID)
+    assert mock_db.create_pending_upload.call_args[0][1] == PID  # owner stays the hash
 
 
 def test_same_filename_same_second_gets_different_keys(client):
@@ -61,12 +77,13 @@ def test_participant_id_cannot_escape_its_folder(client):
     ('/api/noauth/uploadfile/heartrate', 'hr', 'insert_hr'),
 ])
 def test_direct_uploads_are_under_participant(client, mock_db, fake_s3, route, kind, insert):
+    mock_db.get_study_id.return_value = 'P01'
     resp = client.post(route, content_type='multipart/form-data', data={
         'participantId': PID, 'file': (io.BytesIO(b'ts,x\n1,2\n'), 'locations_2026-11-01.csv')})
 
     assert resp.status_code == 200
     key = fake_s3.put_object.call_args.kwargs['Key']
-    assert key.startswith(f'uploads/{PID}/{kind}/')
+    assert key.startswith(f'uploads/P01/{kind}/')
     getattr(mock_db, insert).assert_called_once_with(PID, [{'ts': 0, 'url': key}])
 
 
@@ -78,7 +95,11 @@ def test_direct_upload_before_login_is_refused(client, fake_s3):
     fake_s3.put_object.assert_not_called()
 
 
-def test_helpers():
+def test_helpers(mock_db):
+    mock_db.get_study_id.return_value = None
+    assert participant_folder(mock_db, PID) == PID
+    mock_db.get_study_id.return_value = 'P01'
+    assert participant_folder(mock_db, PID) == 'P01'
     assert safe_participant(PID) == PID
     assert safe_participant('unidentified') is None
     assert safe_participant(None) is None

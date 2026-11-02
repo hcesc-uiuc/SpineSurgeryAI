@@ -8,7 +8,7 @@ from datetime import datetime
 from config import Config
 import boto3, os, json, uuid
 
-from routes.s3_keys import safe_participant, upload_key
+from routes.s3_keys import participant_folder, safe_participant, upload_key
 
 load_dotenv()
 
@@ -42,7 +42,7 @@ def upload_noauth():
         return err
 
     filename = data.get("filename") or request.args.get("filename") or f"upload_{datetime.utcnow():%Y%m%dT%H%M%S}.json"
-    key = upload_key(participant_id, "other", filename)
+    key = upload_key(participant_folder(current_app.config["DB"], participant_id), "other", filename)
 
     s3.put_object(
         Bucket=S3_BUCKET, Key=key,
@@ -64,7 +64,7 @@ def uploadfile_noauth():
     if not file:
         return jsonify({"error": "No file uploaded"}), 400
 
-    key = upload_key(participant_id, "other", file.filename)
+    key = upload_key(participant_folder(current_app.config["DB"], participant_id), "other", file.filename)
     s3.put_object(
         Bucket=S3_BUCKET, Key=key, Body=file.stream,
         ContentType=file.mimetype or "application/octet-stream",
@@ -84,7 +84,7 @@ def uploadfile_accel_noauth():
     if not file:
         return jsonify({"error": "No file uploaded"}), 400
 
-    key = upload_key(participant_id, "accel", file.filename)
+    key = upload_key(participant_folder(current_app.config["DB"], participant_id), "accel", file.filename)
     s3.put_object(
         Bucket=S3_BUCKET, Key=key, Body=file.stream,
         ContentType=file.mimetype or "application/octet-stream",
@@ -104,7 +104,7 @@ def uploadfile_gyro_noauth():
     if not file:
         return jsonify({"error": "No file uploaded"}), 400
 
-    key = upload_key(participant_id, "gyro", file.filename)
+    key = upload_key(participant_folder(current_app.config["DB"], participant_id), "gyro", file.filename)
     s3.put_object(
         Bucket=S3_BUCKET, Key=key, Body=file.stream,
         ContentType=file.mimetype or "application/octet-stream",
@@ -124,7 +124,7 @@ def uploadfile_heartrate_noauth():
     if not file:
         return jsonify({"error": "No file uploaded"}), 400
 
-    key = upload_key(participant_id, "hr", file.filename)
+    key = upload_key(participant_folder(current_app.config["DB"], participant_id), "hr", file.filename)
     s3.put_object(
         Bucket=S3_BUCKET, Key=key, Body=file.stream,
         ContentType=file.mimetype or "application/octet-stream",
@@ -153,7 +153,7 @@ def uploads_presign_noauth():
         return jsonify(error="kind must be accel, gyro, hr, or other"), 400
 
     upload_id = str(uuid.uuid4())
-    key = upload_key(participant_id, kind, filename)
+    key = upload_key(participant_folder(current_app.config["DB"], participant_id), kind, filename)
 
     presigned_url = s3.generate_presigned_url(
         "put_object",

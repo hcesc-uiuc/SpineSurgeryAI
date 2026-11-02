@@ -70,13 +70,14 @@ def test_account_without_participant_link_is_refused(client, mock_db):
     mock_db.create_pending_upload.assert_not_called()
 
 
-def test_presign_key_is_under_participant_and_kind(client, mock_db):
+def test_presign_key_is_under_study_id_and_kind(client, mock_db):
     mock_db.get_participant_id_for_user.return_value = PID
+    mock_db.get_study_id.return_value = 'P01'
 
     resp = client.post('/api/uploads/presign', headers=_bearer(7),
                        json={'filename': 'a.csv', 'kind': 'gyro'})
 
     key = resp.get_json()['key']
-    assert key.startswith(f'uploads/{PID}/gyro/')
+    assert key.startswith('uploads/P01/gyro/')
     assert key.endswith('_a.csv')
     assert mock_db.create_pending_upload.call_args[0][3] == key
