@@ -122,6 +122,9 @@ struct MainAppView: View {
                 // this immediately resets permissionsComplete and routes them
                 // back through PermissionsFlowView before any data is missed.
                 auditPermissionsOnForeground()
+                #if !targetEnvironment(simulator)
+                BackgroundScheduler.shared.fetchSensorKitIfDue()
+                #endif
                 
             } else if newPhase == .inactive {
                 print("App is inactive")

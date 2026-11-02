@@ -370,27 +370,15 @@ class BackgroundScheduler {
         BGTaskScheduler.shared.getPendingTaskRequests{ requests in
             print("Trying to schedule Upload BGProcessing")
             Logger.shared.append("Trying to schedule BGProcessing")
-            var alreadyScheduledButInThePast: Bool = false
-            for request in requests {
+            // Keep any pending request, even one whose earliest date has passed:
+            // that one is due and waiting for Wi-Fi and power. Replacing it on
+            // every launch (the app is relaunched in the background every
+            // 10-20 min) pushed it 15 min out each time, so uploads stopped.
+            for request in requests where request.identifier == self.UPLOAD_PROCESSING_IDENTIFIER {
                 let earliestBeginDateStr = AcclerometerRecorder.shared.dateToString(request.earliestBeginDate)
-                
-                if request.identifier == self.UPLOAD_PROCESSING_IDENTIFIER {
-                    
-                    if (request.earliestBeginDate ?? Date()) < Date() {
-                        //the scheduled time is earlier than now, so
-                        //we will schedule a new one, and invalidate the earlier one.
-                        alreadyScheduledButInThePast = true
-                    }else{
-                        print("\(request.identifier) already scheduled at \(earliestBeginDateStr)")
-                        Logger.shared.append("\(request.identifier) already scheduled at  \(earliestBeginDateStr)")
-                        return
-                    }
-                }
-            }
-            
-            //we are canceling an scheduled background task from the past
-            if alreadyScheduledButInThePast {
-                BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: self.UPLOAD_PROCESSING_IDENTIFIER)
+                print("\(request.identifier) already scheduled at \(earliestBeginDateStr)")
+                Logger.shared.append("\(request.identifier) already scheduled at  \(earliestBeginDateStr)")
+                return
             }
             
             let request = BGProcessingTaskRequest(identifier: self.UPLOAD_PROCESSING_IDENTIFIER)
@@ -560,6 +548,19 @@ class BackgroundScheduler {
         task.setTaskCompleted(success: true)
     }
     
+    /// Fetch SensorKit while the app is in the foreground. Background fetches
+    /// usually run with the phone locked, where SensorKit refuses reads
+    /// (SRErrorDataInaccessible), so this is often the only fetch that works.
+    /// At most once an hour.
+    func fetchSensorKitIfDue(now: Date = Date()) {
+        let key = "sk_last_foreground_fetch"
+        let last = UserDefaults.standard.double(forKey: key)
+        guard now.timeIntervalSince1970 - last > 3600 else { return }
+        UserDefaults.standard.set(now.timeIntervalSince1970, forKey: key)
+        Logger.shared.append("Foreground SensorKit fetch")
+        performSensorkitFetch()
+    }
+
     private func performSensorkitFetch() {
         // Your function goes here
         print("Performing sensorkit fetch")
