@@ -63,6 +63,8 @@ class SensorKitFetcher: NSObject {
     private var stamp: SensorKitStamp       // newest sample time → SensorStatusStore
     private var currentDevice: SRDevice?   // device of the running fetch, for the next chunk
     private var chunksThisRun = 0
+    private var isFetching = false         // a run (all its chunks) is in progress
+    private var fetchStartedAt = Date.distantPast
 
     /// Stops one run from chaining forever (7 days of 1 h chunks is 168).
     static let maxChunksPerRun = 200
@@ -142,6 +144,17 @@ class SensorKitFetcher: NSObject {
             Logger.shared.append("\(logTag): Sensorkit is not authorized, skipping")
             return
         }
+        // A second run on top of one in progress would share pendingFetchEnd
+        // and could commit a window before its rows are written.
+        // A run that never called back (the app was suspended mid-fetch) stops
+        // counting after 30 min.
+        guard !isFetching || Date().timeIntervalSince(fetchStartedAt) > 30 * 60 else {
+            print("\(logTag): Fetch already running, skipping")
+            Logger.shared.append("\(logTag): Fetch already running, skipping")
+            return
+        }
+        isFetching = true
+        fetchStartedAt = Date()
         print("\(logTag): Sensorkit is authorized, fetching devices")
         Logger.shared.append("\(logTag): Sensorkit is authorized, fetching devices")
         openCurrentFile()
@@ -169,6 +182,7 @@ class SensorKitFetcher: NSObject {
         currentDevice = device
         guard let window = Self.nextWindow(lastFetchEnd: lastFetchEnd, now: Date(), chunk: fetchChunk) else {
             print("\(logTag): No new data window available yet")
+            isFetching = false
             return
         }
         let (fetchStart, fetchEnd) = window
@@ -329,6 +343,7 @@ extension SensorKitFetcher: SRSensorReaderDelegate {
         }
         guard let device = pickDevice(from: devices) else {
             print("\(logTag): No SensorKit devices found")
+            isFetching = false
             return
         }
         print("\(logTag): Using device: \(device.name) (\(device.model))")
@@ -337,6 +352,7 @@ extension SensorKitFetcher: SRSensorReaderDelegate {
 
     func sensorReader(_ reader: SRSensorReader, fetchDevicesDidFailWithError error: Error) {
         print("\(logTag): fetchDevices failed: \(error)")
+        isFetching = false
     }
 
     func sensorReader(_ reader: SRSensorReader,
@@ -364,10 +380,13 @@ extension SensorKitFetcher: SRSensorReaderDelegate {
         chunksThisRun += 1
         if !writeFailed, chunksThisRun < Self.maxChunksPerRun, let device = currentDevice,
            Self.nextWindow(lastFetchEnd: lastFetchEnd, now: Date(), chunk: fetchChunk) != nil {
-            fetchSamples(from: device)
+            // Not from inside this callback: SensorKit does not document
+            // starting a fetch from didCompleteFetch.
+            DispatchQueue.main.async { self.fetchSamples(from: device) }
             return
         }
 
+        isFetching = false
         sealCurrentFile()               // hands the file to the uploader
         print("\(logTag): Fetch complete (\(chunksThisRun) chunk(s))")
         Logger.shared.append("\(logTag): Fetch complete (\(chunksThisRun) chunk(s))")
@@ -379,6 +398,7 @@ extension SensorKitFetcher: SRSensorReaderDelegate {
         // Keep lastFetchEnd where it was so the next fetch retries this window.
         // Rows already flushed stay; a retry can repeat some of them.
         pendingFetchEnd = nil
+        isFetching = false
         print("\(logTag): Fetch failed: \(error)")
         Logger.shared.append("\(logTag): Fetch failed, window will be retried: \(error)")
         flush()
