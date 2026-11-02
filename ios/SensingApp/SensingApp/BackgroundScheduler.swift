@@ -6,6 +6,7 @@
 //
 
 import BackgroundTasks
+import UIKit
 import Network
 import SensorKit
 
@@ -554,6 +555,8 @@ class BackgroundScheduler {
     /// Only if no fetch (background or foreground) started in the last hour,
     /// so it does not overlap one still streaming results.
     func fetchSensorKitIfDue(now: Date = Date()) {
+        // Locked: SensorKit would refuse the reads
+        guard UIApplication.shared.isProtectedDataAvailable else { return }
         let last = UserDefaults.standard.double(forKey: lastSensorKitFetchKey)
         guard now.timeIntervalSince1970 - last > 3600 else { return }
         Logger.shared.append("Foreground SensorKit fetch")

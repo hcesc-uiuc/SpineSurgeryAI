@@ -103,6 +103,10 @@ struct MainAppView: View {
             BackgroundScheduler.shared.scheduleUploadBGTask()
             BackgroundScheduler.shared.scheduleBackgroundSensorkitFetch()
             BackgroundScheduler.shared.scheduleHealthResearchBGProcessingTask()
+            // A cold launch into the foreground does not fire the .active change below
+            #if !targetEnvironment(simulator)
+            BackgroundScheduler.shared.fetchSensorKitIfDue()
+            #endif
         }
         .onChange(of: scenePhase) { oldPhase, newPhase in
             if newPhase == .background {
