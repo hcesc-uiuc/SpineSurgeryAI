@@ -37,10 +37,11 @@ class BackgroundScheduler {
         HealthkitRecorder.shared.getHealthKitData()
         
         var someSensorIsActive = false
-        if(AcclerometerRecorder.shared.checkAccelerometerAuthorizationStatus() == true){
+        if(AcclerometerRecorder.shared.checkAccelerometerAuthorizationStatus() == true),
+          coreMotionAccelStillDraining() {
             // Phone accelerometer comes from SensorKit now, so CoreMotion recording
             // is no longer restarted. Keep saving what it already recorded (up to
-            // 12 h) until that runs out.
+            // 12 h); after that each call would only write an empty file.
             AcclerometerRecorder.shared.fetchAndSaveRecordedAcclerometerData()
             someSensorIsActive = true
         }
@@ -52,6 +53,15 @@ class BackgroundScheduler {
         
     }
     
+    /// True for 13 h after this build first stopped restarting CoreMotion
+    /// recording, which records for at most 12 h.
+    private func coreMotionAccelStillDraining(now: Date = Date()) -> Bool {
+        let key = "coremotion_accel_stopped_at"
+        let defaults = UserDefaults.standard
+        if defaults.object(forKey: key) == nil { defaults.set(now.timeIntervalSince1970, forKey: key) }
+        return now.timeIntervalSince1970 - defaults.double(forKey: key) < 13 * 3600
+    }
+
     func printScheduledBackgroundTasks(){
         /*
          We are printing every background task that is
