@@ -46,6 +46,7 @@ class SensorKitFetcher: NSObject {
     private let logTag: String          // e.g. "SK-Accel"
     private let batchSize: Int
     private let maxFileSize: Int
+    private let fetchChunk: TimeInterval   // longest window asked for in one fetch
 
     private let fileIndexKey: String
     private let lastFetchEndKey: String
@@ -60,6 +61,11 @@ class SensorKitFetcher: NSObject {
     private var pendingFetchEnd: Double?   // committed to lastFetchEnd on didCompleteFetch
     private var writeFailed = false        // a flush failed; do not commit the window
     private var stamp: SensorKitStamp       // newest sample time → SensorStatusStore
+    private var currentDevice: SRDevice?   // device of the running fetch, for the next chunk
+    private var chunksThisRun = 0
+
+    /// Stops one run from chaining forever (7 days of 1 h chunks is 168).
+    static let maxChunksPerRun = 200
     private let documentsDir = FileManager.default
         .urls(for: .documentDirectory, in: .userDomainMask)[0]
 
@@ -81,7 +87,8 @@ class SensorKitFetcher: NSObject {
          fileIndexKey: String,
          lastFetchEndKey: String,
          batchSize: Int = 2000,
-         maxFileSizeMB: Int = 50) {
+         maxFileSizeMB: Int = 50,
+         fetchChunkHours: Double = 6) {
         self.sensor           = sensor
         self.reader           = SRSensorReader(sensor: sensor)
         self.filePrefix       = filePrefix
@@ -92,6 +99,7 @@ class SensorKitFetcher: NSObject {
         self.lastFetchEndKey  = lastFetchEndKey
         self.batchSize        = batchSize
         self.maxFileSize      = maxFileSizeMB * 1024 * 1024
+        self.fetchChunk       = fetchChunkHours * 3600
         self.currentFileURL   = documentsDir   // placeholder; set in openCurrentFile()
         self.stamp            = SensorKitStamp(kind)
         super.init()
@@ -137,20 +145,33 @@ class SensorKitFetcher: NSObject {
         print("\(logTag): Sensorkit is authorized, fetching devices")
         Logger.shared.append("\(logTag): Sensorkit is authorized, fetching devices")
         openCurrentFile()
+        chunksThisRun = 0
         reader.fetchDevices()
     }
 
-    private func fetchSamples(from device: SRDevice) {
-        let now = Date()
-        let fetchEnd = now.addingTimeInterval(-25 * 3600)  // respect 24hr embargo
-        let fetchStart = lastFetchEnd > 0
-            ? Date(timeIntervalSinceReferenceDate: lastFetchEnd)
+    /// The next window to fetch, at most `chunk` long, or nil if nothing new is
+    /// out of the 24 h embargo yet. A big window (a high-rate sensor, or days
+    /// behind) can take longer than iOS lets the app run; it then never
+    /// completes, lastFetchEnd never moves, and every run re-reads the same
+    /// start. Short chunks each commit on their own.
+    static func nextWindow(lastFetchEnd: Double, now: Date,
+                           chunk: TimeInterval) -> (from: Date, to: Date)? {
+        let limit = now.addingTimeInterval(-25 * 3600)    // respect 24hr embargo
+        let oldest = now.addingTimeInterval(-7 * 24 * 3600) // SensorKit keeps 7 days
+        let start = lastFetchEnd > 0
+            ? max(Date(timeIntervalSinceReferenceDate: lastFetchEnd), oldest)
             : now.addingTimeInterval(-48 * 3600)
+        guard start < limit else { return nil }
+        return (start, min(start.addingTimeInterval(chunk), limit))
+    }
 
-        guard fetchStart < fetchEnd else {
+    private func fetchSamples(from device: SRDevice) {
+        currentDevice = device
+        guard let window = Self.nextWindow(lastFetchEnd: lastFetchEnd, now: Date(), chunk: fetchChunk) else {
             print("\(logTag): No new data window available yet")
             return
         }
+        let (fetchStart, fetchEnd) = window
 
         let request = SRFetchRequest()
         request.device = device
@@ -328,7 +349,7 @@ extension SensorKitFetcher: SRSensorReaderDelegate {
 
     func sensorReader(_ reader: SRSensorReader, didCompleteFetch fetchRequest: SRFetchRequest) {
         flush()
-        sealCurrentFile()               // hands the file to the uploader
+        fileHandle?.synchronizeFile()   // rows on disk before the window is committed
         if let end = pendingFetchEnd, !writeFailed {
             lastFetchEnd = end
         } else if writeFailed {
@@ -337,8 +358,19 @@ extension SensorKitFetcher: SRSensorReaderDelegate {
         }
         pendingFetchEnd = nil
         stamp.save()
-        print("\(logTag): Fetch complete")
-        Logger.shared.append("\(logTag): Fetch complete")
+
+        // More to catch up on: fetch the next chunk into the same file. If iOS
+        // suspends the app meanwhile, only that chunk is fetched again.
+        chunksThisRun += 1
+        if !writeFailed, chunksThisRun < Self.maxChunksPerRun, let device = currentDevice,
+           Self.nextWindow(lastFetchEnd: lastFetchEnd, now: Date(), chunk: fetchChunk) != nil {
+            fetchSamples(from: device)
+            return
+        }
+
+        sealCurrentFile()               // hands the file to the uploader
+        print("\(logTag): Fetch complete (\(chunksThisRun) chunk(s))")
+        Logger.shared.append("\(logTag): Fetch complete (\(chunksThisRun) chunk(s))")
     }
 
     func sensorReader(_ reader: SRSensorReader,
