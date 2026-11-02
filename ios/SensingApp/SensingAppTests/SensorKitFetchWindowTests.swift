@@ -69,4 +69,22 @@ final class SensorKitFetchWindowTests: XCTestCase {
         let last = now.addingTimeInterval(-25 * hour - SensorKitFetcher.minWindow)
         XCTAssertNotNil(SensorKitFetcher.nextWindow(lastFetchEnd: ref(last), now: now, chunk: hour))
     }
+
+    func testChainingStopsAtTheRunByteCap() {
+        XCTAssertTrue(SensorKitFetcher.shouldChain(chunks: 1, bytesThisRun: 0, freeBytes: nil))
+        XCTAssertFalse(SensorKitFetcher.shouldChain(chunks: 1, bytesThisRun: SensorKitFetcher.maxBytesPerRun,
+                                                    freeBytes: nil))
+    }
+
+    func testChainingStopsWhenThePhoneIsNearlyFull() {
+        XCTAssertFalse(SensorKitFetcher.shouldChain(chunks: 1, bytesThisRun: 0,
+                                                    freeBytes: SensorKitFetcher.minFreeBytes - 1))
+        XCTAssertTrue(SensorKitFetcher.shouldChain(chunks: 1, bytesThisRun: 0,
+                                                   freeBytes: SensorKitFetcher.minFreeBytes))
+    }
+
+    func testChainingStopsAtTheChunkCap() {
+        XCTAssertFalse(SensorKitFetcher.shouldChain(chunks: SensorKitFetcher.maxChunksPerRun,
+                                                    bytesThisRun: 0, freeBytes: nil))
+    }
 }

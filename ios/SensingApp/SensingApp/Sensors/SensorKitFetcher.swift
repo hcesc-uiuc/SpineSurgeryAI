@@ -63,6 +63,7 @@ class SensorKitFetcher: NSObject {
     private var stamp: SensorKitStamp       // newest sample time → SensorStatusStore
     private var currentDevice: SRDevice?   // device of the running fetch, for the next chunk
     private var chunksThisRun = 0
+    private var bytesThisRun = 0
     private var isFetching = false         // a run (all its chunks) is in progress
     private var fetchStartedAt = Date.distantPast
 
@@ -71,6 +72,18 @@ class SensorKitFetcher: NSObject {
 
     /// Shortest window worth a fetch.
     static let minWindow: TimeInterval = 5 * 60
+
+    /// One run stops chaining after writing this much, or when the phone has
+    /// less than minFreeBytes left. Catching up a week of gyroscope is ~1 GB;
+    /// later runs continue once uploads have caught up.
+    static let maxBytesPerRun = 250 * 1024 * 1024
+    static let minFreeBytes: Int64 = 1024 * 1024 * 1024
+
+    static func shouldChain(chunks: Int, bytesThisRun: Int, freeBytes: Int64?) -> Bool {
+        guard chunks < maxChunksPerRun, bytesThisRun < maxBytesPerRun else { return false }
+        if let freeBytes, freeBytes < minFreeBytes { return false }
+        return true
+    }
     private let documentsDir = FileManager.default
         .urls(for: .documentDirectory, in: .userDomainMask)[0]
 
@@ -162,6 +175,7 @@ class SensorKitFetcher: NSObject {
         Logger.shared.append("\(logTag): Sensorkit is authorized, fetching devices")
         openCurrentFile()
         chunksThisRun = 0
+        bytesThisRun = 0
         reader.fetchDevices()
     }
 
@@ -201,6 +215,11 @@ class SensorKitFetcher: NSObject {
         pendingFetchEnd = fetchEnd.timeIntervalSinceReferenceDate
         writeFailed = false
         reader.fetch(request)
+    }
+
+    private func freeDiskBytes() -> Int64? {
+        try? documentsDir.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
+            .volumeAvailableCapacityForImportantUsage
     }
 
     private func pickDevice(from devices: [SRDevice]) -> SRDevice? {
@@ -278,6 +297,7 @@ class SensorKitFetcher: NSObject {
             // The throwing API: the non-throwing write(_:) raises an uncatchable
             // Objective-C exception when the disk is full.
             try handle.write(contentsOf: data)
+            bytesThisRun += data.count
             return true
         } catch {
             print("\(logTag): Write failed: \(error)")
@@ -383,7 +403,8 @@ extension SensorKitFetcher: SRSensorReaderDelegate {
         // More to catch up on: fetch the next chunk into the same file. If iOS
         // suspends the app meanwhile, only that chunk is fetched again.
         chunksThisRun += 1
-        if !writeFailed, chunksThisRun < Self.maxChunksPerRun, let device = currentDevice,
+        if !writeFailed, let device = currentDevice,
+           Self.shouldChain(chunks: chunksThisRun, bytesThisRun: bytesThisRun, freeBytes: freeDiskBytes()),
            Self.nextWindow(lastFetchEnd: lastFetchEnd, now: Date(), chunk: fetchChunk) != nil {
             // Not from inside this callback: SensorKit does not document
             // starting a fetch from didCompleteFetch.
