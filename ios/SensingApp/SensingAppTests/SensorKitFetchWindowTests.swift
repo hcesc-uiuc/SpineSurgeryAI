@@ -58,4 +58,15 @@ final class SensorKitFetchWindowTests: XCTestCase {
         XCTAssertLessThan(chunks, SensorKitFetcher.maxChunksPerRun)
         XCTAssertEqual(last, ref(now.addingTimeInterval(-25 * hour)))
     }
+
+    func testCaughtUpSensorDoesNotFetchTheLastFewSeconds() {
+        // After a chunk ends at the embargo, the embargo has moved a few seconds.
+        let last = now.addingTimeInterval(-25 * hour - 3)
+        XCTAssertNil(SensorKitFetcher.nextWindow(lastFetchEnd: ref(last), now: now, chunk: hour))
+    }
+
+    func testFiveMinutesBehindStillFetches() {
+        let last = now.addingTimeInterval(-25 * hour - SensorKitFetcher.minWindow)
+        XCTAssertNotNil(SensorKitFetcher.nextWindow(lastFetchEnd: ref(last), now: now, chunk: hour))
+    }
 }

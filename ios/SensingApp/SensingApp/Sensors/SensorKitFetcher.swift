@@ -68,6 +68,9 @@ class SensorKitFetcher: NSObject {
 
     /// Stops one run from chaining forever (7 days of 1 h chunks is 168).
     static let maxChunksPerRun = 200
+
+    /// Shortest window worth a fetch.
+    static let minWindow: TimeInterval = 5 * 60
     private let documentsDir = FileManager.default
         .urls(for: .documentDirectory, in: .userDomainMask)[0]
 
@@ -174,7 +177,9 @@ class SensorKitFetcher: NSObject {
         let start = lastFetchEnd > 0
             ? max(Date(timeIntervalSinceReferenceDate: lastFetchEnd), oldest)
             : now.addingTimeInterval(-48 * 3600)
-        guard start < limit else { return nil }
+        // Less than 5 min new: wait. Otherwise a caught-up sensor keeps finding
+        // the few seconds the embargo moved during its last chunk.
+        guard limit.timeIntervalSince(start) >= minWindow else { return nil }
         return (start, min(start.addingTimeInterval(chunk), limit))
     }
 
