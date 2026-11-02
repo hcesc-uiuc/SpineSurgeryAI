@@ -2,7 +2,8 @@
 sensorkit_report.py -- Issue #74.
 
 Answers "is each SensorKit sensor actually producing data?" from what phones
-have uploaded. For every sensorkit_* object under uploads/other/ it reads the
+have uploaded. For every sensorkit_* object under uploads/<study id>/other/
+(and the older uploads/other/) it reads the
 first 4 KB, counts rows after the CSV header, and joins the object to its
 participant through pending_uploads.
 
@@ -28,7 +29,8 @@ import boto3
 import psycopg2
 from dotenv import load_dotenv
 
-KEY_RE = re.compile(r"^uploads/other/(\d{8}T\d{6})_(sensorkit_[a-z]+_[a-z]+)_\d{5}\.csv$")
+# uploads/other/<time>_<name> (before #85) or uploads/<study id>/other/<time>_<random>_<name>
+KEY_RE = re.compile(r"^uploads/(?:[^/]+/)?other/(\d{8}T\d{6})_(?:[0-9a-f]{8}_)?(sensorkit_[a-z]+_[a-z]+)_\d{5}\.csv$")
 
 
 def data_rows(s3, bucket, key):
@@ -55,12 +57,12 @@ def main():
     cur = conn.cursor()
     cur.execute("select pu.object_key, p.external_id from pending_uploads pu "
                 "join participants p on p.id = pu.participant_id "
-                "where pu.object_key like 'uploads/other/%sensorkit_%'")
+                "where pu.object_key like 'uploads/%other/%sensorkit_%'")
     owner = dict(cur.fetchall())
 
     since = args.since.replace("-", "") if args.since else None
     objects = []
-    for page in s3.get_paginator("list_objects_v2").paginate(Bucket=bucket, Prefix="uploads/other/"):
+    for page in s3.get_paginator("list_objects_v2").paginate(Bucket=bucket, Prefix="uploads/"):
         for o in page.get("Contents", []):
             m = KEY_RE.match(o["Key"])
             if not m or (since and m.group(1)[:8] < since):
