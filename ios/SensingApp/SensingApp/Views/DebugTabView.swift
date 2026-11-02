@@ -366,8 +366,7 @@ struct DebugTabView: View {
             print("Motion & Fitness permission is not determined.")
             requestMotionPermission()
         case .authorized:
-            print("Motion & Fitness permission is authorized. Started recording.")
-            AcclerometerRecorder.shared.startRecording()
+            print("Motion & Fitness permission is authorized.")
         case .denied:
             print("Motion & Fitness permission is denied.")
             showPermissionDeniedAlert()
@@ -387,7 +386,6 @@ struct DebugTabView: View {
                 switch status {
                 case .authorized:
                     print("Motion permission granted")
-                    AcclerometerRecorder.shared.startRecording()
                 case .denied, .restricted:
                     print("Motion permission denied/restricted")
                 case .notDetermined:

@@ -38,9 +38,9 @@ class BackgroundScheduler {
         
         var someSensorIsActive = false
         if(AcclerometerRecorder.shared.checkAccelerometerAuthorizationStatus() == true){
-            // Restart motion recording
-            AcclerometerRecorder.shared.startRecording()
-            // Fetch new data
+            // Phone accelerometer comes from SensorKit now, so CoreMotion recording
+            // is no longer restarted. Keep saving what it already recorded (up to
+            // 12 h) until that runs out.
             AcclerometerRecorder.shared.fetchAndSaveRecordedAcclerometerData()
             someSensorIsActive = true
         }

@@ -29,7 +29,7 @@ final class SensorKitStatusTests: XCTestCase {
 
     func testEverySensorHasItsOwnFilePrefix() {
         let prefixes = SensorKitStatusSensor.all.map(\.filePrefix)
-        XCTAssertEqual(prefixes.count, 13)
+        XCTAssertEqual(prefixes.count, 14)
         XCTAssertEqual(Set(prefixes).count, prefixes.count)
     }
 

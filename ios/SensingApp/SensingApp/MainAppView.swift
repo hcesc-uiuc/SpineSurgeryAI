@@ -93,7 +93,7 @@ struct MainAppView: View {
             guard !hasStartedCollection else { return }
             hasStartedCollection = true
             // All permissions have been granted — begin data collection.
-            AcclerometerRecorder.shared.startRecording()
+            // Phone accelerometer comes from SensorKit now (SensorKit_AccelPhone.swift).
             // HealthkitRecorder.shared.getHealthKitData()
             // #if !targetEnvironment(simulator)
             // // SensorKitAccelerometerFetcher.shared.startRecording()

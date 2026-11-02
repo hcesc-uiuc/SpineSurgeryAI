@@ -22,6 +22,8 @@ struct SensorKitStatusSensor: Identifiable {
 
     /// Every SensorKit sensor the app collects (registry and standalone fetchers).
     static let all: [SensorKitStatusSensor] = [
+        .init(name: "Phone accelerometer", sensor: .accelerometer, kind: .accelerometer,
+              filePrefix: "sensorkit_accel_phone", lastFetchEndKey: "sk_accel_phone_last_fetch_end"),
         .init(name: "Watch accelerometer", sensor: .accelerometer, kind: .watchAccelerometer,
               filePrefix: "sensorkit_accel_watch", lastFetchEndKey: "sk_accel_last_fetch_end"),
         .init(name: "Gyroscope", sensor: .rotationRate, kind: .gyroscope,
