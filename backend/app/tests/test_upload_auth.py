@@ -68,3 +68,15 @@ def test_account_without_participant_link_is_refused(client, mock_db):
     assert resp.status_code == 403
     assert resp.get_json()['error'] == 'not_enrolled'
     mock_db.create_pending_upload.assert_not_called()
+
+
+def test_presign_key_is_under_participant_and_kind(client, mock_db):
+    mock_db.get_participant_id_for_user.return_value = PID
+
+    resp = client.post('/api/uploads/presign', headers=_bearer(7),
+                       json={'filename': 'a.csv', 'kind': 'gyro'})
+
+    key = resp.get_json()['key']
+    assert key.startswith(f'uploads/{PID}/gyro/')
+    assert key.endswith('_a.csv')
+    assert mock_db.create_pending_upload.call_args[0][3] == key

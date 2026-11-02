@@ -6,6 +6,8 @@ from auth.middleware import require_auth
 from functools import wraps
 import uuid
 
+from routes.s3_keys import upload_key
+
 #S3 imports
 from flask import Blueprint, request, jsonify
 from dotenv import load_dotenv
@@ -83,7 +85,7 @@ def upload():
         print("---- REQUEST END ----")
 
     # Build S3 key
-    key = f"uploads/{datetime.utcnow():%Y%m%dT%H%M%S}_{secure_filename(filename)}"
+    key = upload_key(g.participant_id, "other", filename)
 
     # Store the entire JSON body as the file contents
     body_bytes = json.dumps(data).encode("utf-8")
@@ -232,7 +234,7 @@ def uploads_presign():
         return jsonify(error="kind must be accel, gyro, hr, or other"), 400
 
     upload_id = str(uuid.uuid4())
-    key = f"uploads/{kind}/{datetime.utcnow():%Y%m%dT%H%M%S}_{secure_filename(filename)}"
+    key = upload_key(g.participant_id, kind, filename)
 
     presigned_url = s3.generate_presigned_url(
         "put_object",
@@ -300,7 +302,7 @@ def uploads_complete():
             db.insert_gyro(g.participant_id, [{"url": key}])
         elif kind == "hr":
             db.insert_hr(g.participant_id, [{"url": key}])
-        # "other" — stored in uploads/other/ in S3, no dedicated DB table
+        # "other" — stored in uploads/<participant>/other/ in S3, no dedicated DB table
 
         db.mark_upload_completed(upload_id)
         return jsonify(status="completed", key=key), 200

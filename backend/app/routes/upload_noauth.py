@@ -8,6 +8,8 @@ from datetime import datetime
 from config import Config
 import boto3, os, json, uuid
 
+from routes.s3_keys import safe_participant, upload_key
+
 load_dotenv()
 
 s3 = boto3.client(
@@ -21,9 +23,11 @@ S3_BUCKET = os.getenv("AWS_BUCKET")
 upload_noauth_bp = Blueprint("upload_noauth", __name__)
 
 
-def _require_participant_id(data: dict):
-    pid = data.get("participantId") or data.get("participant_id")
+def _require_participant_id(data):
+    pid = safe_participant(data.get("participantId") or data.get("participant_id"))
     if not pid:
+        # Missing, or "unidentified" (not logged in yet). The app keeps the
+        # file and retries after login.
         return None, (jsonify({"error": "participantId is required"}), 400)
     return pid, None
 
@@ -38,7 +42,7 @@ def upload_noauth():
         return err
 
     filename = data.get("filename") or request.args.get("filename") or f"upload_{datetime.utcnow():%Y%m%dT%H%M%S}.json"
-    key = f"uploads/{datetime.utcnow():%Y%m%dT%H%M%S}_{secure_filename(filename)}"
+    key = upload_key(participant_id, "other", filename)
 
     s3.put_object(
         Bucket=S3_BUCKET, Key=key,
@@ -52,15 +56,15 @@ def upload_noauth():
 
 @upload_noauth_bp.route("/noauth/uploadfile", methods=["POST"])
 def uploadfile_noauth():
-    participant_id = request.form.get("participantId") or request.form.get("participant_id")
-    if not participant_id:
-        return jsonify({"error": "participantId is required"}), 400
+    participant_id, err = _require_participant_id(request.form)
+    if err:
+        return err
 
     file = request.files.get("file")
     if not file:
         return jsonify({"error": "No file uploaded"}), 400
 
-    key = f"uploads/{datetime.utcnow():%Y%m%dT%H%M%S}_{secure_filename(file.filename)}"
+    key = upload_key(participant_id, "other", file.filename)
     s3.put_object(
         Bucket=S3_BUCKET, Key=key, Body=file.stream,
         ContentType=file.mimetype or "application/octet-stream",
@@ -72,15 +76,15 @@ def uploadfile_noauth():
 
 @upload_noauth_bp.route("/noauth/uploadfile/accel", methods=["POST"])
 def uploadfile_accel_noauth():
-    participant_id = request.form.get("participantId") or request.form.get("participant_id")
-    if not participant_id:
-        return jsonify({"error": "participantId is required"}), 400
+    participant_id, err = _require_participant_id(request.form)
+    if err:
+        return err
 
     file = request.files.get("file")
     if not file:
         return jsonify({"error": "No file uploaded"}), 400
 
-    key = f"uploads/{datetime.utcnow():%Y%m%dT%H%M%S}_{secure_filename(file.filename)}"
+    key = upload_key(participant_id, "accel", file.filename)
     s3.put_object(
         Bucket=S3_BUCKET, Key=key, Body=file.stream,
         ContentType=file.mimetype or "application/octet-stream",
@@ -92,15 +96,15 @@ def uploadfile_accel_noauth():
 
 @upload_noauth_bp.route("/noauth/uploadfile/gyro", methods=["POST"])
 def uploadfile_gyro_noauth():
-    participant_id = request.form.get("participantId") or request.form.get("participant_id")
-    if not participant_id:
-        return jsonify({"error": "participantId is required"}), 400
+    participant_id, err = _require_participant_id(request.form)
+    if err:
+        return err
 
     file = request.files.get("file")
     if not file:
         return jsonify({"error": "No file uploaded"}), 400
 
-    key = f"uploads/{datetime.utcnow():%Y%m%dT%H%M%S}_{secure_filename(file.filename)}"
+    key = upload_key(participant_id, "gyro", file.filename)
     s3.put_object(
         Bucket=S3_BUCKET, Key=key, Body=file.stream,
         ContentType=file.mimetype or "application/octet-stream",
@@ -112,15 +116,15 @@ def uploadfile_gyro_noauth():
 
 @upload_noauth_bp.route("/noauth/uploadfile/heartrate", methods=["POST"])
 def uploadfile_heartrate_noauth():
-    participant_id = request.form.get("participantId") or request.form.get("participant_id")
-    if not participant_id:
-        return jsonify({"error": "participantId is required"}), 400
+    participant_id, err = _require_participant_id(request.form)
+    if err:
+        return err
 
     file = request.files.get("file")
     if not file:
         return jsonify({"error": "No file uploaded"}), 400
 
-    key = f"uploads/{datetime.utcnow():%Y%m%dT%H%M%S}_{secure_filename(file.filename)}"
+    key = upload_key(participant_id, "hr", file.filename)
     s3.put_object(
         Bucket=S3_BUCKET, Key=key, Body=file.stream,
         ContentType=file.mimetype or "application/octet-stream",
@@ -135,9 +139,9 @@ def uploads_presign_noauth():
     db = current_app.config["DB"]
     body = request.get_json(silent=True) or {}
 
-    participant_id = body.get("participantId") or body.get("participant_id")
-    if not participant_id:
-        return jsonify(error="participantId is required"), 400
+    participant_id, err = _require_participant_id(body)
+    if err:
+        return err
 
     filename = body.get("filename")
     content_type = body.get("content_type", "application/octet-stream")
@@ -149,7 +153,7 @@ def uploads_presign_noauth():
         return jsonify(error="kind must be accel, gyro, hr, or other"), 400
 
     upload_id = str(uuid.uuid4())
-    key = f"uploads/{kind}/{datetime.utcnow():%Y%m%dT%H%M%S}_{secure_filename(filename)}"
+    key = upload_key(participant_id, kind, filename)
 
     presigned_url = s3.generate_presigned_url(
         "put_object",
@@ -215,7 +219,7 @@ def uploads_complete_noauth():
             db.insert_gyro(participant_id, [{"url": key}])
         elif kind == "hr":
             db.insert_hr(participant_id, [{"url": key}])
-        # "other" — stored in uploads/other/ in S3, no dedicated DB table
+        # "other" — stored in uploads/<participant>/other/ in S3, no dedicated DB table
 
         db.mark_upload_completed(upload_id)
         return jsonify(status="completed", key=key), 200
