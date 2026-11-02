@@ -73,6 +73,7 @@ struct Uploader {
                             let destination = Uploader.processedDestination(for: file, in: processedURL)
                             do {
                                 try fileManager.moveItem(at: file, to: destination)
+                                Uploader.markUploaded(destination)
                                 print("     Moved \(file.lastPathComponent) -> processed/")
                             } catch {
                                 print("     Failed to move \(file.lastPathComponent): \(error)")
@@ -86,6 +87,7 @@ struct Uploader {
                             let destination = Uploader.processedDestination(for: file, in: processedURL)
                             do {
                                 try fileManager.moveItem(at: file, to: destination)
+                                Uploader.markUploaded(destination)
                                 print("     Moved \(file.lastPathComponent) -> processed/")
                             } catch {
                                 print("     Failed to move \(file.lastPathComponent): \(error)")
@@ -107,6 +109,12 @@ struct Uploader {
                     //                    }
                 }
             }
+        }
+
+        let pruned = Uploader.pruneProcessed(in: processedURL)
+        if pruned > 0 {
+            print("Deleted \(pruned) uploaded file(s) older than 3 days from processed/")
+            Logger.shared.append("Uploader: deleted \(pruned) uploaded file(s) older than 3 days from processed/")
         }
     }
     
@@ -279,6 +287,36 @@ struct Uploader {
 
     /// True when a CSV has at least one non-empty line after its header.
     /// Reads only the first 64 KB.
+    /// How long an uploaded file stays in processed/ before it is deleted.
+    static let processedRetention: TimeInterval = 3 * 24 * 3600
+
+    /// Stamp a file just moved to processed/ with the upload time, so
+    /// pruneProcessed counts from the upload, not from when it was written.
+    static func markUploaded(_ url: URL, now: Date = Date()) {
+        try? FileManager.default.setAttributes([.modificationDate: now], ofItemAtPath: url.path)
+    }
+
+    /// Deletes files in processed/ uploaded more than `retention` ago.
+    /// Everything in processed/ was confirmed by the backend before it was
+    /// moved there. Returns how many files were deleted.
+    @discardableResult
+    static func pruneProcessed(in dir: URL,
+                               retention: TimeInterval = processedRetention,
+                               now: Date = Date(),
+                               fileManager: FileManager = .default) -> Int {
+        let files = (try? fileManager.contentsOfDirectory(
+            at: dir, includingPropertiesForKeys: [.contentModificationDateKey, .isRegularFileKey])) ?? []
+        var deleted = 0
+        for file in files {
+            let values = try? file.resourceValues(forKeys: [.contentModificationDateKey, .isRegularFileKey])
+            guard values?.isRegularFile == true,
+                  let modified = values?.contentModificationDate,
+                  now.timeIntervalSince(modified) > retention else { continue }
+            if (try? fileManager.removeItem(at: file)) != nil { deleted += 1 }
+        }
+        return deleted
+    }
+
     static func hasDataRows(_ file: URL) -> Bool {
         guard let handle = try? FileHandle(forReadingFrom: file) else { return false }
         defer { handle.closeFile() }

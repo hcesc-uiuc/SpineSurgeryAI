@@ -157,4 +157,38 @@ final class UploaderFileTests: XCTestCase {
         XCTAssertEqual(found.map(\.lastPathComponent),
                        [older.lastPathComponent, newer.lastPathComponent])
     }
+
+    // MARK: processed/ cleanup
+
+    private func uploaded(_ name: String, at date: Date) throws -> URL {
+        let url = processed.appendingPathComponent(name)
+        try Data("ts,x\n1,2\n".utf8).write(to: url)
+        Uploader.markUploaded(url, now: date)
+        return url
+    }
+
+    func testPruneDeletesOnlyFilesUploadedMoreThanThreeDaysAgo() throws {
+        let old = try uploaded("sensorkit_ppg_watch_00000.csv", at: fixedDate.addingTimeInterval(-4 * 24 * 3600))
+        let recent = try uploaded("sensorkit_ppg_watch_00001.csv", at: fixedDate.addingTimeInterval(-2 * 24 * 3600))
+
+        let deleted = Uploader.pruneProcessed(in: processed, now: fixedDate)
+
+        XCTAssertEqual(deleted, 1)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: old.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: recent.path))
+    }
+
+    func testPruneLeavesFoldersAlone() throws {
+        let sub = processed.appendingPathComponent("sub")
+        try FileManager.default.createDirectory(at: sub, withIntermediateDirectories: true)
+        try FileManager.default.setAttributes([.modificationDate: fixedDate.addingTimeInterval(-30 * 24 * 3600)],
+                                              ofItemAtPath: sub.path)
+
+        XCTAssertEqual(Uploader.pruneProcessed(in: processed, now: fixedDate), 0)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: sub.path))
+    }
+
+    func testMissingProcessedFolderIsFine() {
+        XCTAssertEqual(Uploader.pruneProcessed(in: dir.appendingPathComponent("nope"), now: fixedDate), 0)
+    }
 }
