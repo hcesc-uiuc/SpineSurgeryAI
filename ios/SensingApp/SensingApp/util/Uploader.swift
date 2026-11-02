@@ -285,38 +285,48 @@ struct Uploader {
         return candidate
     }
 
-    /// True when a CSV has at least one non-empty line after its header.
-    /// Reads only the first 64 KB.
     /// How long an uploaded file stays in processed/ before it is deleted.
     static let processedRetention: TimeInterval = 3 * 24 * 3600
 
-    /// Stamp a file just moved to processed/ with the upload time, so
-    /// pruneProcessed counts from the upload, not from when it was written.
+    /// Extended attribute holding the upload time (seconds since 1970).
+    private static let uploadedAtAttribute = "edu.uiuc.hcesc.uploadedAt"
+
+    /// Stamp a file just moved to processed/ after a confirmed upload. Only
+    /// stamped files are ever pruned: older builds moved some files there
+    /// without the backend confirming them.
     static func markUploaded(_ url: URL, now: Date = Date()) {
-        try? FileManager.default.setAttributes([.modificationDate: now], ofItemAtPath: url.path)
+        var seconds = now.timeIntervalSince1970
+        _ = setxattr(url.path, uploadedAtAttribute, &seconds, MemoryLayout<Double>.size, 0, 0)
     }
 
-    /// Deletes files in processed/ uploaded more than `retention` ago.
-    /// Everything in processed/ was confirmed by the backend before it was
-    /// moved there. Returns how many files were deleted.
+    /// When the file was stamped by markUploaded, or nil if it never was.
+    static func uploadedAt(_ url: URL) -> Date? {
+        var seconds: Double = 0
+        let size = getxattr(url.path, uploadedAtAttribute, &seconds, MemoryLayout<Double>.size, 0, 0)
+        return size == MemoryLayout<Double>.size ? Date(timeIntervalSince1970: seconds) : nil
+    }
+
+    /// Deletes stamped files in processed/ uploaded more than `retention` ago.
+    /// Returns how many files were deleted.
     @discardableResult
     static func pruneProcessed(in dir: URL,
                                retention: TimeInterval = processedRetention,
                                now: Date = Date(),
                                fileManager: FileManager = .default) -> Int {
         let files = (try? fileManager.contentsOfDirectory(
-            at: dir, includingPropertiesForKeys: [.contentModificationDateKey, .isRegularFileKey])) ?? []
+            at: dir, includingPropertiesForKeys: [.isRegularFileKey])) ?? []
         var deleted = 0
         for file in files {
-            let values = try? file.resourceValues(forKeys: [.contentModificationDateKey, .isRegularFileKey])
-            guard values?.isRegularFile == true,
-                  let modified = values?.contentModificationDate,
-                  now.timeIntervalSince(modified) > retention else { continue }
+            guard (try? file.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile == true,
+                  let uploaded = uploadedAt(file),
+                  now.timeIntervalSince(uploaded) > retention else { continue }
             if (try? fileManager.removeItem(at: file)) != nil { deleted += 1 }
         }
         return deleted
     }
 
+    /// True when a CSV has at least one non-empty line after its header.
+    /// Reads only the first 64 KB.
     static func hasDataRows(_ file: URL) -> Bool {
         guard let handle = try? FileHandle(forReadingFrom: file) else { return false }
         defer { handle.closeFile() }

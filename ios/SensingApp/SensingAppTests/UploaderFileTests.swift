@@ -178,6 +178,18 @@ final class UploaderFileTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: recent.path))
     }
 
+    func testPruneKeepsFilesWithoutUploadStamp() throws {
+        // Moved here by an older build, possibly without a confirmed upload.
+        let legacy = processed.appendingPathComponent("accelerometer_2026-09-01.csv")
+        try Data("ts,x\n1,2\n".utf8).write(to: legacy)
+        try FileManager.default.setAttributes([.modificationDate: fixedDate.addingTimeInterval(-60 * 24 * 3600)],
+                                              ofItemAtPath: legacy.path)
+
+        XCTAssertEqual(Uploader.pruneProcessed(in: processed, now: fixedDate), 0)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: legacy.path))
+        XCTAssertNil(Uploader.uploadedAt(legacy))
+    }
+
     func testPruneLeavesFoldersAlone() throws {
         let sub = processed.appendingPathComponent("sub")
         try FileManager.default.createDirectory(at: sub, withIntermediateDirectories: true)
