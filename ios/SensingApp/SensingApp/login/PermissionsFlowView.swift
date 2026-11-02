@@ -495,16 +495,15 @@ struct PermissionsFlowView: View {
                 UserDefaults.standard.set(SRAuthorizationStatus.authorized.rawValue, forKey: "sk_authorization_status")
                 print("SensorKit authorization granted")
                 SensorKitRegistry.all.forEach { $0.startRecording() }
-                /*
                 SensorKitAccelerometerFetcher.shared.startRecording()
-                SensorKitGyroscopeFetcher.shared.startRecording()
-                SensorKitWristDetectionFetcher.shared.startRecording()
+                //SensorKitGyroscopeFetcher.shared.startRecording()
+                //SensorKitWristDetectionFetcher.shared.startRecording()
                 SensorKitPPGFetcher.shared.startRecording()
                 SensorKitAmbientLightFetcher.shared.startRecording()
                 SensorKitDeviceUsageFetcher.shared.startRecording()
                 SensorKitWristTemperatureFetcher.shared.startRecording()
                 SensorKitHeartRateFetcher.shared.startRecording()
-                */
+                
                 continuation.resume(returning: true)
             }
             

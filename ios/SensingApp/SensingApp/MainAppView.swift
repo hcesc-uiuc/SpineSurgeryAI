@@ -22,8 +22,7 @@ struct MainAppView: View {
     // navigation back to PermissionsFlowView automatically
     @AppStorage("permissionsComplete") private var permissionsComplete = false
     
-    @StateObject private var appState         = AppState()
-    @StateObject private var sensorKitManager = SensorKitManager()
+    @EnvironmentObject private var appState: AppState   // SensingAppApp's instance
     
     @State private var isSurveyPresented = false
     
@@ -211,4 +210,5 @@ struct MainAppView: View {
 #Preview {
     MainAppView()
         .environmentObject(SecureAuthManager())
+        .environmentObject(AppState())
 }

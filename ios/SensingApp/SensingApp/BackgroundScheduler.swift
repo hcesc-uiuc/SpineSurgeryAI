@@ -573,15 +573,16 @@ class BackgroundScheduler {
         // let accelFetcher = SensorKitAccelerometerFetcher()
         // Fetcher will call setTaskCompleted in didCompleteFetch
         // accelFetcher.fetchLatestData()
+         */
         SensorKitAccelerometerFetcher.shared.fetchLatestData()
-        SensorKitGyroscopeFetcher.shared.fetchLatestData()
-        SensorKitWristDetectionFetcher.shared.fetchLatestData()
+        //SensorKitGyroscopeFetcher.shared.fetchLatestData()
+        //SensorKitWristDetectionFetcher.shared.fetchLatestData()
         SensorKitPPGFetcher.shared.fetchLatestData()
         SensorKitAmbientLightFetcher.shared.fetchLatestData()
         SensorKitDeviceUsageFetcher.shared.fetchLatestData()
         SensorKitWristTemperatureFetcher.shared.fetchLatestData()
         SensorKitHeartRateFetcher.shared.fetchLatestData()
-        */
+        
 
     }
     

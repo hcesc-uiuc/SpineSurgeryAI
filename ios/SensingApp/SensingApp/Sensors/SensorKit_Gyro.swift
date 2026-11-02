@@ -15,6 +15,7 @@ final class SensorKitGyroscopeFetcher: SensorKitFetcher {
     init() {
         super.init(
             sensor: .rotationRate,
+            kind: .gyroscope,
             filePrefix: "sensorkit_gyro_phone",
             csvHeader: "timestamp_unix,x,y,z",
             devicePreference: .iPhone,

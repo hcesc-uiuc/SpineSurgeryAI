@@ -63,6 +63,7 @@ private final class AmbientLightCircularBuffer {
 
 class SensorKitAmbientLightFetcher: NSObject {
     static let shared = SensorKitAmbientLightFetcher()
+    private var stamp = SensorKitStamp(.ambientLight)   // newest sample time → SensorStatusStore
 
     private let reader = SRSensorReader(sensor: .ambientLightSensor)
 
@@ -273,6 +274,7 @@ extension SensorKitAmbientLightFetcher: SRSensorReaderDelegate {
         guard let sample = result.sample as? SRAmbientLightSample else {
             return true
         }
+        stamp.saw(result)
 
         print("SK-AmbientLight: Writing ambient light sample")
         Logger.shared.append("SK-AmbientLight: Writing ambient light sample")
@@ -299,6 +301,7 @@ extension SensorKitAmbientLightFetcher: SRSensorReaderDelegate {
     func sensorReader(_ reader: SRSensorReader, didCompleteFetch fetchRequest: SRFetchRequest) {
         flushBuffer()
         fileHandle?.synchronizeFile()  // fsync to disk
+        stamp.save()
         print("SK-AmbientLight: Fetch complete")
         Logger.shared.append("SK-AmbientLight: Fetch complete")
     }

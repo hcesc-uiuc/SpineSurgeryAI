@@ -4,13 +4,10 @@
 //
 //  Created by Mohammod Mashfiqui Rabbi Shuvo on 5/8/26.
 //
-
-
-// S3UploadTest.swift
-// Drop this into a new single-view SwiftUI Xcode project (iOS target).
-// Run on simulator or device — tap the buttons in order to verify the full flow.
-
-
+//  Presigned upload flow: presign -> PUT to S3 -> complete.
+//  An upload only counts as successful once the backend confirms it in the
+//  complete step (HTTP 200 and "status": "completed"). See ios-test/UPLOAD_FLOW.md.
+//
 
 import Foundation
 
@@ -23,6 +20,9 @@ public enum S3UploadConfig {
     public nonisolated(unsafe) static let presignURL   = "\(_baseURL)/api/noauth/uploads/presign"
     public nonisolated(unsafe) static let completeURL  = "\(_baseURL)/api/noauth/uploads/complete"
     public static var participantID: String { ParticipantID.current }   // anonymous SHA-256 participant hash
+
+    /// Attempts for the complete call when it hits a network error or a 5xx.
+    public static let completeMaxAttempts = 3
 }
 
 // Top-level aliases for backwards compatibility
@@ -54,57 +54,58 @@ extension PresignResponse: Decodable {
     }
 }
 
-private struct CompleteResponse: Codable, Sendable {
+private struct CompleteResponse: Sendable {
     let status: String
     let key: String?
     let error: String?
 }
 
+extension CompleteResponse: Decodable {
+    nonisolated init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        status = try c.decode(String.self, forKey: .status)
+        key    = try c.decodeIfPresent(String.self, forKey: .key)
+        error  = try c.decodeIfPresent(String.self, forKey: .error)
+    }
+    private enum CodingKeys: String, CodingKey {
+        case status, key, error
+    }
+}
+
 // MARK: - Uploader
-/*
- In Swift, an actor is essentially a class with built-in data race protection.
- 
- Class — reference type with no concurrency guarantees. Multiple threads can read
-        and write its properties simultaneously, leading to data races unless
-        you manually synchronize with locks, serial queues, etc.
- 
- Actor — also a reference type, but the Swift runtime ensures that only one
-        task can access its mutable state at a time. Accessing an actor's properties
-        or methods from outside requires await, because the caller may need to wait for
-        the actor to become available.
- 
- 
- */
 public actor S3TestUploader {
 
-    // Creates a small dummy CSV in the temp directory and uploads it.
+    private let session: URLSession
+
+    /// `session` is injectable so tests and the upload harness can intercept requests.
+    init(session: URLSession = .shared) {
+        self.session = session
+    }
+
+    /// Uploads one file. Returns true only when the backend confirms the upload
+    /// was recorded; the caller moves the file to processed/ on true.
     func runFullFlow(filenameURL: URL, kind: String) async -> Bool {
         print("--- Starting \(kind) upload flow ---")
+        let filename = filenameURL.lastPathComponent
 
-        // 1. Write a dummy file to disk
-        let tmpURL = filenameURL
-        let filename = tmpURL.lastPathComponent
-        
-        // 2. Presign
         print("Step 1: Requesting presigned URL...")
         guard let presign = await requestPresign(filename: filename, kind: kind) else { return false }
         print("  upload_id: \(presign.upload_id)")
         print("  key: \(presign.key)")
 
-        // 3. PUT to S3
         print("Step 2: Uploading to S3...")
-        let s3Success = await putToS3(presign: presign, fileURL: tmpURL)
+        let s3Success = await putToS3(presign: presign, fileURL: filenameURL)
         print("  S3 PUT success: \(s3Success)")
 
-        // 4. Complete
+        // Report failures too, so the backend deletes the partial object and closes the row.
         print("Step 3: Notifying server of result...")
-        await notifyComplete(uploadID: presign.upload_id, success: s3Success)
+        let completed = await notifyComplete(uploadID: presign.upload_id, success: s3Success)
 
+        let recorded = s3Success && completed
+        print("  upload recorded by backend: \(recorded)")
         print("--- Done ---\n")
-        return s3Success
+        return recorded
     }
-    
-    
 
     private func requestPresign(filename: String, kind: String) async -> PresignResponse? {
         guard let url = URL(string: S3UploadConfig.presignURL) else {
@@ -124,7 +125,7 @@ public actor S3TestUploader {
         req.httpBody = try? JSONSerialization.data(withJSONObject: body)
 
         do {
-            let (data, response) = try await URLSession.shared.data(for: req)
+            let (data, response) = try await session.data(for: req)
             let status = (response as? HTTPURLResponse)?.statusCode ?? 0
             print("  presign HTTP status: \(status)")
             if let raw = String(data: data, encoding: .utf8) {
@@ -152,7 +153,7 @@ public actor S3TestUploader {
             req.setValue(v, forHTTPHeaderField: k)
         }
         do {
-            let (_, response) = try await URLSession.shared.upload(for: req, fromFile: fileURL)
+            let (_, response) = try await session.upload(for: req, fromFile: fileURL)
             let status = (response as? HTTPURLResponse)?.statusCode ?? 0
             print("  S3 PUT HTTP status: \(status)")
             return status == 200
@@ -162,10 +163,12 @@ public actor S3TestUploader {
         }
     }
 
-    private func notifyComplete(uploadID: String, success: Bool) async {
+    /// Returns true only for HTTP 200 with "status": "completed".
+    /// Network errors and 5xx are retried; any other reply is final.
+    private func notifyComplete(uploadID: String, success: Bool) async -> Bool {
         guard let url = URL(string: S3UploadConfig.completeURL) else {
             print("ERROR: invalid complete URL")
-            return
+            return false
         }
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
@@ -174,15 +177,47 @@ public actor S3TestUploader {
         let body: [String: Any] = ["upload_id": uploadID, "success": success]
         req.httpBody = try? JSONSerialization.data(withJSONObject: body)
 
-        do {
-            let (data, response) = try await URLSession.shared.data(for: req)
-            let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-            print("  complete HTTP status: \(status)")
-            if let raw = String(data: data, encoding: .utf8) {
-                print("  complete response: \(raw)")
+        let maxAttempts = S3UploadConfig.completeMaxAttempts
+        for attempt in 1...maxAttempts {
+            do {
+                let (data, response) = try await session.data(for: req)
+                let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+                print("  complete HTTP status: \(status)")
+                if let raw = String(data: data, encoding: .utf8) {
+                    print("  complete response: \(raw)")
+                }
+
+                if status >= 500 && attempt < maxAttempts {
+                    print("  complete: server error, retrying (\(attempt)/\(maxAttempts))")
+                    await backoff(attempt: attempt)
+                    continue
+                }
+                guard status == 200,
+                      let reply = try? JSONDecoder().decode(CompleteResponse.self, from: data) else {
+                    print("  complete: not recorded (HTTP \(status))")
+                    return false
+                }
+                if reply.status == "completed" {
+                    print("  complete: completed")
+                    return true
+                }
+                print("  complete: \(reply.status)\(reply.error.map { " (\($0))" } ?? "")")
+                return false
+            } catch {
+                print("ERROR complete: \(error)")
+                if attempt < maxAttempts {
+                    print("  complete: network error, retrying (\(attempt)/\(maxAttempts))")
+                    await backoff(attempt: attempt)
+                    continue
+                }
+                return false
             }
-        } catch {
-            print("ERROR complete: \(error)")
         }
+        return false
+    }
+
+    /// 1s, then 2s. Kept short because uploads run inside a background task.
+    private func backoff(attempt: Int) async {
+        try? await Task.sleep(nanoseconds: UInt64(attempt) * 1_000_000_000)
     }
 }

@@ -19,6 +19,7 @@ final class SensorKitSleepSessionsFetcher: SensorKitFetcher {
     init() {
         super.init(
             sensor: .sleepSessions,
+            kind: .watchSleep,
             filePrefix: "sensorkit_sleep_watch",
             csvHeader: "timestamp_unix,session_id,start_unix,duration_s",
             devicePreference: .watch,   // SensorKit records sleep sessions on Apple Watch only

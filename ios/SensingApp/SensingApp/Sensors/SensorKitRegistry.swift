@@ -14,7 +14,6 @@ enum SensorKitRegistry {
 
     /// Every sensor fetcher, in one place.
     static let all: [SensorKitFetcher] = [
-        SensorKitAccelerometerFetcher.shared,
         SensorKitGyroscopeFetcher.shared,
         SensorKitWristDetectionFetcher.shared,
         // Issue #57 - iPhone usage/environment sensors
@@ -29,6 +28,7 @@ enum SensorKitRegistry {
     /// Sensors read by the older standalone fetchers (not SensorKitFetcher
     /// subclasses). They still need authorization.
     static let legacySensors: Set<SRSensor> = [
+        .accelerometer,
         .photoplethysmogram,
         .ambientLightSensor,
         .deviceUsageReport,

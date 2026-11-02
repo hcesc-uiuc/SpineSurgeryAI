@@ -183,15 +183,24 @@ nonisolated enum SensorKindMatcher {
         .activeEnergy:         ["activeenergyburned", "activeenergy", "energyburned", "calories", "kcal"],
         .flights:              ["flightsclimbed", "flights", "stairs"],
         .sleep:                ["sleepanalysis", "sleep"],
-        .watchAccelerometer:   ["watchaccelerometer", "watchaccel"],
-        .watchHeartPPG:        ["watchheartppg", "watchheart", "ppg"],
-        .wristTemperature:     ["wristtemperature", "wristtemp"],
-        .ambientLight:         ["ambientlight", "lux"],
         .accelerometer:        ["accelerometer", "accel"],
         .gyroscope:            ["gyroscope", "gyro"],
         .location:             ["coordinates", "location", "gps"],
-        .ecg:                  ["electrocardiogram", "ecg", "ekg"],
-        .survey:               ["painscore", "checkin", "survey"]
+        .survey:               ["painscore", "checkin", "survey"],
+        // SensorKit: the reader's file prefix is listed, so its own CSVs match
+        // (e.g. sensorkit_accel_watch_00000.csv → "accelwatch").
+        .deviceUsage:          ["deviceusage"],
+        .phoneUsage:           ["phoneusage"],
+        .messagesUsage:        ["messages"],
+        .keyboard:             ["keyboard"],
+        .ambientLight:         ["ambientlight", "lux"],
+        .pressure:             ["pressure"],
+        .watchAccelerometer:   ["watchaccelerometer", "watchaccel", "accelwatch"],
+        .watchHeartRate:       ["watchheartrate", "heartratewatch"],
+        .watchPPG:             ["ppg"],
+        .wristTemperature:     ["wristtemperature", "wristtemp"],
+        .wristDetection:       ["wristdetection"],
+        .watchSleep:           ["watchsleep", "sleepwatch"]
     ]
 
     /// Longest aliases first, so "heartratevariability" can never be captured by

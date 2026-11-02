@@ -57,6 +57,7 @@ private struct PPGRow {
 
 class SensorKitPPGFetcher: NSObject {
     static let shared = SensorKitPPGFetcher()
+    private var stamp = SensorKitStamp(.watchPPG)   // newest sample time → SensorStatusStore
 
     private let reader = SRSensorReader(sensor: .photoplethysmogram)
 
@@ -314,6 +315,7 @@ extension SensorKitPPGFetcher: SRSensorReaderDelegate {
         guard let samples = result.sample as? [SRPhotoplethysmogramSample] else {
             return true
         }
+        stamp.saw(result)
 
         print("SK-PPG: Writing \(samples.count) PPG samples")
         Logger.shared.append("SK-PPG: Writing \(samples.count) PPG samples")
@@ -357,6 +359,7 @@ extension SensorKitPPGFetcher: SRSensorReaderDelegate {
     func sensorReader(_ reader: SRSensorReader, didCompleteFetch fetchRequest: SRFetchRequest) {
         flushBuffer()
         fileHandle?.synchronizeFile()  // fsync to disk
+        stamp.save()
         print("SK-PPG: Fetch complete")
         Logger.shared.append("SK-PPG: Fetch complete")
     }

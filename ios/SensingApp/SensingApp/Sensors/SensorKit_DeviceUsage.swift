@@ -38,6 +38,7 @@ private struct DeviceUsageSample {
 
 class SensorKitDeviceUsageFetcher: NSObject {
     static let shared = SensorKitDeviceUsageFetcher()
+    private var stamp = SensorKitStamp(.deviceUsage)   // newest sample time → SensorStatusStore
 
     private let reader = SRSensorReader(sensor: .deviceUsageReport)
 
@@ -248,6 +249,7 @@ extension SensorKitDeviceUsageFetcher: SRSensorReaderDelegate {
         guard let report = result.sample as? SRDeviceUsageReport else {
             return true
         }
+        stamp.saw(result)
 
         let start = result.timestamp.toCFAbsoluteTime()
         let end = start + report.duration
@@ -280,6 +282,7 @@ extension SensorKitDeviceUsageFetcher: SRSensorReaderDelegate {
     func sensorReader(_ reader: SRSensorReader, didCompleteFetch fetchRequest: SRFetchRequest) {
         flushBuffer()
         fileHandle?.synchronizeFile()  // fsync to disk
+        stamp.save()
         print("SK-DeviceUsage: Fetch complete")
         Logger.shared.append("SK-DeviceUsage: Fetch complete")
     }
