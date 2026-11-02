@@ -38,7 +38,7 @@ from dotenv import load_dotenv
 # uploads/other/<time>_<name> (before #85) or uploads/<study id>/other/<time>_<random>_<name>
 # Every SensorKit file the app writes (file prefix minus "sensorkit_")
 EXPECTED_SENSORS = [
-    "sensorkit_accel_watch", "sensorkit_gyro_phone", "sensorkit_wristdetection_watch",
+    "sensorkit_accel_phone", "sensorkit_accel_watch", "sensorkit_gyro_phone", "sensorkit_wristdetection_watch",
     "sensorkit_pressure_phone", "sensorkit_phoneusage_phone", "sensorkit_messages_phone",
     "sensorkit_keyboard_phone", "sensorkit_sleep_watch", "sensorkit_ppg_watch",
     "sensorkit_ambientlight_phone", "sensorkit_deviceusage_phone", "sensorkit_wristtemp_watch",
