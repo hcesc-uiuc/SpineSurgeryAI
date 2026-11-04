@@ -582,7 +582,17 @@ class BackgroundScheduler {
             UserDefaults.standard.set(now.timeIntervalSince1970, forKey: self.lastUnlockedFetchKey)
             UserDefaults.standard.set(trigger, forKey: self.lastUnlockedFetchTriggerKey)
             Logger.shared.append("SensorKit fetch started (\(trigger), phone unlocked)")
+            // A relaunch for location gets ~10 s; ask for the usual ~30 s so
+            // more chunks finish. Each chunk commits on its own either way.
+            var task = UIBackgroundTaskIdentifier.invalid
+            let endTask = {
+                guard task != .invalid else { return }
+                UIApplication.shared.endBackgroundTask(task)
+                task = .invalid
+            }
+            task = UIApplication.shared.beginBackgroundTask(withName: "SensorKitFetch", expirationHandler: endTask)
             self.performSensorkitFetch()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 25, execute: endTask)
         }
     }
 
