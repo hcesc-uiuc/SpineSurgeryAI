@@ -562,21 +562,23 @@ class BackgroundScheduler {
     /// Fetch SensorKit while the app is in the foreground. Background fetches
     /// usually run with the phone locked, where SensorKit refuses reads
     /// (SRErrorDataInaccessible), so this is often the only fetch that works.
-    /// Only if no fetch (background or foreground) started in the last hour,
-    /// so it does not overlap one still streaming results.
+    /// At most once an hour.
     func fetchSensorKitIfDue(now: Date = Date()) {
         // Locked: SensorKit would refuse the reads
         guard UIApplication.shared.isProtectedDataAvailable else { return }
-        let last = UserDefaults.standard.double(forKey: lastSensorKitFetchKey)
+        let last = UserDefaults.standard.double(forKey: lastForegroundFetchKey)
         guard now.timeIntervalSince1970 - last > 3600 else { return }
+        UserDefaults.standard.set(now.timeIntervalSince1970, forKey: lastForegroundFetchKey)
         Logger.shared.append("Foreground SensorKit fetch")
         performSensorkitFetch()
     }
 
-    private let lastSensorKitFetchKey = "sk_last_fetch_started"
+    // Only foreground fetches count: a background fetch with the phone locked
+    // fails and must not hold off the one that works. Overlap is prevented per
+    // sensor (SensorKitFetcher's one-run-at-a-time guard).
+    private let lastForegroundFetchKey = "sk_last_foreground_fetch"
 
     private func performSensorkitFetch() {
-        UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: lastSensorKitFetchKey)
         // Your function goes here
         print("Performing sensorkit fetch")
         Logger.shared.append("BGSensorkitFetchTask: Performing sensorkit fetch")
