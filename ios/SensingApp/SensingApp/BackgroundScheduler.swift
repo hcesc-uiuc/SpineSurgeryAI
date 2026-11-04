@@ -559,24 +559,55 @@ class BackgroundScheduler {
         task.setTaskCompleted(success: true)
     }
     
-    /// Fetch SensorKit while the app is in the foreground. Background fetches
-    /// usually run with the phone locked, where SensorKit refuses reads
-    /// (SRErrorDataInaccessible), so this is often the only fetch that works.
-    /// At most once an hour.
-    func fetchSensorKitIfDue(now: Date = Date()) {
-        // Locked: SensorKit would refuse the reads
-        guard UIApplication.shared.isProtectedDataAvailable else { return }
-        let last = UserDefaults.standard.double(forKey: lastForegroundFetchKey)
-        guard now.timeIntervalSince1970 - last > 3600 else { return }
-        UserDefaults.standard.set(now.timeIntervalSince1970, forKey: lastForegroundFetchKey)
-        Logger.shared.append("Foreground SensorKit fetch")
-        performSensorkitFetch()
+    /// Fetch SensorKit whenever the app runs while the phone is unlocked: app
+    /// opened, background relaunch, location update. SensorKit refuses reads
+    /// while locked (SRErrorDataInaccessible), and the scheduled background
+    /// fetch mostly runs at night, locked. The app is relaunched for location
+    /// every 10-20 min, often while the phone is in use, so data comes in
+    /// without the app being opened. At most once an hour; every decision is
+    /// logged with its trigger.
+    func fetchSensorKitIfDue(trigger: String, now: Date = Date()) {
+        // UIApplication is main-thread only; location callbacks may not be
+        DispatchQueue.main.async {
+            guard UIApplication.shared.isProtectedDataAvailable else {
+                self.logSkip("SensorKit fetch check (\(trigger)): phone locked, skipped", now: now)
+                return
+            }
+            let last = UserDefaults.standard.double(forKey: self.lastUnlockedFetchKey)
+            let minutesAgo = Int((now.timeIntervalSince1970 - last) / 60)
+            guard minutesAgo >= 60 else {
+                self.logSkip("SensorKit fetch check (\(trigger)): last fetch \(minutesAgo) min ago, skipped", now: now)
+                return
+            }
+            UserDefaults.standard.set(now.timeIntervalSince1970, forKey: self.lastUnlockedFetchKey)
+            UserDefaults.standard.set(trigger, forKey: self.lastUnlockedFetchTriggerKey)
+            Logger.shared.append("SensorKit fetch started (\(trigger), phone unlocked)")
+            self.performSensorkitFetch()
+        }
     }
 
-    // Only foreground fetches count: a background fetch with the phone locked
-    // fails and must not hold off the one that works. Overlap is prevented per
+    // Location updates can come every few seconds while moving; log skips at
+    // most every 10 min so they do not flood the log.
+    private var lastSkipLog = Date.distantPast
+    private func logSkip(_ line: String, now: Date) {
+        guard now.timeIntervalSince(lastSkipLog) >= 600 else { return }
+        lastSkipLog = now
+        Logger.shared.append(line)
+    }
+
+    /// When and why the last unlocked fetch ran (Debug tab status screen).
+    var lastUnlockedFetch: (date: Date, trigger: String)? {
+        let t = UserDefaults.standard.double(forKey: lastUnlockedFetchKey)
+        guard t > 0 else { return nil }
+        return (Date(timeIntervalSince1970: t),
+                UserDefaults.standard.string(forKey: lastUnlockedFetchTriggerKey) ?? "?")
+    }
+
+    // Only unlocked fetches count: a background fetch with the phone locked
+    // fails and must not hold off one that works. Overlap is prevented per
     // sensor (SensorKitFetcher's one-run-at-a-time guard).
-    private let lastForegroundFetchKey = "sk_last_foreground_fetch"
+    private let lastUnlockedFetchKey = "sk_last_unlocked_fetch"
+    private let lastUnlockedFetchTriggerKey = "sk_last_unlocked_fetch_trigger"
 
     private func performSensorkitFetch() {
         // Your function goes here

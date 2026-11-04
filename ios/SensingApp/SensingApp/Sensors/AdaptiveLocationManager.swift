@@ -627,6 +627,11 @@ class AdaptiveLocationManager: NSObject, ObservableObject, CLLocationManagerDele
         if let latest = locations.last {
             updateStationaryGeofence(to: latest)
         }
+
+        // The app is awake, maybe with the phone unlocked: fetch SensorKit if due
+        #if !targetEnvironment(simulator)
+        BackgroundScheduler.shared.fetchSensorKitIfDue(trigger: "location update")
+        #endif
     }
 
     // Called automatically by iOS when it decides to pause location delivery.

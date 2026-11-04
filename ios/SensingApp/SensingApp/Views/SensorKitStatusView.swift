@@ -115,6 +115,8 @@ struct SensorKitStatusView: View {
                     labeled("Last upload run", Uploader.lastRun.map(when) ?? "never")
                     labeled("Last run result", Uploader.lastRunSummary ?? "-")
                     labeled("Files waiting", "\(waitingTotal)")
+                    labeled("Last SensorKit fetch", BackgroundScheduler.shared.lastUnlockedFetch
+                        .map { "\(when($0.date)) (\($0.trigger))" } ?? "never")
                     if pendingTasks.isEmpty {
                         labeled("Background tasks", "none pending")
                     }

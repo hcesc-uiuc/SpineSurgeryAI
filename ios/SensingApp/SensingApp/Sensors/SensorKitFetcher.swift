@@ -212,6 +212,7 @@ class SensorKitFetcher: NSObject {
         request.to   = SRAbsoluteTime.fromCFAbsoluteTime(_cf: fetchEnd.timeIntervalSinceReferenceDate)
 
         print("\(logTag): Fetching from \(fetchStart) to \(fetchEnd)")
+        Logger.shared.append("\(logTag): Fetching \(fetchStart.formatted(date: .abbreviated, time: .shortened)) - \(fetchEnd.formatted(date: .omitted, time: .shortened))")
         pendingFetchEnd = fetchEnd.timeIntervalSinceReferenceDate
         writeFailed = false
         reader.fetch(request)

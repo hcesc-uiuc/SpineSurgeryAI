@@ -105,7 +105,7 @@ struct MainAppView: View {
             BackgroundScheduler.shared.scheduleHealthResearchBGProcessingTask()
             // A cold launch into the foreground does not fire the .active change below
             #if !targetEnvironment(simulator)
-            BackgroundScheduler.shared.fetchSensorKitIfDue()
+            BackgroundScheduler.shared.fetchSensorKitIfDue(trigger: "app launch")
             #endif
         }
         .onChange(of: scenePhase) { oldPhase, newPhase in
@@ -127,7 +127,7 @@ struct MainAppView: View {
                 // back through PermissionsFlowView before any data is missed.
                 auditPermissionsOnForeground()
                 #if !targetEnvironment(simulator)
-                BackgroundScheduler.shared.fetchSensorKitIfDue()
+                BackgroundScheduler.shared.fetchSensorKitIfDue(trigger: "app opened")
                 #endif
                 
             } else if newPhase == .inactive {

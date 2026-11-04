@@ -122,7 +122,9 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         SensorKitDeviceUsageFetcher.shared.startRecordingWithAuthorizationCheck()
         SensorKitWristTemperatureFetcher.shared.startRecordingWithAuthorizationCheck()
         SensorKitHeartRateFetcher.shared.startRecordingWithAuthorizationCheck()
-        
+
+        // Runs on every launch, including background relaunches for location
+        BackgroundScheduler.shared.fetchSensorKitIfDue(trigger: "relaunch")
         #endif
         
         registerForPushNotifications()
