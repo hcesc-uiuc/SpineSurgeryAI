@@ -578,9 +578,10 @@ class BackgroundScheduler {
                 self.logSkip("SensorKit fetch check (\(trigger)): a run is still going, skipped", now: now)
                 return
             }
-            // Only a fetch that committed a chunk counts toward the hour; a
-            // failed or cut-off attempt may retry after 10 min.
-            let lastSuccess = UserDefaults.standard.double(forKey: SensorKitFetcher.lastChunkCommittedKey)
+            // Wait an hour only once every sensor has finished a run in that
+            // hour; a failed or cut-off run may retry after 10 min.
+            let lastSuccess = SensorKitRegistry.all
+                .map { $0.lastSuccessfulRun?.timeIntervalSince1970 ?? 0 }.min() ?? 0
             let lastAttempt = UserDefaults.standard.double(forKey: self.lastUnlockedFetchKey)
             let successMin = Int((now.timeIntervalSince1970 - lastSuccess) / 60)
             let attemptMin = Int((now.timeIntervalSince1970 - lastAttempt) / 60)
@@ -605,8 +606,11 @@ class BackgroundScheduler {
             task = UIApplication.shared.beginBackgroundTask(withName: "SensorKitFetch", expirationHandler: endTask)
             self.performSensorkitFetch()
             func waitForRun() {
+                // At least 25 s: the standalone fetchers (Watch, PPG, ...) are
+                // not tracked here and had that long before.
                 let running = SensorKitRegistry.all.contains(where: { $0.isRunning })
-                if !running || Date().timeIntervalSince(started) > 600 {
+                let elapsed = Date().timeIntervalSince(started)
+                if (!running && elapsed >= 25) || elapsed > 600 {
                     endTask()
                 } else if task != .invalid {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 2) { waitForRun() }
@@ -641,7 +645,7 @@ class BackgroundScheduler {
     }
 
     // Last unlocked attempt (the hourly limit counts successes, see
-    // SensorKitFetcher.lastChunkCommittedKey).
+    // SensorKitFetcher.lastSuccessfulRun).
     private let lastUnlockedFetchKey = "sk_last_unlocked_fetch"
     private let lastUnlockedFetchTriggerKey = "sk_last_unlocked_fetch_trigger"
 

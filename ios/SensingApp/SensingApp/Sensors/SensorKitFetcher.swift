@@ -62,6 +62,7 @@ class SensorKitFetcher: NSObject {
     private var writeFailed = false        // a flush failed; do not commit the window
     private var stamp: SensorKitStamp       // newest sample time → SensorStatusStore
     private var currentDevice: SRDevice?   // device of the running fetch, for the next chunk
+    private var currentRequest: SRFetchRequest?   // callbacks for any other request are stale
     private var chunksThisRun = 0
     private var bytesThisRun = 0
     private var isFetching = false         // a run (all its chunks) is in progress
@@ -70,8 +71,29 @@ class SensorKitFetcher: NSObject {
     /// A run is in progress (one that never called back stops counting after 30 min).
     var isRunning: Bool { isFetching && Date().timeIntervalSince(fetchStartedAt) <= 30 * 60 }
 
-    /// When any sensor last committed a chunk (BackgroundScheduler's hourly limit).
-    static let lastChunkCommittedKey = "sk_last_chunk_committed"
+    /// When this sensor last finished a run without failing (caught up or
+    /// stopped by a limit). BackgroundScheduler's hourly limit waits until
+    /// every sensor has one in the last hour, so a failed gyroscope run is
+    /// retried even if the cheap sensors succeeded.
+    var lastSuccessfulRun: Date? {
+        let t = UserDefaults.standard.double(forKey: lastFetchEndKey + "_run_ok")
+        return t > 0 ? Date(timeIntervalSince1970: t) : nil
+    }
+    private func recordSuccessfulRun() {
+        UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: lastFetchEndKey + "_run_ok")
+    }
+
+    /// Records how much of the current file belongs to completed chunks. If
+    /// the size cannot be read, the previous value stays: recording 0 would
+    /// later delete committed chunks.
+    private func recordCommittedSize() {
+        let key = Self.committedBytesKey(for: currentFileURL.lastPathComponent)
+        if !FileManager.default.fileExists(atPath: currentFileURL.path) {
+            UserDefaults.standard.set(0, forKey: key)
+        } else if let size = FileManager.default.currentSize(of: currentFileURL) {
+            UserDefaults.standard.set(size, forKey: key)
+        }
+    }
 
     /// UserDefaults key holding how many bytes of a ".part" file belong to
     /// committed chunks. Anything after that is a chunk that never completed;
@@ -85,15 +107,25 @@ class SensorKitFetcher: NSObject {
         let key = committedBytesKey(for: url.lastPathComponent)
         guard defaults.object(forKey: key) != nil else { return true }
         let committed = UInt64(max(0, defaults.integer(forKey: key)))
-        defaults.removeObject(forKey: key)
         if committed == 0 {
             try? FileManager.default.removeItem(at: url)
+            defaults.removeObject(forKey: key)
             return false
         }
-        if let h = try? FileHandle(forWritingTo: url) {
-            try? h.truncate(atOffset: committed)
-            try? h.close()
+        // Never grow the file (truncating past the end pads it with zeros)
+        let size = UInt64(FileManager.default.currentSize(of: url) ?? 0)
+        if committed < size {
+            do {
+                let h = try FileHandle(forWritingTo: url)
+                try h.truncate(atOffset: committed)
+                try h.close()
+            } catch {
+                // Keep the key so the next launch tries again
+                Logger.shared.append("Could not cut \(url.lastPathComponent) back to \(committed) bytes: \(error)")
+                return true
+            }
         }
+        defaults.removeObject(forKey: key)
         return true
     }
 
@@ -232,12 +264,12 @@ class SensorKitFetcher: NSObject {
         guard let window = Self.nextWindow(lastFetchEnd: lastFetchEnd, now: Date(), chunk: fetchChunk) else {
             print("\(logTag): No new data window available yet")
             isFetching = false
+            recordSuccessfulRun()
             return
         }
         let (fetchStart, fetchEnd) = window
         // Everything in the file now belongs to committed chunks
-        UserDefaults.standard.set(FileManager.default.currentSize(of: currentFileURL) ?? 0,
-                                  forKey: Self.committedBytesKey(for: currentFileURL.lastPathComponent))
+        recordCommittedSize()
 
         let request = SRFetchRequest()
         request.device = device
@@ -248,6 +280,7 @@ class SensorKitFetcher: NSObject {
         Logger.shared.append("\(logTag): Fetching \(fetchStart.formatted(date: .abbreviated, time: .shortened)) - \(fetchEnd.formatted(date: .omitted, time: .shortened))")
         pendingFetchEnd = fetchEnd.timeIntervalSinceReferenceDate
         writeFailed = false
+        currentRequest = request
         reader.fetch(request)
     }
 
@@ -433,12 +466,18 @@ extension SensorKitFetcher: SRSensorReaderDelegate {
     func sensorReader(_ reader: SRSensorReader,
                       fetching fetchRequest: SRFetchRequest,
                       didFetchResult result: SRFetchResult<AnyObject>) -> Bool {
+        guard fetchRequest === currentRequest else { return false }   // stale: stop it
         buffer(rows(from: result))   // subclass decides how to turn the result into lines
         stamp.saw(result)
         return true
     }
 
     func sensorReader(_ reader: SRSensorReader, didCompleteFetch fetchRequest: SRFetchRequest) {
+        guard fetchRequest === currentRequest else {
+            Logger.shared.append("\(logTag): Ignored completion of an abandoned fetch")
+            return
+        }
+        currentRequest = nil
         flush()
         fileHandle?.synchronizeFile()   // rows on disk before the window is committed
         if writeFailed {
@@ -451,10 +490,11 @@ extension SensorKitFetcher: SRSensorReaderDelegate {
             return
         }
         if let end = pendingFetchEnd {
+            // Size first: if the app dies between the two, the chunk is kept
+            // and fetched again (duplicates), never cut off after its window
+            // moved on (loss).
+            recordCommittedSize()
             lastFetchEnd = end
-            UserDefaults.standard.set(FileManager.default.currentSize(of: currentFileURL) ?? 0,
-                                      forKey: Self.committedBytesKey(for: currentFileURL.lastPathComponent))
-            UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: Self.lastChunkCommittedKey)
         }
         pendingFetchEnd = nil
         stamp.save()
@@ -474,6 +514,7 @@ extension SensorKitFetcher: SRSensorReaderDelegate {
         }
 
         isFetching = false
+        recordSuccessfulRun()
         sealCurrentFile()               // hands the file to the uploader
         let reason = Self.stopReason(caughtUp: !more, chunks: chunksThisRun,
                                      bytesThisRun: bytesThisRun, freeBytes: free)
@@ -498,6 +539,11 @@ extension SensorKitFetcher: SRSensorReaderDelegate {
     func sensorReader(_ reader: SRSensorReader,
                       fetching fetchRequest: SRFetchRequest,
                       failedWithError error: Error) {
+        guard fetchRequest === currentRequest else {
+            Logger.shared.append("\(logTag): Ignored failure of an abandoned fetch")
+            return
+        }
+        currentRequest = nil
         // Keep lastFetchEnd where it was so the next fetch retries this window,
         // and drop this chunk's rows so the retry does not duplicate them.
         pendingFetchEnd = nil

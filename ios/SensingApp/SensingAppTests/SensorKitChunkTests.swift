@@ -66,4 +66,13 @@ final class SensorKitChunkTests: XCTestCase {
         XCTAssertEqual(SensorKitFetcher.stopReason(caughtUp: false, chunks: SensorKitFetcher.maxChunksPerRun,
                                                    bytesThisRun: 0, freeBytes: nil), "chunk limit")
     }
+
+    func testCommittedSizeLargerThanFileNeverGrowsIt() throws {
+        let text = "timestamp_unix,x,y,z\n1,0,0,0\n"
+        let url = try part(text)
+        defaults.set(text.utf8.count + 500, forKey: SensorKitFetcher.committedBytesKey(for: url.lastPathComponent))
+
+        XCTAssertTrue(SensorKitFetcher.trimToCommitted(url, defaults: defaults))
+        XCTAssertEqual(try String(contentsOf: url, encoding: .utf8), text)
+    }
 }
