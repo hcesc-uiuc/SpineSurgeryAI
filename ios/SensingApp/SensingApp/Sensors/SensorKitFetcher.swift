@@ -67,7 +67,37 @@ class SensorKitFetcher: NSObject {
     private var isFetching = false         // a run (all its chunks) is in progress
     private var fetchStartedAt = Date.distantPast
 
-    /// Stops one run from chaining forever (7 days of 1 h chunks is 168).
+    /// A run is in progress (one that never called back stops counting after 30 min).
+    var isRunning: Bool { isFetching && Date().timeIntervalSince(fetchStartedAt) <= 30 * 60 }
+
+    /// When any sensor last committed a chunk (BackgroundScheduler's hourly limit).
+    static let lastChunkCommittedKey = "sk_last_chunk_committed"
+
+    /// UserDefaults key holding how many bytes of a ".part" file belong to
+    /// committed chunks. Anything after that is a chunk that never completed;
+    /// it is cut off on failure, or at the next launch if the app was killed.
+    static func committedBytesKey(for partName: String) -> String { "sk_committed_bytes:\(partName)" }
+
+    /// Cuts a ".part" file back to its committed bytes (deleting it if none).
+    /// Returns false if it no longer holds anything.
+    @discardableResult
+    static func trimToCommitted(_ url: URL, defaults: UserDefaults = .standard) -> Bool {
+        let key = committedBytesKey(for: url.lastPathComponent)
+        guard defaults.object(forKey: key) != nil else { return true }
+        let committed = UInt64(max(0, defaults.integer(forKey: key)))
+        defaults.removeObject(forKey: key)
+        if committed == 0 {
+            try? FileManager.default.removeItem(at: url)
+            return false
+        }
+        if let h = try? FileHandle(forWritingTo: url) {
+            try? h.truncate(atOffset: committed)
+            try? h.close()
+        }
+        return true
+    }
+
+    /// Stops one run from chaining forever (the 250 MB limit usually comes first).
     static let maxChunksPerRun = 200
 
     /// Shortest window worth a fetch.
@@ -205,6 +235,9 @@ class SensorKitFetcher: NSObject {
             return
         }
         let (fetchStart, fetchEnd) = window
+        // Everything in the file now belongs to committed chunks
+        UserDefaults.standard.set(FileManager.default.currentSize(of: currentFileURL) ?? 0,
+                                  forKey: Self.committedBytesKey(for: currentFileURL.lastPathComponent))
 
         let request = SRFetchRequest()
         request.device = device
@@ -264,6 +297,7 @@ class SensorKitFetcher: NSObject {
 
         do {
             let sealed = try FileManager.default.seal(currentFileURL)
+            UserDefaults.standard.removeObject(forKey: Self.committedBytesKey(for: currentFileURL.lastPathComponent))
             fileIndex += 1                                    // next fetch writes its own file
             print("\(logTag): Sealed \(sealed.lastPathComponent)")
             Logger.shared.append("\(logTag): Sealed \(sealed.lastPathComponent)")
@@ -307,6 +341,20 @@ class SensorKitFetcher: NSObject {
         }
     }
 
+    /// Drops the rows of the chunk that did not complete, then hands what was
+    /// committed to the uploader. A retry fetches that chunk again in full, so
+    /// keeping its partial rows would only upload them twice.
+    private func discardUncommittedChunk() {
+        lineBuffer.removeAll(keepingCapacity: true)
+        fileHandle?.closeFile()
+        fileHandle = nil
+        if Self.trimToCommitted(currentFileURL) {
+            sealCurrentFile()
+        } else {
+            openCurrentFile()
+        }
+    }
+
     private func rotateFileIfNeeded() {
         guard let size = FileManager.default.currentSize(of: currentFileURL) else { return }
         if size >= maxFileSize {
@@ -339,7 +387,8 @@ class SensorKitFetcher: NSObject {
         }
         print("\(logTag): Flushed \(lines.count) rows -> \(currentFileURL.lastPathComponent)")
         Logger.shared.append("\(logTag): Flushed \(lines.count) rows -> \(currentFileURL.lastPathComponent)")
-        rotateFileIfNeeded()
+        // No rotation here: a chunk stays in one file so it can be cut off
+        // whole if it fails. didCompleteFetch rotates between chunks.
     }
 
     deinit {
@@ -392,21 +441,32 @@ extension SensorKitFetcher: SRSensorReaderDelegate {
     func sensorReader(_ reader: SRSensorReader, didCompleteFetch fetchRequest: SRFetchRequest) {
         flush()
         fileHandle?.synchronizeFile()   // rows on disk before the window is committed
-        if let end = pendingFetchEnd, !writeFailed {
-            lastFetchEnd = end
-        } else if writeFailed {
+        if writeFailed {
             print("\(logTag): Rows could not be written, window will be retried")
             Logger.shared.append("\(logTag): Rows could not be written, window will be retried")
+            pendingFetchEnd = nil
+            isFetching = false
+            discardUncommittedChunk()
+            Logger.shared.append("\(logTag): Fetch complete (\(chunksThisRun) chunk(s), stopped: write failed, \(freeSpaceText()))")
+            return
+        }
+        if let end = pendingFetchEnd {
+            lastFetchEnd = end
+            UserDefaults.standard.set(FileManager.default.currentSize(of: currentFileURL) ?? 0,
+                                      forKey: Self.committedBytesKey(for: currentFileURL.lastPathComponent))
+            UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: Self.lastChunkCommittedKey)
         }
         pendingFetchEnd = nil
         stamp.save()
+        rotateFileIfNeeded()            // between chunks only, see flush()
 
         // More to catch up on: fetch the next chunk into the same file. If iOS
         // suspends the app meanwhile, only that chunk is fetched again.
         chunksThisRun += 1
-        if !writeFailed, let device = currentDevice,
-           Self.shouldChain(chunks: chunksThisRun, bytesThisRun: bytesThisRun, freeBytes: freeDiskBytes()),
-           Self.nextWindow(lastFetchEnd: lastFetchEnd, now: Date(), chunk: fetchChunk) != nil {
+        let free = freeDiskBytes()
+        let more = Self.nextWindow(lastFetchEnd: lastFetchEnd, now: Date(), chunk: fetchChunk) != nil
+        if more, let device = currentDevice,
+           Self.shouldChain(chunks: chunksThisRun, bytesThisRun: bytesThisRun, freeBytes: free) {
             // Not from inside this callback: SensorKit does not document
             // starting a fetch from didCompleteFetch.
             DispatchQueue.main.async { self.fetchSamples(from: device) }
@@ -415,21 +475,36 @@ extension SensorKitFetcher: SRSensorReaderDelegate {
 
         isFetching = false
         sealCurrentFile()               // hands the file to the uploader
-        print("\(logTag): Fetch complete (\(chunksThisRun) chunk(s))")
-        Logger.shared.append("\(logTag): Fetch complete (\(chunksThisRun) chunk(s))")
+        let reason = Self.stopReason(caughtUp: !more, chunks: chunksThisRun,
+                                     bytesThisRun: bytesThisRun, freeBytes: free)
+        print("\(logTag): Fetch complete (\(chunksThisRun) chunk(s), stopped: \(reason))")
+        Logger.shared.append("\(logTag): Fetch complete (\(chunksThisRun) chunk(s), \(bytesThisRun / 1_000_000) MB, stopped: \(reason), \(freeSpaceText()))")
+    }
+
+    /// Why a run stopped chaining, for the log.
+    static func stopReason(caughtUp: Bool, chunks: Int, bytesThisRun: Int, freeBytes: Int64?) -> String {
+        if caughtUp { return "caught up" }
+        if chunks >= maxChunksPerRun { return "chunk limit" }
+        if bytesThisRun >= maxBytesPerRun { return "250 MB run limit" }
+        if let freeBytes, freeBytes < minFreeBytes { return "low storage" }
+        return "no device"
+    }
+
+    private func freeSpaceText() -> String {
+        guard let free = freeDiskBytes() else { return "free space unknown" }
+        return "\(free / 1_000_000) MB free"
     }
 
     func sensorReader(_ reader: SRSensorReader,
                       fetching fetchRequest: SRFetchRequest,
                       failedWithError error: Error) {
-        // Keep lastFetchEnd where it was so the next fetch retries this window.
-        // Rows already flushed stay; a retry can repeat some of them.
+        // Keep lastFetchEnd where it was so the next fetch retries this window,
+        // and drop this chunk's rows so the retry does not duplicate them.
         pendingFetchEnd = nil
         isFetching = false
         print("\(logTag): Fetch failed: \(error)")
-        Logger.shared.append("\(logTag): Fetch failed, window will be retried: \(error)")
-        flush()
-        sealCurrentFile()               // a partial batch is still worth uploading
+        Logger.shared.append("\(logTag): Fetch failed after \(chunksThisRun) chunk(s), window will be retried: \(error)")
+        discardUncommittedChunk()
     }
 
     func sensorReader(_ reader: SRSensorReader, didChange authorizationStatus: SRAuthorizationStatus) {

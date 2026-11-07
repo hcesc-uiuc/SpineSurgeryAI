@@ -217,6 +217,12 @@ class AppDelegate: NSObject, UIApplicationDelegate {
                                                          includingPropertiesForKeys: nil,
                                                          options: [.skipsHiddenFiles])) ?? []
         for url in urls where url.pathExtension == SensorKitFetcher.partExtension {
+            // Cut off a chunk that was being written when the app was killed;
+            // it is fetched again in full, so its rows would be duplicates.
+            guard SensorKitFetcher.trimToCommitted(url) else {
+                Logger.shared.append("Deleted orphaned \(url.lastPathComponent): no completed chunk")
+                continue
+            }
             do {
                 // seal() picks a free name if the final one is taken; deleting
                 // the .part in that case would throw its rows away.

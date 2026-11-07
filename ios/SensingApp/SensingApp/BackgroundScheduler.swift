@@ -564,7 +564,8 @@ class BackgroundScheduler {
     /// while locked (SRErrorDataInaccessible), and the scheduled background
     /// fetch mostly runs at night, locked. The app is relaunched for location
     /// every 10-20 min, often while the phone is in use, so data comes in
-    /// without the app being opened. At most once an hour; every decision is
+    /// without the app being opened. One successful run an hour (a failed one
+    /// may retry after 10 min); every decision is
     /// logged with its trigger.
     func fetchSensorKitIfDue(trigger: String, now: Date = Date()) {
         // UIApplication is main-thread only; location callbacks may not be
@@ -573,27 +574,53 @@ class BackgroundScheduler {
                 self.logSkip("SensorKit fetch check (\(trigger)): phone locked, skipped", now: now)
                 return
             }
-            let last = UserDefaults.standard.double(forKey: self.lastUnlockedFetchKey)
-            let minutesAgo = Int((now.timeIntervalSince1970 - last) / 60)
-            guard minutesAgo >= 60 else {
-                self.logSkip("SensorKit fetch check (\(trigger)): last fetch \(minutesAgo) min ago, skipped", now: now)
+            if SensorKitRegistry.all.contains(where: { $0.isRunning }) {
+                self.logSkip("SensorKit fetch check (\(trigger)): a run is still going, skipped", now: now)
+                return
+            }
+            // Only a fetch that committed a chunk counts toward the hour; a
+            // failed or cut-off attempt may retry after 10 min.
+            let lastSuccess = UserDefaults.standard.double(forKey: SensorKitFetcher.lastChunkCommittedKey)
+            let lastAttempt = UserDefaults.standard.double(forKey: self.lastUnlockedFetchKey)
+            let successMin = Int((now.timeIntervalSince1970 - lastSuccess) / 60)
+            let attemptMin = Int((now.timeIntervalSince1970 - lastAttempt) / 60)
+            guard successMin >= 60, attemptMin >= 10 else {
+                self.logSkip("SensorKit fetch check (\(trigger)): last success \(successMin) min ago, last attempt \(attemptMin) min ago, skipped", now: now)
                 return
             }
             UserDefaults.standard.set(now.timeIntervalSince1970, forKey: self.lastUnlockedFetchKey)
             UserDefaults.standard.set(trigger, forKey: self.lastUnlockedFetchTriggerKey)
-            Logger.shared.append("SensorKit fetch started (\(trigger), phone unlocked)")
-            // A relaunch for location gets ~10 s; ask for the usual ~30 s so
-            // more chunks finish. Each chunk commits on its own either way.
+            Logger.shared.append("SensorKit fetch started (\(trigger), phone unlocked, \(Self.freeSpaceText()))")
+            // Keep running until every sensor's run has finished, instead of a
+            // fixed time: a run cut off mid-chunk has to fetch that chunk again.
+            // iOS still ends it through the expiration handler when time is up.
             var task = UIBackgroundTaskIdentifier.invalid
+            let started = Date()
             let endTask = {
                 guard task != .invalid else { return }
                 UIApplication.shared.endBackgroundTask(task)
                 task = .invalid
+                Logger.shared.append("SensorKit fetch run ended after \(Int(Date().timeIntervalSince(started))) s")
             }
             task = UIApplication.shared.beginBackgroundTask(withName: "SensorKitFetch", expirationHandler: endTask)
             self.performSensorkitFetch()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 25, execute: endTask)
+            func waitForRun() {
+                let running = SensorKitRegistry.all.contains(where: { $0.isRunning })
+                if !running || Date().timeIntervalSince(started) > 600 {
+                    endTask()
+                } else if task != .invalid {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) { waitForRun() }
+                }
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { waitForRun() }
         }
+    }
+
+    private static func freeSpaceText() -> String {
+        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        guard let free = try? docs.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
+            .volumeAvailableCapacityForImportantUsage else { return "free space unknown" }
+        return "\(free / 1_000_000) MB free"
     }
 
     // Location updates can come every few seconds while moving; log skips at
@@ -613,9 +640,8 @@ class BackgroundScheduler {
                 UserDefaults.standard.string(forKey: lastUnlockedFetchTriggerKey) ?? "?")
     }
 
-    // Only unlocked fetches count: a background fetch with the phone locked
-    // fails and must not hold off one that works. Overlap is prevented per
-    // sensor (SensorKitFetcher's one-run-at-a-time guard).
+    // Last unlocked attempt (the hourly limit counts successes, see
+    // SensorKitFetcher.lastChunkCommittedKey).
     private let lastUnlockedFetchKey = "sk_last_unlocked_fetch"
     private let lastUnlockedFetchTriggerKey = "sk_last_unlocked_fetch_trigger"
 

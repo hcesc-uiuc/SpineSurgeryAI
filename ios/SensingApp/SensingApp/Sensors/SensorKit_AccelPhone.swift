@@ -24,7 +24,7 @@ final class SensorKitPhoneAccelerometerFetcher: SensorKitFetcher {
             // Own keys: the Watch fetcher uses sk_csv_file_index / sk_accel_last_fetch_end
             fileIndexKey: "sk_accel_phone_csv_file_index",
             lastFetchEndKey: "sk_accel_phone_last_fetch_end",
-            fetchChunkHours: 1   // high rate, like the gyroscope
+            fetchChunkHours: 0.5   // high rate, like the gyroscope
         )
     }
 
