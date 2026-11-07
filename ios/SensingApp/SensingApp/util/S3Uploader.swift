@@ -83,7 +83,7 @@ public actor S3TestUploader {
     }
 
     /// Uploads one file. Returns true only when the backend confirms the upload
-    /// was recorded; the caller moves the file to processed/ on true.
+    /// was recorded; the caller deletes the file on true.
     func runFullFlow(filenameURL: URL, kind: String) async -> Bool {
         print("--- Starting \(kind) upload flow ---")
         let filename = filenameURL.lastPathComponent
@@ -99,7 +99,10 @@ public actor S3TestUploader {
 
         // Report failures too, so the backend deletes the partial object and closes the row.
         print("Step 3: Notifying server of result...")
-        let completed = await notifyComplete(uploadID: presign.upload_id, success: s3Success)
+        // The size lets the backend confirm the whole file arrived; the caller
+        // deletes the file once this returns true.
+        let size = (try? filenameURL.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? nil
+        let completed = await notifyComplete(uploadID: presign.upload_id, success: s3Success, size: size)
 
         let recorded = s3Success && completed
         print("  upload recorded by backend: \(recorded)")
@@ -165,7 +168,7 @@ public actor S3TestUploader {
 
     /// Returns true only for HTTP 200 with "status": "completed".
     /// Network errors and 5xx are retried; any other reply is final.
-    private func notifyComplete(uploadID: String, success: Bool) async -> Bool {
+    private func notifyComplete(uploadID: String, success: Bool, size: Int? = nil) async -> Bool {
         guard let url = URL(string: S3UploadConfig.completeURL) else {
             print("ERROR: invalid complete URL")
             return false
@@ -174,7 +177,8 @@ public actor S3TestUploader {
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
-        let body: [String: Any] = ["upload_id": uploadID, "success": success]
+        var body: [String: Any] = ["upload_id": uploadID, "success": success]
+        if let size { body["size"] = size }
         req.httpBody = try? JSONSerialization.data(withJSONObject: body)
 
         let maxAttempts = S3UploadConfig.completeMaxAttempts

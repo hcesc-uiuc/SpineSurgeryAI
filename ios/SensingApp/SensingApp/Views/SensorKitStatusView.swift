@@ -92,7 +92,8 @@ struct SensorKitStatusRow: Identifiable {
             newestSample: SensorStatusStore.shared.latest(for: sensor.kind)?.date,
             waitingFiles: waiting.count,
             waitingBytes: waiting.reduce(0) { $0 + ((try? $1.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0) },
-            lastUploaded: uploaded.compactMap { Uploader.uploadedAt($0) }.max())
+            lastUploaded: Uploader.lastUploaded(prefix: sensor.filePrefix)
+                ?? uploaded.compactMap { Uploader.uploadedAt($0) }.max())
     }
 
     static func files(in dir: URL, prefix: String, fileManager: FileManager = .default) -> [URL] {

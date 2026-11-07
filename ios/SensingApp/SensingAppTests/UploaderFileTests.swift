@@ -171,7 +171,7 @@ final class UploaderFileTests: XCTestCase {
         let old = try uploaded("sensorkit_ppg_watch_00000.csv", at: fixedDate.addingTimeInterval(-4 * 24 * 3600))
         let recent = try uploaded("sensorkit_ppg_watch_00001.csv", at: fixedDate.addingTimeInterval(-2 * 24 * 3600))
 
-        let deleted = Uploader.pruneProcessed(in: processed, now: fixedDate)
+        let deleted = Uploader.pruneProcessed(in: processed, retention: 3 * 24 * 3600, now: fixedDate)
 
         XCTAssertEqual(deleted, 1)
         XCTAssertFalse(FileManager.default.fileExists(atPath: old.path))
@@ -202,5 +202,26 @@ final class UploaderFileTests: XCTestCase {
 
     func testMissingProcessedFolderIsFine() {
         XCTAssertEqual(Uploader.pruneProcessed(in: dir.appendingPathComponent("nope"), now: fixedDate), 0)
+    }
+
+    // MARK: delete after confirmed upload (#85)
+
+    func testDefaultPruneClearsEveryStampedFile() throws {
+        let old = try uploaded("sensorkit_gyro_phone_00001.csv", at: fixedDate.addingTimeInterval(-60))
+        XCTAssertEqual(Uploader.pruneProcessed(in: processed, now: fixedDate), 1)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: old.path))
+    }
+
+    func testDeleteUploadedRemovesTheFileAndRecordsTheSensor() throws {
+        let f = try file("sensorkit_accel_phone_00007.csv", "ts,x\n1,2\n")
+        Uploader.deleteUploaded(f, prefix: "sensorkit_", now: fixedDate)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: f.path))
+        XCTAssertEqual(Uploader.lastUploaded(prefix: "sensorkit_accel_phone"), fixedDate)
+    }
+
+    func testSensorPrefix() {
+        XCTAssertEqual(Uploader.sensorPrefix(of: "sensorkit_gyro_phone_00012.csv"), "sensorkit_gyro_phone")
+        XCTAssertEqual(Uploader.sensorPrefix(of: "sensorkit_gyro_phone_00012-1.csv"), "sensorkit_gyro_phone")
+        XCTAssertNil(Uploader.sensorPrefix(of: "locations_2026-11-07.txt"))
     }
 }

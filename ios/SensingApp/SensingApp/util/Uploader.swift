@@ -72,30 +72,14 @@ struct Uploader {
                         let uploadSuccess = await uploader.runFullFlow(filenameURL: file, kind: kind)
                         if uploadSuccess { uploadedCount += 1 } else { failedCount += 1 }
                         if uploadSuccess {
-                            // Move the file to "processed/" so it isn't re-uploaded on the next run
-                            let destination = Uploader.processedDestination(for: file, in: processedURL)
-                            do {
-                                try fileManager.moveItem(at: file, to: destination)
-                                Uploader.markUploaded(destination)
-                                print("     Moved \(file.lastPathComponent) -> processed/")
-                            } catch {
-                                print("     Failed to move \(file.lastPathComponent): \(error)")
-                            }
+                            Uploader.deleteUploaded(file, prefix: file_prefix)
                         }
                     }else{
                         //we will upload directly to the uploadFile link
                         let success = await uploadFile(fileURL: file)
                         if success { uploadedCount += 1 } else { failedCount += 1 }
                         if success {
-                            // Move the file to "processed/" so it isn't re-uploaded on the next run
-                            let destination = Uploader.processedDestination(for: file, in: processedURL)
-                            do {
-                                try fileManager.moveItem(at: file, to: destination)
-                                Uploader.markUploaded(destination)
-                                print("     Moved \(file.lastPathComponent) -> processed/")
-                            } catch {
-                                print("     Failed to move \(file.lastPathComponent): \(error)")
-                            }
+                            Uploader.deleteUploaded(file, prefix: file_prefix)
                         }
                     }
                     
@@ -116,11 +100,13 @@ struct Uploader {
         }
 
         Uploader.recordRun(uploaded: uploadedCount, failed: failedCount)
+        Logger.shared.append("Uploader: \(uploadedCount) uploaded and deleted, \(failedCount) failed")
 
+        // Files earlier builds moved here after a confirmed upload
         let pruned = Uploader.pruneProcessed(in: processedURL)
         if pruned > 0 {
-            print("Deleted \(pruned) uploaded file(s) older than 3 days from processed/")
-            Logger.shared.append("Uploader: deleted \(pruned) uploaded file(s) older than 3 days from processed/")
+            print("Deleted \(pruned) uploaded file(s) from processed/")
+            Logger.shared.append("Uploader: deleted \(pruned) uploaded file(s) from processed/")
         }
     }
     
@@ -303,8 +289,38 @@ struct Uploader {
         UserDefaults.standard.set("\(uploaded) uploaded, \(failed) failed", forKey: "upload_last_run_summary")
     }
 
-    /// How long an uploaded file stays in processed/ before it is deleted.
-    static let processedRetention: TimeInterval = 3 * 24 * 3600
+    /// Deletes a file once the backend has confirmed it is in S3 at full size.
+    /// Keeping uploaded copies (3 days of accel and gyro is 2.5+ GB) kept the
+    /// phone under the 1 GB SensorKit fetches need to catch up.
+    static func deleteUploaded(_ file: URL, prefix: String, now: Date = Date()) {
+        do {
+            try FileManager.default.removeItem(at: file)
+            UserDefaults.standard.set(now.timeIntervalSince1970,
+                                      forKey: lastUploadKey(for: sensorPrefix(of: file.lastPathComponent) ?? prefix))
+            print("     Uploaded and deleted \(file.lastPathComponent)")
+        } catch {
+            print("     Failed to delete \(file.lastPathComponent): \(error)")
+            Logger.shared.append("Uploader: failed to delete \(file.lastPathComponent): \(error)")
+        }
+    }
+
+    /// "sensorkit_gyro_phone_00012.csv" -> "sensorkit_gyro_phone"
+    static func sensorPrefix(of name: String) -> String? {
+        guard let r = name.range(of: #"_\d{5}"#, options: .regularExpression) else { return nil }
+        return String(name[..<r.lowerBound])
+    }
+
+    static func lastUploadKey(for prefix: String) -> String { "upload_last_\(prefix)" }
+
+    /// When a file of this sensor was last confirmed and deleted.
+    static func lastUploaded(prefix: String) -> Date? {
+        let t = UserDefaults.standard.double(forKey: lastUploadKey(for: prefix))
+        return t > 0 ? Date(timeIntervalSince1970: t) : nil
+    }
+
+    /// How long a file stamped by markUploaded stays in processed/. Uploads no
+    /// longer go there; this clears what earlier builds left.
+    static let processedRetention: TimeInterval = 0
 
     /// Extended attribute holding the upload time (seconds since 1970).
     private static let uploadedAtAttribute = "edu.uiuc.hcesc.uploadedAt"
