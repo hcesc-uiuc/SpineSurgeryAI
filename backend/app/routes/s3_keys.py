@@ -31,3 +31,22 @@ def upload_key(folder, kind, filename):
     apart (SensorKit files reuse index 00000 after every upload)."""
     return (f"uploads/{secure_filename(str(folder))}/{kind}/"
             f"{datetime.utcnow():%Y%m%dT%H%M%S}_{uuid.uuid4().hex[:8]}_{secure_filename(filename)}")
+
+
+def check_uploaded(s3, bucket, key, expected_size):
+    """None if the object is in S3 (and, when the phone sent its file size,
+    has exactly that size); otherwise why not. The phone deletes its copy as
+    soon as an upload is confirmed, so "confirmed" has to mean complete."""
+    try:
+        head = s3.head_object(Bucket=bucket, Key=key)
+    except Exception:
+        return "object not found in S3"
+    if expected_size is None:
+        return None
+    try:
+        expected = int(expected_size)
+    except (TypeError, ValueError):
+        return "invalid size"
+    if head.get("ContentLength") != expected:
+        return f"size mismatch: S3 has {head.get('ContentLength')} bytes, phone sent {expected}"
+    return None

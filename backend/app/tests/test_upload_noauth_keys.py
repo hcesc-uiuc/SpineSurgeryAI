@@ -104,3 +104,44 @@ def test_helpers(mock_db):
     assert safe_participant('unidentified') is None
     assert safe_participant(None) is None
     assert upload_key(PID, 'hr', 'x y.csv').endswith('_x_y.csv')
+
+
+# Complete step: the phone deletes its copy once confirmed, so a confirmation
+# must mean the whole file is in S3.
+
+def _complete(client, mock_db, fake_s3, s3_size, sent_size, missing=False):
+    mock_db.get_pending_upload.return_value = {
+        'external_id': PID, 'status': 'pending', 'kind': 'other', 'object_key': 'k'}
+    if missing:
+        fake_s3.head_object.side_effect = Exception('404')
+    else:
+        fake_s3.head_object.return_value = {'ContentLength': s3_size}
+    body = {'upload_id': 'u1', 'success': True}
+    if sent_size is not None:
+        body['size'] = sent_size
+    return client.post('/api/noauth/uploads/complete', json=body)
+
+
+def test_complete_when_size_matches(client, mock_db, fake_s3):
+    resp = _complete(client, mock_db, fake_s3, s3_size=1234, sent_size=1234)
+    assert resp.get_json()['status'] == 'completed'
+    mock_db.mark_upload_completed.assert_called_once_with('u1')
+
+
+def test_size_mismatch_fails_and_removes_the_object(client, mock_db, fake_s3):
+    resp = _complete(client, mock_db, fake_s3, s3_size=1000, sent_size=1234)
+    assert resp.get_json()['status'] == 'failed'
+    mock_db.mark_upload_completed.assert_not_called()
+    fake_s3.delete_object.assert_called_once()
+    assert 'size mismatch' in mock_db.mark_upload_failed.call_args[0][1]
+
+
+def test_missing_object_fails(client, mock_db, fake_s3):
+    resp = _complete(client, mock_db, fake_s3, s3_size=None, sent_size=1234, missing=True)
+    assert resp.get_json()['status'] == 'failed'
+    mock_db.mark_upload_completed.assert_not_called()
+
+
+def test_old_app_without_size_still_completes(client, mock_db, fake_s3):
+    resp = _complete(client, mock_db, fake_s3, s3_size=1234, sent_size=None)
+    assert resp.get_json()['status'] == 'completed'

@@ -6,7 +6,7 @@ from auth.middleware import require_auth
 from functools import wraps
 import uuid
 
-from routes.s3_keys import participant_folder, upload_key
+from routes.s3_keys import check_uploaded, participant_folder, upload_key
 
 #S3 imports
 from flask import Blueprint, request, jsonify
@@ -287,11 +287,16 @@ def uploads_complete():
 
     if success:
         # Verify object actually exists in S3 before recording in DB
-        try:
-            s3.head_object(Bucket=S3_BUCKET, Key=pending["object_key"])
-        except Exception:
-            db.mark_upload_failed(upload_id, "object not found in S3 after reported success")
-            return jsonify(status="failed", error="object not found in S3"), 200
+        problem = check_uploaded(s3, S3_BUCKET, pending["object_key"], body.get("size"))
+        if problem:
+            if problem != "object not found in S3":
+                # Incomplete object: remove it so the phone's retry starts clean
+                try:
+                    s3.delete_object(Bucket=S3_BUCKET, Key=pending["object_key"])
+                except Exception:
+                    pass
+            db.mark_upload_failed(upload_id, problem)
+            return jsonify(status="failed", error=problem), 200
 
         kind = pending["kind"]
         key = pending["object_key"]

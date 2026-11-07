@@ -8,7 +8,7 @@ from datetime import datetime
 from config import Config
 import boto3, os, json, uuid
 
-from routes.s3_keys import participant_folder, safe_participant, upload_key
+from routes.s3_keys import check_uploaded, participant_folder, safe_participant, upload_key
 
 load_dotenv()
 
@@ -204,11 +204,16 @@ def uploads_complete_noauth():
     participant_id = pending["external_id"]
 
     if success:
-        try:
-            s3.head_object(Bucket=S3_BUCKET, Key=pending["object_key"])
-        except Exception:
-            db.mark_upload_failed(upload_id, "object not found in S3 after reported success")
-            return jsonify(status="failed", error="object not found in S3"), 200
+        problem = check_uploaded(s3, S3_BUCKET, pending["object_key"], body.get("size"))
+        if problem:
+            if problem != "object not found in S3":
+                # Incomplete object: remove it so the phone's retry starts clean
+                try:
+                    s3.delete_object(Bucket=S3_BUCKET, Key=pending["object_key"])
+                except Exception:
+                    pass
+            db.mark_upload_failed(upload_id, problem)
+            return jsonify(status="failed", error=problem), 200
 
         kind = pending["kind"]
         key = pending["object_key"]
