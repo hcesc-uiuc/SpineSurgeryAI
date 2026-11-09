@@ -5,11 +5,7 @@
 
 import SwiftUI
 import AuthenticationServices
-import CoreMotion
-import CoreLocation
 import UserNotifications
-import HealthKit
-import SensorKit
 
 // ============================================================
 // MARK: - AuthLoginView Documentation
@@ -283,56 +279,10 @@ struct AuthLoginView: View {
     }
 
     // MARK: - Permission Audit
-    //
-    // Checks all 5 required permissions on every launch.
-    // Any missing permission resets permissionsComplete = false.
-    //
-    // HEALTH FIX: Uses actual authorizationStatus for stepCount rather than
-    // isHealthDataAvailable() which is always true on a real device.
-    //
-    // SENSORKIT: Skipped on simulator — cannot be authorized there.
+    // Re-checks all 5 permissions on every launch (PermissionAudit). Anything
+    // off resets permissionsComplete, which routes back to its card.
     private func auditPermissions() {
-        // Sync checks
-        // Motion: if hardware unavailable (simulator), treat as granted — mirrors requestMotion().
-        let motionOK   = !CMMotionActivityManager.isActivityAvailable() ||
-                         CMMotionActivityManager.authorizationStatus() == .authorized
-        let locationOK = CLLocationManager().authorizationStatus == .authorizedAlways
-
-        // Health — check actual authorization status, not just device availability
-        var healthOK = false
-        if HKHealthStore.isHealthDataAvailable() {
-            let store    = HKHealthStore()
-            let stepType = HKObjectType.quantityType(forIdentifier: .stepCount)!
-            healthOK     = store.authorizationStatus(for: stepType) != .notDetermined
-        }
-
-        if !motionOK || !locationOK || !healthOK {
-            permissionsComplete = false
-            // Don't return — the Task below must always run to keep the
-            // notifications flag in sync so PermissionsFlowView skips
-            // already-granted cards correctly.
-        }
-
-        // Async checks — SensorKit and Notifications
-        Task {
-            // SensorKit — not available on simulator, skip gracefully
-            #if targetEnvironment(simulator)
-            let sensorKitOK = true
-            #else
-            let sensorReader = SRSensorReader(sensor: .ambientLightSensor)
-            let sensorKitOK  = sensorReader.authorizationStatus == .authorized
-            #endif
-
-            // Notifications — sync the UserDefaults flag so PermissionsFlowView
-            // only shows the notifications card when it's actually revoked.
-            let settings        = await UNUserNotificationCenter.current().notificationSettings()
-            let notificationsOK = settings.authorizationStatus == .authorized
-            UserDefaults.standard.set(notificationsOK, forKey: "journey_notifications_authorized")
-
-            if !sensorKitOK || !notificationsOK {
-                await MainActor.run { permissionsComplete = false }
-            }
-        }
+        PermissionAudit.audit { permissionsComplete = false }
     }
 
     // MARK: - Apple Sign In Handler
