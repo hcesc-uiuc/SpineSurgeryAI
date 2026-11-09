@@ -27,11 +27,9 @@ class BackgroundScheduler {
         let authKey = "sk_authorization_status"
         let raw = UserDefaults.standard.integer(forKey: authKey)
         let authorizationStatus = SRAuthorizationStatus(rawValue: raw) ?? .notDetermined
-        if authorizationStatus == .authorized{
-            print("SensorKit is authorized. We are fetching data")
-            Logger.shared.append("SensorKit is authorized. We are fetching data")
-            performSensorkitFetch()
-        }
+        // SensorKit is fetched by the wake handlers through fetchSensorKitIfDue,
+        // which checks the phone is unlocked first (reads fail while locked).
+        _ = authorizationStatus
         
         //check healthkit authorization
         HealthkitRecorder.shared.getHealthKitData()
@@ -150,9 +148,19 @@ class BackgroundScheduler {
         scheduleAppRefresh()
         
         // Expiration handler
+        // Completed once: by the expiration handler or after the fetch run
+        var completed = false
+        let complete = { (success: Bool) in
+            DispatchQueue.main.async {
+                guard !completed else { return }
+                completed = true
+                task.setTaskCompleted(success: success)
+            }
+        }
         task.expirationHandler = {
             print("==BGAppRefreshTask== expired")
             Logger.shared.append("==BGAppRefreshTask== expired before completion.")
+            complete(false)
         }
 
         // Do not need execute work asynchronously
@@ -187,9 +195,11 @@ class BackgroundScheduler {
         }
         
         
-        task.setTaskCompleted(success: true)
-        print("BGAppRefreshTask completed")
-        Logger.shared.append("==BGAppRefreshTask== sucessfully completed")
+        fetchSensorKitIfDue(trigger: "app refresh") {
+            complete(true)
+            print("BGAppRefreshTask completed")
+            Logger.shared.append("==BGAppRefreshTask== sucessfully completed")
+        }
         
     }
     
@@ -317,9 +327,18 @@ class BackgroundScheduler {
         
         // Complete the task
         //Todo complete the task handler.
+        // Completed once: by the expiration handler or after the fetch run
+        var completed = false
+        let complete = { (success: Bool) in
+            DispatchQueue.main.async {
+                guard !completed else { return }
+                completed = true
+                task.setTaskCompleted(success: success)
+            }
+        }
         task.expirationHandler = {
             Logger.shared.append("SensingApp: Background task expired before completion.")
-            task.setTaskCompleted(success: false)
+            complete(false)
         }
         
         //We will do a recording of motion and reschedule a background task
@@ -347,7 +366,7 @@ class BackgroundScheduler {
         }
         
         startSensorRecording()
-        task.setTaskCompleted(success: true)
+        fetchSensorKitIfDue(trigger: "bg processing") { complete(true) }
         
         // Schedule the next one
         // if some sensor is active
@@ -548,15 +567,24 @@ class BackgroundScheduler {
         scheduleBackgroundSensorkitFetch()
         
         // Expiration handler
+        // Completed once: by the expiration handler or after the fetch run
+        var completed = false
+        let complete = { (success: Bool) in
+            DispatchQueue.main.async {
+                guard !completed else { return }
+                completed = true
+                task.setTaskCompleted(success: success)
+            }
+        }
         task.expirationHandler = {
             print("==BGSensorkitFetchTask== expired")
             Logger.shared.append("==BGSensorkitFetchTask== expired before completion.")
+            complete(false)
         }
 
-        // Execute work asynchronously
-        // Do your actual work
-        performSensorkitFetch()
-        task.setTaskCompleted(success: true)
+        // Through the gate: while locked it skips instead of failing every
+        // sensor, and the task completes only after the run.
+        fetchSensorKitIfDue(trigger: "overnight task") { complete(true) }
     }
     
     /// Fetch SensorKit whenever the app runs while the phone is unlocked: app
@@ -567,52 +595,74 @@ class BackgroundScheduler {
     /// without the app being opened. One successful run an hour (a failed one
     /// may retry after 10 min); every decision is
     /// logged with its trigger.
-    func fetchSensorKitIfDue(trigger: String, now: Date = Date()) {
+    /// What the gate decides for one wake. Pure, so it can be tested.
+    enum FetchDecision: Equatable {
+        case start
+        case skip(String)
+    }
+
+    static func fetchDecision(unlocked: Bool, running: Bool,
+                              minutesSinceSuccess: Int, minutesSinceAttempt: Int) -> FetchDecision {
+        if !unlocked { return .skip("phone locked") }
+        if running { return .skip("a run is still going") }
+        // Wait an hour only once every sensor has finished a run in that
+        // hour; a failed or cut-off run may retry after 10 min.
+        if minutesSinceSuccess < 60 || minutesSinceAttempt < 10 {
+            return .skip("last success \(minutesSinceSuccess) min ago, last attempt \(minutesSinceAttempt) min ago")
+        }
+        return .start
+    }
+
+    /// `completion` runs once on the main queue when the run ends or the wake
+    /// is skipped, so a background task or push handler reports done only
+    /// after the fetch, not before it (iOS suspends the app when told done).
+    func fetchSensorKitIfDue(trigger: String, now: Date = Date(), completion: (() -> Void)? = nil) {
         // UIApplication is main-thread only; location callbacks may not be
         DispatchQueue.main.async {
-            guard UIApplication.shared.isProtectedDataAvailable else {
-                self.logSkip("SensorKit fetch check (\(trigger)): phone locked, skipped", now: now)
-                return
-            }
-            if SensorKitRegistry.all.contains(where: { $0.isRunning }) {
-                self.logSkip("SensorKit fetch check (\(trigger)): a run is still going, skipped", now: now)
-                return
-            }
-            // Wait an hour only once every sensor has finished a run in that
-            // hour; a failed or cut-off run may retry after 10 min.
             let lastSuccess = SensorKitRegistry.all
                 .map { $0.lastSuccessfulRun?.timeIntervalSince1970 ?? 0 }.min() ?? 0
             let lastAttempt = UserDefaults.standard.double(forKey: self.lastUnlockedFetchKey)
-            let successMin = Int((now.timeIntervalSince1970 - lastSuccess) / 60)
-            let attemptMin = Int((now.timeIntervalSince1970 - lastAttempt) / 60)
-            guard successMin >= 60, attemptMin >= 10 else {
-                self.logSkip("SensorKit fetch check (\(trigger)): last success \(successMin) min ago, last attempt \(attemptMin) min ago, skipped", now: now)
+            let decision = Self.fetchDecision(
+                unlocked: UIApplication.shared.isProtectedDataAvailable,
+                running: SensorKitRegistry.all.contains(where: { $0.isRunning }),
+                minutesSinceSuccess: Int((now.timeIntervalSince1970 - lastSuccess) / 60),
+                minutesSinceAttempt: Int((now.timeIntervalSince1970 - lastAttempt) / 60))
+            if case .skip(let why) = decision {
+                self.logSkip("SensorKit fetch check (\(trigger)): \(why), skipped", now: now)
+                completion?()
                 return
             }
             UserDefaults.standard.set(now.timeIntervalSince1970, forKey: self.lastUnlockedFetchKey)
             UserDefaults.standard.set(trigger, forKey: self.lastUnlockedFetchTriggerKey)
+            SensorRunLog.currentTrigger = trigger
             Logger.shared.append("SensorKit fetch started (\(trigger), phone unlocked, \(Self.freeSpaceText()))")
             // Keep running until every sensor's run has finished, instead of a
             // fixed time: a run cut off mid-chunk has to fetch that chunk again.
             // iOS still ends it through the expiration handler when time is up.
             var task = UIBackgroundTaskIdentifier.invalid
+            var finished = false
             let started = Date()
-            let endTask = {
-                guard task != .invalid else { return }
-                UIApplication.shared.endBackgroundTask(task)
-                task = .invalid
-                Logger.shared.append("SensorKit fetch run ended after \(Int(Date().timeIntervalSince(started))) s")
+            let finish = {
+                guard !finished else { return }
+                finished = true
+                if task != .invalid {
+                    UIApplication.shared.endBackgroundTask(task)
+                    task = .invalid
+                }
+                Logger.shared.append("SensorKit fetch run ended after \(Int(Date().timeIntervalSince(started))) s (\(trigger))")
+                completion?()
             }
-            task = UIApplication.shared.beginBackgroundTask(withName: "SensorKitFetch", expirationHandler: endTask)
+            task = UIApplication.shared.beginBackgroundTask(withName: "SensorKitFetch", expirationHandler: finish)
             self.performSensorkitFetch()
             func waitForRun() {
+                guard !finished else { return }
                 // At least 25 s: the standalone fetchers (Watch, PPG, ...) are
                 // not tracked here and had that long before.
                 let running = SensorKitRegistry.all.contains(where: { $0.isRunning })
                 let elapsed = Date().timeIntervalSince(started)
                 if (!running && elapsed >= 25) || elapsed > 600 {
-                    endTask()
-                } else if task != .invalid {
+                    finish()
+                } else {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 2) { waitForRun() }
                 }
             }

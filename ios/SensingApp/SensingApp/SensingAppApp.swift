@@ -192,6 +192,18 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         BackgroundScheduler.shared.scheduleBGProcessingTask()
         BackgroundScheduler.shared.scheduleBackgroundSensorkitFetch()
         BackgroundScheduler.shared.scheduleHealthResearchBGProcessingTask()
+
+        // A silent push (every 15 min from the server, delivered when iOS
+        // chooses) is a chance to fetch if the phone happens to be unlocked.
+        // iOS must be told when we are done; never telling it can cost the
+        // app future background time.
+        #if !targetEnvironment(simulator)
+        BackgroundScheduler.shared.fetchSensorKitIfDue(trigger: "silent push") {
+            completionHandler(.newData)
+        }
+        #else
+        completionHandler(.noData)
+        #endif
     }
 
     func applicationDidEnterBackground(_ application: UIApplication) {
