@@ -65,6 +65,8 @@ class SensorKitFetcher: NSObject {
     private var currentRequest: SRFetchRequest?   // callbacks for any other request are stale
     private var chunksThisRun = 0
     private var bytesThisRun = 0
+    private var rowsThisRun = 0            // rows in committed chunks
+    private var chunkRows = 0              // rows of the chunk being fetched
     private var isFetching = false         // a run (all its chunks) is in progress
     private var fetchStartedAt = Date.distantPast
 
@@ -182,6 +184,7 @@ class SensorKitFetcher: NSObject {
         self.fetchChunk       = fetchChunkHours * 3600
         self.currentFileURL   = documentsDir   // placeholder; set in openCurrentFile()
         self.stamp            = SensorKitStamp(kind)
+        self.stamp.recordsRunOnSave = false    // runs are recorded in finishRun below
         super.init()
         reader.delegate = self
     }
@@ -238,6 +241,7 @@ class SensorKitFetcher: NSObject {
         openCurrentFile()
         chunksThisRun = 0
         bytesThisRun = 0
+        rowsThisRun = 0
         reader.fetchDevices()
     }
 
@@ -280,6 +284,7 @@ class SensorKitFetcher: NSObject {
         Logger.shared.append("\(logTag): Fetching \(fetchStart.formatted(date: .abbreviated, time: .shortened)) - \(fetchEnd.formatted(date: .omitted, time: .shortened))")
         pendingFetchEnd = fetchEnd.timeIntervalSinceReferenceDate
         writeFailed = false
+        chunkRows = 0
         currentRequest = request
         reader.fetch(request)
     }
@@ -403,6 +408,7 @@ class SensorKitFetcher: NSObject {
     private func buffer(_ lines: [String]) {
         guard !lines.isEmpty else { return }
         lineBuffer.append(contentsOf: lines)
+        chunkRows += lines.count
         if lineBuffer.count >= batchSize { flush() }
     }
 
@@ -486,7 +492,7 @@ extension SensorKitFetcher: SRSensorReaderDelegate {
             pendingFetchEnd = nil
             isFetching = false
             discardUncommittedChunk()
-            Logger.shared.append("\(logTag): Fetch complete (\(chunksThisRun) chunk(s), stopped: write failed, \(freeSpaceText()))")
+            finishRun(stopReason: "write failed", failed: true)
             return
         }
         if let end = pendingFetchEnd {
@@ -495,6 +501,8 @@ extension SensorKitFetcher: SRSensorReaderDelegate {
             // moved on (loss).
             recordCommittedSize()
             lastFetchEnd = end
+            rowsThisRun += chunkRows
+            chunkRows = 0
         }
         pendingFetchEnd = nil
         stamp.save()
@@ -519,7 +527,18 @@ extension SensorKitFetcher: SRSensorReaderDelegate {
         let reason = Self.stopReason(caughtUp: !more, chunks: chunksThisRun,
                                      bytesThisRun: bytesThisRun, freeBytes: free)
         print("\(logTag): Fetch complete (\(chunksThisRun) chunk(s), stopped: \(reason))")
-        Logger.shared.append("\(logTag): Fetch complete (\(chunksThisRun) chunk(s), \(bytesThisRun / 1_000_000) MB, stopped: \(reason), \(freeSpaceText()))")
+        finishRun(stopReason: reason, failed: false)
+    }
+
+    /// Records this run (SensorRunLog, shown on the status screen) and logs
+    /// one summary line for it.
+    private func finishRun(stopReason: String, failed: Bool) {
+        let r = stamp.finishRun(samples: rowsThisRun, unit: "rows", chunks: chunksThisRun,
+                                megabytes: bytesThisRun / 1_000_000,
+                                stopReason: stopReason, failed: failed)
+        Logger.shared.append("\(logTag): \(failed ? "Fetch failed" : "Fetch complete") (\(r.trigger)): "
+            + "\(r.chunks ?? 0) chunk(s), \(SensorRunLog.describe(r)), \(r.megabytes ?? 0) MB, "
+            + "stopped: \(stopReason), \(freeSpaceText())")
     }
 
     /// Why a run stopped chaining, for the log.
@@ -551,6 +570,7 @@ extension SensorKitFetcher: SRSensorReaderDelegate {
         print("\(logTag): Fetch failed: \(error)")
         Logger.shared.append("\(logTag): Fetch failed after \(chunksThisRun) chunk(s), window will be retried: \(error)")
         discardUncommittedChunk()
+        finishRun(stopReason: "failed: \((error as NSError).localizedDescription)", failed: true)
     }
 
     func sensorReader(_ reader: SRSensorReader, didChange authorizationStatus: SRAuthorizationStatus) {

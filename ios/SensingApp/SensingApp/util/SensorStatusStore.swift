@@ -325,16 +325,50 @@ nonisolated struct SensorKitStamp {
     let kind: SensorKind
     private var newest: Date?
 
+    // This run so far, for SensorRunLog (#85)
+    private var runResults = 0
+    private var runStart: Date?
+    private var runEnd: Date?
+
+    /// The standalone fetchers record their run when they save. SensorKitFetcher
+    /// saves after every chunk, so it turns this off and calls finishRun itself
+    /// with rows written and why the run stopped.
+    var recordsRunOnSave = true
+
     init(_ kind: SensorKind) { self.kind = kind }
 
     mutating func saw(_ result: SRFetchResult<AnyObject>) {
         let date = Date(timeIntervalSinceReferenceDate: result.timestamp.toCFAbsoluteTime())
         newest = max(newest ?? date, date)
+        runResults += 1
+        runStart = min(runStart ?? date, date)
+        runEnd = max(runEnd ?? date, date)
     }
 
     mutating func save() {
         if let newest { SensorStatusStore.shared.record(kind, at: newest) }
         newest = nil
+        if recordsRunOnSave {
+            finishRun(samples: nil, unit: "results", chunks: nil, megabytes: nil,
+                      stopReason: "complete", failed: false)
+        }
+    }
+
+    /// Records this run in SensorRunLog and starts counting a new one.
+    /// `samples` nil means the number of SensorKit results seen.
+    @discardableResult
+    mutating func finishRun(samples: Int?, unit: String, chunks: Int?, megabytes: Int?,
+                            stopReason: String, failed: Bool) -> SensorRunRecord {
+        let r = SensorRunRecord(finishedAt: Date(), trigger: SensorRunLog.currentTrigger,
+                                samples: samples ?? runResults, unit: unit,
+                                dataStart: runStart, dataEnd: runEnd,
+                                chunks: chunks, megabytes: megabytes,
+                                stopReason: stopReason, failed: failed)
+        SensorRunLog.record(r, kind: kind)
+        runResults = 0
+        runStart = nil
+        runEnd = nil
+        return r
     }
 }
 

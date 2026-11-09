@@ -106,6 +106,7 @@ struct SensorKitStatusView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var rows: [SensorKitStatusRow] = []
     @State private var pendingTasks: [BGTaskRequest] = []
+    @State private var windowHours = 24
 
     private let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
 
@@ -126,6 +127,14 @@ struct SensorKitStatusView: View {
                                 task.earliestBeginDate.map { "after " + when($0) } ?? "any time")
                     }
                 }
+                Section("Fetch totals over") {
+                    Picker("Window", selection: $windowHours) {
+                        Text("6 h").tag(6)
+                        Text("24 h").tag(24)
+                        Text("72 h").tag(72)
+                    }
+                    .pickerStyle(.segmented)
+                }
                 Section("SensorKit sensors") {
                     ForEach(rows) { row in
                         VStack(alignment: .leading, spacing: 2) {
@@ -140,6 +149,8 @@ struct SensorKitStatusView: View {
                             detail("Fetched up to", row.lastFetchEnd.map(when) ?? "never")
                             detail("Waiting", "\(row.waitingFiles) file(s), \(ByteCountFormatter.string(fromByteCount: Int64(row.waitingBytes), countStyle: .file))")
                             detail("Last uploaded", row.lastUploaded.map(when) ?? "none kept")
+                            detail("Last fetch", lastFetchText(row.sensor.kind))
+                            detail("Last \(windowHours) h", windowText(row.sensor.kind))
                         }
                     }
                 }
@@ -151,6 +162,23 @@ struct SensorKitStatusView: View {
             }
             .onAppear(perform: reload)
         }
+    }
+
+    /// "Nov 8, 10:47 PM (relaunch): 1,240,000 rows, data Nov 6, 8:31 PM - Nov 7, 11:01 AM, stopped: caught up"
+    private func lastFetchText(_ kind: SensorKind) -> String {
+        guard let r = SensorRunLog.records(kind).last else { return "none recorded yet" }
+        var text = "\(when(r.finishedAt)) (\(r.trigger)): \(SensorRunLog.describe(r))"
+        if r.stopReason != "complete" { text += ", stopped: \(r.stopReason)" }
+        return text
+    }
+
+    /// "3 run(s), 2,100,000 rows, data up to Nov 7, 11:01 AM"
+    private func windowText(_ kind: SensorKind) -> String {
+        let t = SensorRunLog.totals(kind, window: TimeInterval(windowHours) * 3600)
+        guard t.runs > 0 else { return "no fetch finished" }
+        let unit = SensorRunLog.records(kind).last?.unit ?? "samples"
+        return "\(t.runs) run(s), \(t.samples.formatted(.number)) \(unit)"
+            + (t.dataEnd.map { ", data up to \(when($0))" } ?? ", no data")
     }
 
     private var waitingTotal: Int {
