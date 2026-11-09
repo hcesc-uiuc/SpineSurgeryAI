@@ -242,6 +242,7 @@ class SensorKitFetcher: NSObject {
         chunksThisRun = 0
         bytesThisRun = 0
         rowsThisRun = 0
+        stamp.startRun()
         reader.fetchDevices()
     }
 
@@ -269,6 +270,7 @@ class SensorKitFetcher: NSObject {
             print("\(logTag): No new data window available yet")
             isFetching = false
             recordSuccessfulRun()
+            if chunksThisRun == 0 { finishRun(stopReason: "caught up", failed: false) }
             return
         }
         let (fetchStart, fetchEnd) = window
@@ -384,6 +386,7 @@ class SensorKitFetcher: NSObject {
     /// keeping its partial rows would only upload them twice.
     private func discardUncommittedChunk() {
         lineBuffer.removeAll(keepingCapacity: true)
+        stamp.discardChunk()
         fileHandle?.closeFile()
         fileHandle = nil
         if Self.trimToCommitted(currentFileURL) {
@@ -458,6 +461,7 @@ extension SensorKitFetcher: SRSensorReaderDelegate {
         guard let device = pickDevice(from: devices) else {
             print("\(logTag): No SensorKit devices found")
             isFetching = false
+            finishRun(stopReason: "no device", failed: true)
             return
         }
         print("\(logTag): Using device: \(device.name) (\(device.model))")
@@ -467,6 +471,7 @@ extension SensorKitFetcher: SRSensorReaderDelegate {
     func sensorReader(_ reader: SRSensorReader, fetchDevicesDidFailWithError error: Error) {
         print("\(logTag): fetchDevices failed: \(error)")
         isFetching = false
+        finishRun(stopReason: "device lookup failed", failed: true)
     }
 
     func sensorReader(_ reader: SRSensorReader,
@@ -503,6 +508,7 @@ extension SensorKitFetcher: SRSensorReaderDelegate {
             lastFetchEnd = end
             rowsThisRun += chunkRows
             chunkRows = 0
+            stamp.commitChunk()
         }
         pendingFetchEnd = nil
         stamp.save()

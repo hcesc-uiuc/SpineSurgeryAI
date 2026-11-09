@@ -616,7 +616,12 @@ class BackgroundScheduler {
     /// `completion` runs once on the main queue when the run ends or the wake
     /// is skipped, so a background task or push handler reports done only
     /// after the fetch, not before it (iOS suspends the app when told done).
-    func fetchSensorKitIfDue(trigger: String, now: Date = Date(), completion: (() -> Void)? = nil) {
+    /// `onDecision` runs on the main queue as soon as the gate decides (true:
+    /// a run started). A push handler reports from there: iOS allows it 30 s,
+    /// and the run carries on under its own background task.
+    func fetchSensorKitIfDue(trigger: String, now: Date = Date(),
+                             onDecision: ((Bool) -> Void)? = nil,
+                             completion: (() -> Void)? = nil) {
         // UIApplication is main-thread only; location callbacks may not be
         DispatchQueue.main.async {
             let lastSuccess = SensorKitRegistry.all
@@ -629,6 +634,7 @@ class BackgroundScheduler {
                 minutesSinceAttempt: Int((now.timeIntervalSince1970 - lastAttempt) / 60))
             if case .skip(let why) = decision {
                 self.logSkip("SensorKit fetch check (\(trigger)): \(why), skipped", now: now)
+                onDecision?(false)
                 completion?()
                 return
             }
@@ -654,6 +660,7 @@ class BackgroundScheduler {
             }
             task = UIApplication.shared.beginBackgroundTask(withName: "SensorKitFetch", expirationHandler: finish)
             self.performSensorkitFetch()
+            onDecision?(true)
             func waitForRun() {
                 guard !finished else { return }
                 // At least 25 s: the standalone fetchers (Watch, PPG, ...) are

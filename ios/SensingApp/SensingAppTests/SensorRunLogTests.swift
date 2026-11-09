@@ -22,12 +22,13 @@ final class SensorRunLogTests: XCTestCase {
                         dataEnd: dataEnd, chunks: 2, megabytes: 1, stopReason: "caught up", failed: false)
     }
 
-    func testKeepsOnlyTheLast50() {
-        for i in 0..<60 { SensorRunLog.record(run(hoursAgo: 0, samples: i), kind: .gyroscope, defaults: defaults) }
+    func testKeepsOnlyTheNewestRecords() {
+        let n = SensorRunLog.maxRecords
+        for i in 0..<(n + 10) { SensorRunLog.record(run(hoursAgo: 0, samples: i), kind: .gyroscope, defaults: defaults) }
         let all = SensorRunLog.records(.gyroscope, defaults: defaults)
-        XCTAssertEqual(all.count, 50)
+        XCTAssertEqual(all.count, n)
         XCTAssertEqual(all.first?.samples, 10)
-        XCTAssertEqual(all.last?.samples, 59)
+        XCTAssertEqual(all.last?.samples, n + 9)
     }
 
     func testTotalsOnlyCountRunsInTheWindow() {
@@ -61,5 +62,18 @@ final class SensorRunLogTests: XCTestCase {
         XCTAssertNotEqual(G.fetchDecision(unlocked: true, running: false, minutesSinceSuccess: 30, minutesSinceAttempt: 999), .start)
         XCTAssertNotEqual(G.fetchDecision(unlocked: true, running: false, minutesSinceSuccess: 999, minutesSinceAttempt: 5), .start)
         XCTAssertEqual(G.fetchDecision(unlocked: true, running: false, minutesSinceSuccess: 61, minutesSinceAttempt: 11), .start)
+    }
+
+    // MARK: stamp counts only committed chunks
+
+    func testDiscardedChunkDoesNotCount() {
+        var stamp = SensorKitStamp(.pressure)
+        stamp.recordsRunOnSave = false
+        stamp.startRun()
+        stamp.discardChunk()      // nothing seen: must still be empty
+        let r = stamp.finishRun(samples: nil, unit: "results", chunks: 0, megabytes: 0,
+                                stopReason: "test", failed: false)
+        XCTAssertEqual(r.samples, 0)
+        XCTAssertNil(r.dataStart)
     }
 }

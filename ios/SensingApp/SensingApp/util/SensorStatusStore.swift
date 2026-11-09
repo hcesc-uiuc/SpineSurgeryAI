@@ -325,10 +325,15 @@ nonisolated struct SensorKitStamp {
     let kind: SensorKind
     private var newest: Date?
 
-    // This run so far, for SensorRunLog (#85)
+    // This run so far, for SensorRunLog (#85). Results of the chunk being
+    // fetched are kept apart until it commits, so a discarded chunk does not
+    // count.
     private var runResults = 0
     private var runStart: Date?
     private var runEnd: Date?
+    private var chunkResults = 0
+    private var chunkStart: Date?
+    private var chunkEnd: Date?
 
     /// The standalone fetchers record their run when they save. SensorKitFetcher
     /// saves after every chunk, so it turns this off and calls finishRun itself
@@ -340,15 +345,39 @@ nonisolated struct SensorKitStamp {
     mutating func saw(_ result: SRFetchResult<AnyObject>) {
         let date = Date(timeIntervalSinceReferenceDate: result.timestamp.toCFAbsoluteTime())
         newest = max(newest ?? date, date)
-        runResults += 1
-        runStart = min(runStart ?? date, date)
-        runEnd = max(runEnd ?? date, date)
+        chunkResults += 1
+        chunkStart = min(chunkStart ?? date, date)
+        chunkEnd = max(chunkEnd ?? date, date)
+    }
+
+    /// The chunk's rows are written and its window committed.
+    mutating func commitChunk() {
+        runResults += chunkResults
+        if let s = chunkStart { runStart = min(runStart ?? s, s) }
+        if let e = chunkEnd { runEnd = max(runEnd ?? e, e) }
+        discardChunk()
+    }
+
+    /// The chunk failed and its rows were cut off.
+    mutating func discardChunk() {
+        chunkResults = 0
+        chunkStart = nil
+        chunkEnd = nil
+    }
+
+    /// A new run starts: drop anything left from one that never finished.
+    mutating func startRun() {
+        discardChunk()
+        runResults = 0
+        runStart = nil
+        runEnd = nil
     }
 
     mutating func save() {
         if let newest { SensorStatusStore.shared.record(kind, at: newest) }
         newest = nil
         if recordsRunOnSave {
+            commitChunk()
             finishRun(samples: nil, unit: "results", chunks: nil, megabytes: nil,
                       stopReason: "complete", failed: false)
         }

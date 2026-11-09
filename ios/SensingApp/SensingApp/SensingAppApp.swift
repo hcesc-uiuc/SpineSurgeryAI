@@ -198,9 +198,9 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         // iOS must be told when we are done; never telling it can cost the
         // app future background time.
         #if !targetEnvironment(simulator)
-        BackgroundScheduler.shared.fetchSensorKitIfDue(trigger: "silent push") {
-            completionHandler(.newData)
-        }
+        BackgroundScheduler.shared.fetchSensorKitIfDue(trigger: "silent push", onDecision: { started in
+            completionHandler(started ? .newData : .noData)
+        })
         #else
         completionHandler(.noData)
         #endif

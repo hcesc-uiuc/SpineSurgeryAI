@@ -4,7 +4,7 @@
 //
 //  Issue #85: what each SensorKit fetch run got. One record per sensor per
 //  run (samples, the time range of those samples, what triggered it, why it
-//  stopped), the last 50 kept in UserDefaults, shown on the SensorKit status
+//  stopped), the last 120 kept in UserDefaults, shown on the SensorKit status
 //  screen and written to the log as one summary line.
 //
 
@@ -28,11 +28,16 @@ nonisolated struct SensorRunRecord: Codable, Equatable {
 
 nonisolated enum SensorRunLog {
 
-    /// Set by BackgroundScheduler when it starts a run; read when a run ends.
-    nonisolated(unsafe) static var currentTrigger = "unknown"
-
-    static let maxRecords = 50
+    static let maxRecords = 120   // ~5 days at one run an hour, covers the 72 h view
     private static let lock = NSLock()
+
+    /// Set by BackgroundScheduler when it starts a run; read when a run ends
+    /// (on SensorKit's queue), hence the lock.
+    nonisolated(unsafe) private static var trigger = "unknown"
+    static var currentTrigger: String {
+        get { lock.lock(); defer { lock.unlock() }; return trigger }
+        set { lock.lock(); trigger = newValue; lock.unlock() }
+    }
 
     static func key(_ kind: SensorKind) -> String { "sk_run_log_\(kind.rawValue)" }
 
