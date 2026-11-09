@@ -61,19 +61,43 @@ enum SensorKitRegistry {
         }
     }
 
-    /// For participants who authorized SensorKit before a sensor was added:
-    /// asks again only if they finished SensorKit onboarding and some registry
-    /// sensor has never been decided. Participants still onboarding are left
-    /// to PermissionsFlowView.
-    static func requestMissingAuthorizationIfNeeded() {
-        let onboarded = SRAuthorizationStatus(
-            rawValue: UserDefaults.standard.integer(forKey: "sk_authorization_status")) == .authorized
-        guard onboarded else { return }
-        let undecided = all.filter { $0.authorizationStatus == .notDetermined }
-        guard !undecided.isEmpty else { return }
-        print("SensorKit: \(undecided.count) sensor(s) not yet authorized, requesting")
-        requestAuthorization { _ in
+    // Sensors added after onboarding, or turned off in Settings, are
+    // caught by PermissionAudit, which re-shows the SensorKit card.
+
+    /// Required sensors that are not currently authorized. Fresh readers, so a
+    /// change made in Settings is seen right away.
+    static var missingSensors: [SRSensor] {
+        #if targetEnvironment(simulator)
+        return []
+        #else
+        return sensors.filter { SRSensorReader(sensor: $0).authorizationStatus != .authorized }
+        #endif
+    }
+
+    /// True when some required sensor was never asked about, so the system
+    /// sheet can still be shown for it.
+    static var hasUndecidedSensors: Bool {
+        sensors.contains { SRSensorReader(sensor: $0).authorizationStatus == .notDetermined }
+    }
+
+    /// Starts every reader: the registry ones plus the legacy standalone ones.
+    static func startAllRecording(checkAuthorization: Bool) {
+        if checkAuthorization {
             all.forEach { $0.startRecordingWithAuthorizationCheck() }
+            SensorKitAccelerometerFetcher.shared.startRecordingWithAuthorizationCheck()
+            SensorKitPPGFetcher.shared.startRecordingWithAuthorizationCheck()
+            SensorKitAmbientLightFetcher.shared.startRecordingWithAuthorizationCheck()
+            SensorKitDeviceUsageFetcher.shared.startRecordingWithAuthorizationCheck()
+            SensorKitWristTemperatureFetcher.shared.startRecordingWithAuthorizationCheck()
+            SensorKitHeartRateFetcher.shared.startRecordingWithAuthorizationCheck()
+        } else {
+            all.forEach { $0.startRecording() }
+            SensorKitAccelerometerFetcher.shared.startRecording()
+            SensorKitPPGFetcher.shared.startRecording()
+            SensorKitAmbientLightFetcher.shared.startRecording()
+            SensorKitDeviceUsageFetcher.shared.startRecording()
+            SensorKitWristTemperatureFetcher.shared.startRecording()
+            SensorKitHeartRateFetcher.shared.startRecording()
         }
     }
 }

@@ -103,21 +103,9 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         //This will start recording the sensor data if
         //authorization is already available
         #if !targetEnvironment(simulator)
-        SensorKitRegistry.all.forEach { $0.startRecordingWithAuthorizationCheck() }
-        // Issue #74: ask once for sensors added after the participant onboarded.
-        SensorKitRegistry.requestMissingAuthorizationIfNeeded()
-
-        /* Mash Todo: Check if we need this.
-         */
-        SensorKitAccelerometerFetcher.shared.startRecordingWithAuthorizationCheck()
-        //SensorKitGyroscopeFetcher.shared.startRecordingWithAuthorizationCheck()
-        //SensorKitWristDetectionFetcher.shared.startRecordingWithAuthorizationCheck()
-        SensorKitPPGFetcher.shared.startRecordingWithAuthorizationCheck()
-        SensorKitAmbientLightFetcher.shared.startRecordingWithAuthorizationCheck()
-        SensorKitDeviceUsageFetcher.shared.startRecordingWithAuthorizationCheck()
-        SensorKitWristTemperatureFetcher.shared.startRecordingWithAuthorizationCheck()
-        SensorKitHeartRateFetcher.shared.startRecordingWithAuthorizationCheck()
-        
+        // Issue #83: sensors still undecided are asked for by the SensorKit
+        // permission card (PermissionAudit), not with a bare sheet at launch.
+        SensorKitRegistry.startAllRecording(checkAuthorization: true)
         #endif
         
         registerForPushNotifications()
