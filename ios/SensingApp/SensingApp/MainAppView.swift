@@ -106,6 +106,8 @@ struct MainAppView: View {
             // A cold launch into the foreground does not fire the .active change below
             #if !targetEnvironment(simulator)
             BackgroundScheduler.shared.fetchSensorKitIfDue(trigger: "app launch")
+            BackgroundScheduler.shared.uploadIfDue(trigger: "app launch")
+            BackgroundScheduler.shared.logBackgroundSettings(reason: "app launch")
             #endif
         }
         .onChange(of: scenePhase) { oldPhase, newPhase in
@@ -128,6 +130,8 @@ struct MainAppView: View {
                 auditPermissionsOnForeground()
                 #if !targetEnvironment(simulator)
                 BackgroundScheduler.shared.fetchSensorKitIfDue(trigger: "app opened")
+                BackgroundScheduler.shared.uploadIfDue(trigger: "app opened")
+                BackgroundScheduler.shared.logBackgroundSettings(reason: "app opened")
                 #endif
                 
             } else if newPhase == .inactive {

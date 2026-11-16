@@ -18,7 +18,14 @@ struct Uploader {
     
     
     func uploadFolder() async {
-        
+        // One run at a time: the upload task and an upload on opening the app
+        // could otherwise send the same files twice.
+        guard Uploader.beginRun() else {
+            Logger.shared.append("Uploader: a run is already going, skipped")
+            return
+        }
+        defer { Uploader.endRun() }
+
         let fileManager = FileManager.default
         let documentsURL = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first!
         let toBeProcessedURL = documentsURL.appendingPathComponent("to-be-processed")
@@ -283,6 +290,21 @@ struct Uploader {
         return t > 0 ? Date(timeIntervalSince1970: t) : nil
     }
     static var lastRunSummary: String? { UserDefaults.standard.string(forKey: "upload_last_run_summary") }
+
+    private static let runLock = NSLock()
+    nonisolated(unsafe) private static var running = false
+
+    /// False if a run is already going.
+    static func beginRun() -> Bool {
+        runLock.lock(); defer { runLock.unlock() }
+        if running { return false }
+        running = true
+        return true
+    }
+
+    static func endRun() {
+        runLock.lock(); running = false; runLock.unlock()
+    }
 
     static func recordRun(uploaded: Int, failed: Int, now: Date = Date()) {
         UserDefaults.standard.set(now.timeIntervalSince1970, forKey: "upload_last_run")

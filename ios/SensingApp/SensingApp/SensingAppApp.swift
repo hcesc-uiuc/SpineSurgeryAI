@@ -125,6 +125,11 @@ class AppDelegate: NSObject, UIApplicationDelegate {
 
         // Runs on every launch, including background relaunches for location
         BackgroundScheduler.shared.fetchSensorKitIfDue(trigger: "relaunch")
+        // Log Low Power Mode changes: it stops iOS running background tasks
+        NotificationCenter.default.addObserver(forName: .NSProcessInfoPowerStateDidChange,
+                                               object: nil, queue: .main) { _ in
+            BackgroundScheduler.shared.logBackgroundSettings(reason: "Low Power Mode changed")
+        }
         #endif
         
         registerForPushNotifications()

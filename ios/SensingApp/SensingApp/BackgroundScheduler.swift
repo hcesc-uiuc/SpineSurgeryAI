@@ -126,6 +126,7 @@ class BackgroundScheduler {
                 print("BGAppRefreshTask scheduled")
             } catch {
                 print("Could not schedule BGAppRefreshTask: \(error)")
+                BackgroundScheduler.shared.recordSubmitError(task: "app refresh", error: error)
             }
         }
     }
@@ -261,6 +262,7 @@ class BackgroundScheduler {
                 Logger.shared.append("Background recording scheduled (scheduleBGProcessingTask).")
             } catch {
                 print("Failed to schedule BGProcessingTask: \(error)")
+                BackgroundScheduler.shared.recordSubmitError(task: "bg processing", error: error)
             }
         }
     }
@@ -312,6 +314,7 @@ class BackgroundScheduler {
                 Logger.shared.append("Background recording scheduled (rescheduleBackgroundRecordingAfterXhour).")
             } catch {
                 print("Could not schedule background task: \(error)")
+                BackgroundScheduler.shared.recordSubmitError(task: "background recording", error: error)
             }
         }
     }
@@ -421,6 +424,7 @@ class BackgroundScheduler {
                 Logger.shared.append("Background uploading scheduled (scheduleUploadBGTask).")
             } catch {
                 print("Failed to schedule UploadBGTask: \(error)")
+                BackgroundScheduler.shared.recordSubmitError(task: "upload", error: error)
             }
         }
     }
@@ -457,6 +461,106 @@ class BackgroundScheduler {
         return onWiFi
     }
     
+    // MARK: - Why iOS refuses background work (#85)
+
+    /// Plain-language reason for a BGTaskScheduler.submit failure. "Unavailable"
+    /// is what Low Power Mode or Background App Refresh being off looks like;
+    /// after P01's phone died on Nov 12 every upload request failed this way
+    /// and nothing said so.
+    static func describeSubmitError(_ error: Error) -> String {
+        switch (error as? BGTaskScheduler.Error)?.code {
+        case .unavailable:
+            return "unavailable (Low Power Mode on, or Background App Refresh off)"
+        case .tooManyPendingTaskRequests:
+            return "too many pending requests"
+        case .notPermitted:
+            return "not permitted (identifier missing from Info.plist)"
+        default:
+            return error.localizedDescription
+        }
+    }
+
+    private let submitErrorLock = NSLock()
+    private var lastSubmitErrorLog: [String: (text: String, at: Date)] = [:]
+
+    /// Logs a refused task request (each task at most every 30 min unless the
+    /// reason changes) and keeps the latest for the status screen.
+    func recordSubmitError(task: String, error: Error, now: Date = Date()) {
+        let text = "\(Self.describeSubmitError(error)), Low Power Mode \(ProcessInfo.processInfo.isLowPowerModeEnabled ? "on" : "off")"
+        UserDefaults.standard.set("\(task): \(text)", forKey: "bg_last_submit_error")
+        UserDefaults.standard.set(now.timeIntervalSince1970, forKey: "bg_last_submit_error_at")
+        submitErrorLock.lock()
+        let last = lastSubmitErrorLog[task]
+        let shouldLog = last == nil || last!.text != text || now.timeIntervalSince(last!.at) >= 1800
+        if shouldLog { lastSubmitErrorLog[task] = (text, now) }
+        submitErrorLock.unlock()
+        if shouldLog { Logger.shared.append("iOS refused the \(task) task: \(text)") }
+    }
+
+    /// The latest refused request, for the status screen.
+    var lastSubmitError: (text: String, at: Date)? {
+        guard let text = UserDefaults.standard.string(forKey: "bg_last_submit_error") else { return nil }
+        return (text, Date(timeIntervalSince1970: UserDefaults.standard.double(forKey: "bg_last_submit_error_at")))
+    }
+
+    /// Main thread only (UIApplication).
+    static func backgroundSettingsText() -> String {
+        let refresh: String
+        switch UIApplication.shared.backgroundRefreshStatus {
+        case .available:  refresh = "on"
+        case .denied:     refresh = "OFF"
+        case .restricted: refresh = "restricted"
+        @unknown default: refresh = "unknown"
+        }
+        return "Background App Refresh \(refresh), Low Power Mode \(ProcessInfo.processInfo.isLowPowerModeEnabled ? "ON" : "off")"
+    }
+
+    /// Logs both settings; called at launch, on opening and when Low Power Mode changes.
+    func logBackgroundSettings(reason: String) {
+        DispatchQueue.main.async {
+            Logger.shared.append("Background settings (\(reason)): \(Self.backgroundSettingsText())")
+        }
+    }
+
+    // MARK: - Upload when the app is opened (#85)
+
+    /// Uploads straight away when the app is opened on Wi-Fi with files
+    /// waiting, instead of waiting for iOS to run the upload task (which needs
+    /// charging, and which iOS may refuse altogether, as above).
+    func uploadIfDue(trigger: String) {
+        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let dir = docs.appendingPathComponent("to-be-processed")
+        let waiting = ((try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? [])
+            .filter { Uploader.isSealed($0) }
+        guard !waiting.isEmpty else { return }
+        if let last = Uploader.lastRun, Date().timeIntervalSince(last) < 10 * 60 { return }
+
+        var task = UIBackgroundTaskIdentifier.invalid
+        task = UIApplication.shared.beginBackgroundTask(withName: "ForegroundUpload") {
+            UIApplication.shared.endBackgroundTask(task)
+            task = .invalid
+        }
+        DispatchQueue.global(qos: .utility).async {
+            defer {
+                DispatchQueue.main.async {
+                    if task != .invalid { UIApplication.shared.endBackgroundTask(task); task = .invalid }
+                }
+            }
+            guard self.isOnWiFi() else {
+                Logger.shared.append("Upload on open (\(trigger)): not on Wi-Fi, \(waiting.count) file(s) waiting")
+                return
+            }
+            Logger.shared.append("Upload on open (\(trigger)): Wi-Fi, \(waiting.count) file(s) waiting, starting")
+            SQLiteSaver.shared.flushDataToDb(forceNewFile: true)
+            let done = DispatchSemaphore(value: 0)
+            Task {
+                await Uploader.shared.uploadFolder()
+                done.signal()
+            }
+            done.wait()
+        }
+    }
+
     private func performUpload() {
         // Your function goes here
         print("Running background work — Network connected, charging")
@@ -548,6 +652,7 @@ class BackgroundScheduler {
                 Logger.shared.append("Background SK recording scheduled (scheduleBGSensorKitFetchTask).")
             } catch {
                 print("Failed to schedule BGSensorKitFetchTask: \(error)")
+                BackgroundScheduler.shared.recordSubmitError(task: "overnight SensorKit fetch", error: error)
             }
         }
         
@@ -791,6 +896,7 @@ class BackgroundScheduler {
                 print("[HealthResearch] Scheduled for 60 min from now")
             } catch {
                 print("[HealthResearch] Schedule failed: \(error)")
+                BackgroundScheduler.shared.recordSubmitError(task: "health research", error: error)
             }
         }
     }
