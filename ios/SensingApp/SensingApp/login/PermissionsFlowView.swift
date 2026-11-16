@@ -56,6 +56,9 @@ import SensorKit
 //   The flow always shows only cards for permissions that are not currently
 //   granted; a genuinely fresh device (all five notDetermined) shows all 5.
 //   If all permissions are already granted on entry, completes immediately.
+//   Issue #83: "granted" comes from PermissionAudit, and a card never lets the
+//   patient past while its permission is off. The SensorKit card lists each
+//   sensor that is turned off; cards re-check when the app returns from Settings.
 //
 // SIMULATOR NOTE:
 //   SensorKit cannot be authorized on the iOS simulator — there is no
@@ -123,12 +126,12 @@ enum JourneyPermission: CaseIterable, Identifiable {
             return "Location data helps us understand how much you're moving around day-to-day. This is used only for research purposes and is never shared outside the study."
         
         case .sensorKit:
-            return "Device usage patterns, motion and activity sensors, and health and biometric sensors help us detect subtle behavioral changes that may reflect your recovery progress. All data is anonymized and used for research only."
+            return "Your iPhone and Apple Watch sensors show how you move, sleep and use your phone as you recover, including typing, messaging and call activity. We only collect counts and timing, never what you type, say or read. Please allow every sensor on the next screen; the study needs all of them."
         
         case .notifications:
             return "We'll send gentle daily reminders for check-ins and surveys so you are always aware of what to expect."
         case .health:
-            return "Connecting to Apple Health lets us read step counts, heart rate, and other metrics that paint a fuller picture of your recovery journey. You'll choose exactly which data types to share."
+            return "Connecting to Apple Health lets us read step counts, heart rate, sleep and other metrics that paint a fuller picture of your recovery journey. Please turn on every category; the study needs all of them. You can review this anytime in Settings › Health access."
         }
     }
 
@@ -151,10 +154,21 @@ struct PermissionsFlowView: View {
     @State private var locationRequester: LocationPermissionRequester?
 
     @State private var permissions: [JourneyPermission] = []
-    private let locationManager = CLLocationManager()
     private let healthStore     = HKHealthStore()
 
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var requestInFlight     = false   // a system prompt is up; don't re-check
+    @State private var sensorsOff: [SRSensor] = []   // SensorKit card: sensors to turn on in Settings
+    @State private var stillOff            = false
+    @State private var showingContactAlert = false
+
     var onComplete: () -> Void
+
+    #if DEBUG
+    /// Previews only: pins the flow to the SensorKit card with these sensors off
+    /// ([] = the first-ask card). SensorKit can't run in the simulator.
+    var previewSensorsOff: [SRSensor]? = nil
+    #endif
 
     var body: some View {
         ZStack {
@@ -177,11 +191,16 @@ struct PermissionsFlowView: View {
                     .padding(.bottom, 32)
 
                 if currentIndex < permissions.count {
-                    permissionCard(for: permissions[currentIndex])
-                        .id(currentIndex)
-                        .opacity(cardAppeared ? 1 : 0)
-                        .offset(y: cardAppeared ? 0 : 30)
-                        .animation(.spring(response: 0.5, dampingFraction: 0.82), value: cardAppeared)
+                    // Scrolls: the SensorKit list can outgrow the screen at large text sizes.
+                    ScrollView {
+                        permissionCard(for: permissions[currentIndex])
+                            .id(currentIndex)
+                            .opacity(cardAppeared ? 1 : 0)
+                            .offset(y: cardAppeared ? 0 : 30)
+                            .animation(.spring(response: 0.5, dampingFraction: 0.82), value: cardAppeared)
+                            .padding(.bottom, 24)
+                    }
+                    .scrollBounceBehavior(.basedOnSize)
                 }
 
                 Spacer()
@@ -193,6 +212,9 @@ struct PermissionsFlowView: View {
             // A genuinely fresh device will have all 5; a returning user with some revoked
             // will see only the cards they still need to grant.
             permissions = JourneyPermission.allCases.filter { !isAlreadyGranted($0) }
+            #if DEBUG
+            if previewSensorsOff != nil { permissions = [.sensorKit] }
+            #endif
             if permissions.isEmpty {
                 permissionsComplete = true
                 onComplete()
@@ -200,6 +222,10 @@ struct PermissionsFlowView: View {
             }
             currentIndex = 0
             triggerCardAppear()
+        }
+        .onChange(of: scenePhase) { _, phase in
+            // Back from Settings: advance if the permission is on again.
+            if phase == .active { recheckCurrentCard() }
         }
         .alert("Permission Required", isPresented: $showingDeniedAlert) {
             Button("Open Settings") { openAppSettings(for: permissions[currentIndex]) }
@@ -279,35 +305,45 @@ struct PermissionsFlowView: View {
                 Text(permission.title)
                     .font(.journey(.title, weight: .bold))
                     .foregroundStyle(Color(red: 0.28, green: 0.22, blue: 0.20))
+                    .multilineTextAlignment(.center)
 
-                Text(permission.headline)
+                Text(headline(for: permission))
                     .font(.journey(.body, weight: .medium))
                     .foregroundStyle(Color(red: 0.42, green: 0.62, blue: 0.55))
-
-                Text(permission.explanation)
-                    .font(.journey(.subheadline))
-                    .foregroundStyle(Color(red: 0.40, green: 0.32, blue: 0.29).opacity(0.85))
                     .multilineTextAlignment(.center)
-                    .lineSpacing(4)
-                    .padding(.horizontal, 8)
-                    .padding(.top, 4)
+
+                if showsSensorList(permission) {
+                    sensorsOffList
+                } else {
+                    Text(permission.explanation)
+                        .font(.journey(.subheadline))
+                        .foregroundStyle(Color(red: 0.40, green: 0.32, blue: 0.29).opacity(0.85))
+                        .multilineTextAlignment(.center)
+                        .lineSpacing(4)
+                        .padding(.horizontal, 8)
+                        .padding(.top, 4)
+                }
             }
 
-            Button(action: requestCurrentPermission) {
-                Text(permission.buttonLabel)
-                    .font(.journey(.body, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16)
-                    .background(
-                        LinearGradient(
-                            colors: [permission.iconColor, permission.iconColor.opacity(0.80)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .clipShape(RoundedRectangle(cornerRadius: 16))
-                    .shadow(color: permission.iconColor.opacity(0.35), radius: 10, y: 5)
+            VStack(spacing: 14) {
+                if showsSensorList(permission) {
+                    primaryButton("Open Settings", color: permission.iconColor) { openAppSettings() }
+                    Button("I've turned them on") { recheckCurrentCard(userTapped: true) }
+                        .font(.journey(.callout, weight: .semibold))
+                        .foregroundStyle(permission.iconColor)
+                } else {
+                    primaryButton(permission.buttonLabel, color: permission.iconColor,
+                                  action: requestCurrentPermission)
+                }
+
+                Button("Contact study team") { showingContactAlert = true }
+                    .font(.journey(.footnote, weight: .medium))
+                    .foregroundStyle(Color(red: 0.55, green: 0.47, blue: 0.44))
+                    .alert("Contact your study team", isPresented: $showingContactAlert) {
+                        Button("OK", role: .cancel) { }
+                    } message: {
+                        Text(StudyContact.message)
+                    }
             }
             .padding(.top, 4)
         }
@@ -320,39 +356,99 @@ struct PermissionsFlowView: View {
         .padding(.horizontal, 24)
     }
 
+    private func primaryButton(_ label: String, color: Color, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(label)
+                .font(.journey(.body, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 16)
+                .background(
+                    LinearGradient(
+                        colors: [color, color.opacity(0.80)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 16))
+                .shadow(color: color.opacity(0.35), radius: 10, y: 5)
+        }
+    }
+
+    // MARK: - SensorKit "turned off" list
+
+    /// The SensorKit card switches to a list once the system sheet can no longer
+    /// be shown, i.e. every remaining sensor was turned off rather than undecided.
+    private func showsSensorList(_ permission: JourneyPermission) -> Bool {
+        permission == .sensorKit && !sensorsOff.isEmpty
+    }
+
+    private func headline(for permission: JourneyPermission) -> String {
+        guard showsSensorList(permission) else { return permission.headline }
+        return sensorsOff.count == 1 ? "1 sensor is turned off" : "\(sensorsOff.count) sensors are turned off"
+    }
+
+    private var sensorsOffList: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            ForEach(sensorsOff.sorted { $0.consentName < $1.consentName }, id: \.rawValue) { sensor in
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(sensor.consentName)
+                        .font(.journey(.subheadline, weight: .semibold))
+                        .foregroundStyle(Color(red: 0.28, green: 0.22, blue: 0.20))
+                    Text(sensor.consentDetail)
+                        .font(.journey(.footnote))
+                        .foregroundStyle(Color(red: 0.40, green: 0.32, blue: 0.29).opacity(0.85))
+                }
+                .accessibilityElement(children: .combine)
+            }
+
+            Text("The study needs every sensor on. To turn them back on, open Settings › Privacy & Security › Research Sensor & Usage Data › Journey.")
+                .font(.journey(.footnote))
+                .foregroundStyle(Color(red: 0.40, green: 0.32, blue: 0.29))
+                .lineSpacing(3)
+                .padding(.top, 4)
+
+            if stillOff {
+                Text("Some sensors are still off. Check each switch, then come back.")
+                    .font(.journey(.footnote, weight: .semibold))
+                    .foregroundStyle(Color(red: 0.75, green: 0.25, blue: 0.22))
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.top, 4)
+    }
+
+    private func refreshSensorKitState() {
+        #if DEBUG
+        if let previewSensorsOff { sensorsOff = previewSensorsOff; return }
+        #endif
+        sensorsOff = SensorKitRegistry.hasUndecidedSensors ? [] : SensorKitRegistry.missingSensors
+    }
+
     // MARK: - isAlreadyGranted
     private func isAlreadyGranted(_ permission: JourneyPermission) -> Bool {
-        switch permission {
-            case .motion:
-                // Mirror requestMotion(): if hardware is unavailable (simulator), treat as granted.
-                guard CMMotionActivityManager.isActivityAvailable() else { return true }
-                return CMMotionActivityManager.authorizationStatus() == .authorized
+        PermissionAudit.isGranted(permission)
+    }
 
-            case .location:
-                return locationManager.authorizationStatus == .authorizedAlways
-            
-            
-            case .sensorKit:
-                // SensorKit cannot be authorized on the simulator — always skip
-                #if targetEnvironment(simulator)
-                return true
-                #else
-                // let reader = SRSensorReader(sensor: .ambientLightSensor)
-                let authKey = "sk_authorization_status"
-                let raw = UserDefaults.standard.integer(forKey: authKey)
-                let authorizationStatus = SRAuthorizationStatus(rawValue: raw) ?? .notDetermined
-                return authorizationStatus == .authorized
-                #endif
-             
-                
-            case .notifications:
-                return UserDefaults.standard.bool(forKey: "journey_notifications_authorized")
-
-            case .health:
-                guard HKHealthStore.isHealthDataAvailable() else { return false }
-                let stepType = HKObjectType.quantityType(forIdentifier: .stepCount)!
-                let status = healthStore.authorizationStatus(for: stepType)
-                return status != .notDetermined
+    /// Re-checks the card on screen (back from Settings, or "I've turned them on").
+    private func recheckCurrentCard(userTapped: Bool = false) {
+        guard currentIndex < permissions.count, cardAppeared, !requestInFlight else { return }
+        let permission = permissions[currentIndex]
+        #if DEBUG
+        // The simulator reports SensorKit as granted; a preview must stay on the card.
+        if previewSensorsOff != nil { stillOff = userTapped; return }
+        #endif
+        Task {
+            if permission == .notifications { await PermissionAudit.syncNotificationsFlag() }
+            guard currentIndex < permissions.count, permissions[currentIndex] == permission else { return }
+            if isAlreadyGranted(permission) {
+                showingDeniedAlert = false
+                showingAlwaysLocationPrompt = false
+                advanceToNext()
+            } else if permission == .sensorKit {
+                refreshSensorKitState()
+                stillOff = userTapped
+            }
         }
     }
 
@@ -373,6 +469,7 @@ struct PermissionsFlowView: View {
             return
         }
 
+        requestInFlight = true
         Task {
             let granted: Bool
             switch permission {
@@ -383,6 +480,7 @@ struct PermissionsFlowView: View {
                 case .health:        granted = await requestHealth()
             }
             await MainActor.run {
+                requestInFlight = false
                 if granted {
                     advanceToNext()
                 } else if permission == .location &&
@@ -390,6 +488,9 @@ struct PermissionsFlowView: View {
                     // User tapped "Allow While Using App" — upgrade prompt needed.
                     // Setting state here (on the main actor) is reliable.
                     showingAlwaysLocationPrompt = true
+                } else if permission == .sensorKit && !SensorKitRegistry.hasUndecidedSensors {
+                    // Some sensors were switched off in the sheet: show which ones.
+                    refreshSensorKitState()
                 } else {
                     deniedPermissionName = permission.title
                     showingDeniedAlert = true
@@ -400,6 +501,10 @@ struct PermissionsFlowView: View {
 
     // MARK: - Advance Logic
     private func advanceToNext() {
+        // Only reached once the current permission is on.
+        if currentIndex < permissions.count, permissions[currentIndex] == .sensorKit {
+            PermissionAudit.sensorKitDidBecomeGranted()
+        }
         cardAppeared = false
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
             var next = currentIndex + 1
@@ -420,6 +525,10 @@ struct PermissionsFlowView: View {
     }
 
     private func triggerCardAppear() {
+        stillOff = false
+        if currentIndex < permissions.count, permissions[currentIndex] == .sensorKit {
+            refreshSensorKitState()
+        }
         cardAppeared = false
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
             cardAppeared = true
@@ -471,71 +580,35 @@ struct PermissionsFlowView: View {
         }
     }
 
-    /// SensorKit — requests authorization for all relevant sensor types.
+    /// SensorKit — requests every required sensor (SensorKitRegistry).
     /// Skipped entirely on simulator (no hardware, no Settings entry).
     /// NOTE: Requires com.apple.developer.sensorkit.reader entitlement.
+    /// Granted means every required sensor is on; a partial grant returns false
+    /// and the card switches to its "turned off" list.
     private func requestSensorKit() async -> Bool {
         #if targetEnvironment(simulator)
-        // SensorKit cannot be authorized on simulator — skip silently
         return true
         #else
         return await withCheckedContinuation { continuation in
-            
-            // Issue #74: this used to list only the eight older sensors, so
-            // pressure, keyboard, messages and phone usage were never granted
-            // at onboarding. The registry set covers every sensor the app reads.
             SensorKitRegistry.requestAuthorization { error in
+                DispatchQueue.main.async {
+                    // 8201 = nothing left to ask; not a failure.
+                    let nsError = error as NSError?
+                    let answered = error == nil || (nsError?.domain == "SRErrorDomain" && nsError?.code == 8201)
+                    if let error, !answered {
+                        print("SensorKit auth error: \(error)")
+                        Logger.shared.append("SensorKit auth error: \(error)")
+                    }
+                    // Mash's standalone readers gate on this flag.
+                    let status: SRAuthorizationStatus = answered ? .authorized : .denied
+                    UserDefaults.standard.set(status.rawValue, forKey: PermissionAudit.sensorKitFlagKey)
 
-                if let error = error {
-                    print("SensorKit auth error: \(error)")
-                    UserDefaults.standard.set(SRAuthorizationStatus.denied.rawValue, forKey: "sk_authorization_status")
-                    continuation.resume(returning: false)
-                    return
+                    let granted = SensorKitRegistry.missingSensors.isEmpty
+                    // Record what was allowed while the card waits for the rest.
+                    if !granted { SensorKitRegistry.startAllRecording(checkAuthorization: true) }
+                    continuation.resume(returning: granted)
                 }
-                UserDefaults.standard.set(SRAuthorizationStatus.authorized.rawValue, forKey: "sk_authorization_status")
-                print("SensorKit authorization granted")
-                SensorKitRegistry.all.forEach { $0.startRecording() }
-                SensorKitAccelerometerFetcher.shared.startRecording()
-                //SensorKitGyroscopeFetcher.shared.startRecording()
-                //SensorKitWristDetectionFetcher.shared.startRecording()
-                SensorKitPPGFetcher.shared.startRecording()
-                SensorKitAmbientLightFetcher.shared.startRecording()
-                SensorKitDeviceUsageFetcher.shared.startRecording()
-                SensorKitWristTemperatureFetcher.shared.startRecording()
-                SensorKitHeartRateFetcher.shared.startRecording()
-                
-                continuation.resume(returning: true)
             }
-            
-            /*
-            // Multi-sensor for sensorkit. Disabling now.
-            let sensors: Set<SRSensor> = [
-                .ambientLightSensor,
-                .accelerometer,
-                .keyboardMetrics,
-                .deviceUsageReport
-            ]
-
-            let readers = sensors.map { SRSensorReader(sensor: $0) }
-
-            guard let primaryReader = readers.first else {
-                continuation.resume(returning: false)
-                return
-            }
-
-            primaryReader.delegate = SensorKitAuthDelegate(
-                onAuthorized: { continuation.resume(returning: true) },
-                onDenied:     { continuation.resume(returning: false) }
-            )
-            */
-
-            //            SRSensorReader.requestAuthorization(sensors: sensors) { error in
-            //                if let error = error {
-            //                    print("SensorKit auth error: \(error)")
-            //                    continuation.resume(returning: false)
-            //                }
-            //                // Actual result comes via delegate — don't resume here
-            //            }
         }
         #endif
     }
@@ -607,34 +680,20 @@ struct PermissionsFlowView: View {
     }
 }
 
-// MARK: - SensorKit Auth Delegate
-//
-// Bridges SensorKit's delegate pattern into async/await.
-// Only used on real devices — simulator path returns true immediately.
-private class SensorKitAuthDelegate: NSObject, SRSensorReaderDelegate {
-    private var onAuthorized: (() -> Void)?
-    private var onDenied:     (() -> Void)?
-    private var resolved = false
-
-    init(onAuthorized: @escaping () -> Void, onDenied: @escaping () -> Void) {
-        self.onAuthorized = onAuthorized
-        self.onDenied     = onDenied
-    }
-
-    func sensorReader(_ reader: SRSensorReader, didChange authorizationStatus: SRAuthorizationStatus) {
-        guard !resolved else { return }
-        resolved = true
-        DispatchQueue.main.async {
-            if authorizationStatus == .authorized {
-                self.onAuthorized?()
-            } else {
-                self.onDenied?()
-            }
-            self.onAuthorized = nil
-            self.onDenied     = nil
-        }
-    }
+#if DEBUG
+#Preview("SensorKit – first ask") {
+    PermissionsFlowView(onComplete: {}, previewSensorsOff: [])
 }
+
+#Preview("SensorKit – sensors turned off") {
+    PermissionsFlowView(onComplete: {},
+                        previewSensorsOff: [.keyboardMetrics, .messagesUsageReport, .heartRate])
+}
+
+#Preview("Full flow (simulator skips SensorKit)") {
+    PermissionsFlowView(onComplete: {})
+}
+#endif
 
 // MARK: - Always Location Prompt View
 
@@ -812,4 +871,12 @@ class LocationPermissionRequester: NSObject, CLLocationManagerDelegate {
         completion?(granted)
         completion = nil
     }
+}
+
+// MARK: - Study contact
+
+/// Shown by every card's "Contact study team". The coordinator's real details
+/// are still a placeholder (same as Settings › Help & Support).
+enum StudyContact {
+    static let message = "Questions about the data we collect, or don't want to share it? Your study coordinator can help. Their contact details were provided by your care team."
 }

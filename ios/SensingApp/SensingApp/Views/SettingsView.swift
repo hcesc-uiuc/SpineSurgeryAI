@@ -14,6 +14,7 @@ struct SettingsView: View {
     @State private var showingLogoutAlert = false
     @State private var showingPrivacySheet = false
     @State private var showingHelpSheet = false
+    @State private var showingHealthAlert = false
     var body: some View {
         NavigationStack {
             ZStack {
@@ -67,6 +68,13 @@ struct SettingsView: View {
                             }
                             .buttonStyle(.plain)
                             Divider().padding(.leading, 56)
+                            // iOS hides Health read denials from apps, so the study
+                            // can't detect them; this row lets the patient check.
+                            Button { showingHealthAlert = true } label: {
+                                settingsRow(icon: "heart.fill", label: "Health access", color: Color(red: 0.80, green: 0.35, blue: 0.38))
+                            }
+                            .buttonStyle(.plain)
+                            Divider().padding(.leading, 56)
                             Button { showingPrivacySheet = true } label: {
                                 settingsRow(icon: "lock.fill", label: "Privacy", color: Color(red: 0.38, green: 0.55, blue: 0.75))
                             }
@@ -117,6 +125,14 @@ struct SettingsView: View {
                 Button("Cancel", role: .cancel) {}
             } message: {
                 Text("Are you sure you want to log out of Journey?")
+            }
+            .alert("Health access", isPresented: $showingHealthAlert) {
+                Button("Open Health") {
+                    if let url = URL(string: "x-apple-health://") { UIApplication.shared.open(url) }
+                }
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text("The study needs every Apple Health category turned on. To check, open the Health app, tap your profile picture, then Apps › Journey, and make sure every switch is on.")
             }
             .sheet(isPresented: $showingPrivacySheet) {
                 privacySheet

@@ -34,53 +34,15 @@ class SensorKitManager: NSObject, ObservableObject {
     func requestAuthorization() {
         guard authorizationStatus != .authorized else {
             print("Sensorkit Already authorized, skipping")
-            SensorKitRegistry.all.forEach { $0.startRecording() }
-            SensorKitAccelerometerFetcher.shared.startRecording()
-            //SensorKitGyroscopeFetcher.shared.startRecording()
-            //SensorKitWristDetectionFetcher.shared.startRecording()
-            SensorKitPPGFetcher.shared.startRecording()
-            SensorKitAmbientLightFetcher.shared.startRecording()
-            SensorKitDeviceUsageFetcher.shared.startRecording()
-            SensorKitWristTemperatureFetcher.shared.startRecording()
-            SensorKitHeartRateFetcher.shared.startRecording()
+            SensorKitRegistry.startAllRecording(checkAuthorization: false)
             return
         }
         self.askForAuthorization()
     }
 
     func askForAuthorization(){
-        // Authorize every sensor in the registry; adding a sensor there is all
-        // that's needed to include it here.
-        
-        var sensors: Set<SRSensor> = SensorKitRegistry.sensors
-        let toAdd: [SRSensor] = [.accelerometer, .deviceUsageReport, .ambientLightSensor, .photoplethysmogram, .wristTemperature, .heartRate]
-        sensors.formUnion(toAdd)
-        
-        
-                                                                                 
-                                                                                 
-        /*//We separated this function out to force
-        //authorization of new sensor types as we add them
-        SRSensorReader.requestAuthorization(
-            sensors: [
-                .accelerometer,
-                .rotationRate,
-                .onWristState,
-                .deviceUsageReport,
-                .ambientLightSensor,
-                .photoplethysmogram,
-                .wristTemperature,
-                .heartRate
-            ]
-        )
-        { [weak self] error in*/
-                                                                                 
-                                                                                 
-        // Registry sensors plus the legacy standalone ones, with unconfirmed
-        // sensors (sleep sessions) requested separately. Same set as onboarding.
-        // Jason: changes
-        // SensorKitRegistry.requestAuthorization { [weak self] error in
-        SRSensorReader.requestAuthorization(sensors: sensors) { [weak self] error in
+        // Same set as onboarding: registry + legacy, sleep sessions requested separately.
+        SensorKitRegistry.requestAuthorization { [weak self] error in
             if let error = error {
                 let nsError = error as NSError
                 if nsError.domain == "SRErrorDomain", nsError.code == 8201 {
@@ -94,15 +56,7 @@ class SensorKitManager: NSObject, ObservableObject {
             }
             self?.saveAuthorizationStatus(.authorized)
             print("SensorKit authorization granted")
-            SensorKitRegistry.all.forEach { $0.startRecording() }
-            SensorKitAccelerometerFetcher.shared.startRecording()
-            //SensorKitGyroscopeFetcher.shared.startRecording()
-            //SensorKitWristDetectionFetcher.shared.startRecording()
-            SensorKitPPGFetcher.shared.startRecording()
-            SensorKitAmbientLightFetcher.shared.startRecording()
-            SensorKitDeviceUsageFetcher.shared.startRecording()
-            SensorKitWristTemperatureFetcher.shared.startRecording()
-            SensorKitHeartRateFetcher.shared.startRecording()
+            SensorKitRegistry.startAllRecording(checkAuthorization: false)
         }
     }
     
