@@ -11,8 +11,9 @@ import Foundation
 struct Uploader {
     
     static let shared = Uploader()
-    //static let UploadURL = "http://18.116.67.186/api/noauth/uploadfile"
     static let UploadURL = "https://rvsh5s5hg66ezcom2itcz7a27y0smcig.lambda-url.us-east-2.on.aws/api/noauth/uploadfile"
+    
+    //static let UploadURL = "http://18.116.67.186/api/noauth/uploadfile"
     //static let UploadURL = "http://18.116.67.186/api/noauth/uploadfile/accel"
     //    static let UploadURL = "https://rvsh5s5hg66ezcom2itcz7a27y0smcig.lambda-url.us-east-2.on.aws/api/noauth/uploadfile/accel"
     
@@ -56,8 +57,11 @@ struct Uploader {
                     continue
                 }
                 
+                // For sensorkit CSV files, empty files are not uploaded.
+                //
                 // A SensorKit CSV with only its header has nothing to upload yet;
                 // leave it for the fetcher to append to.
+                //
                 if file_prefix == "sensorkit_" && file.pathExtension == "csv" && !Uploader.hasDataRows(file) {
                     print("\(file.lastPathComponent) has no data rows yet, skipping")
                     continue
@@ -68,6 +72,15 @@ struct Uploader {
                     print("\(index+1)/\(numberOfFiles) Uploading file: \(file.lastPathComponent); \(fileSizeInKB)KB")
                     
                     let kind = kinds[file_prefix]!
+                    /*
+                     let kinds = [
+                         "locations_": "loc",
+                         "accelerometer_": "accel",
+                         "healthkit_": "hk",
+                         "sqlite_": "other",
+                         "sensorkit_": "other",
+                     ]
+                     */
                     if kind == "accel" || kind == "other"{
                         //Direct S3 upload
                         let uploadSuccess = await uploader.runFullFlow(filenameURL: file, kind: kind)
@@ -103,7 +116,7 @@ struct Uploader {
                     //                        let destination = processedURL.appendingPathComponent(file.lastPathComponent)
                     //                        do {
                     //                            try fileManager.moveItem(at: file, to: destination)
-                    //                            print("     Moved \(file.lastPathComponent) -> processed/")
+                    //                            print("     Moved \(file.lastPathCompon  ent) -> processed/")
                     //                        } catch {
                     //                            print("     Failed to move \(file.lastPathComponent): \(error)")
                     //                        }
@@ -115,6 +128,7 @@ struct Uploader {
     
     
     // Returns true if the upload succeeded, false otherwise.
+    // Only 200 triggers a success. Everything else is a failure.
     func uploadFile(fileURL: URL) async -> Bool {
         
         if FileManager.default.fileExists(atPath: fileURL.path) {
@@ -283,6 +297,25 @@ struct Uploader {
     /// True when a CSV has at least one non-empty line after its header.
     /// Reads only the first 64 KB.
     static func hasDataRows(_ file: URL) -> Bool {
+        // Open the file for reading; if it can't be opened, treat it as having no data.
+        //
+        // Read only the first 64 KB rather than loading the entire file — sufficient
+        // to detect data rows in any sensor CSV with a short header, and avoids
+        // loading large files into memory just for this check.
+        //
+        // If the bytes can't be decoded as UTF-8 (e.g. binary or corrupted file),
+        // fall back to: any bytes at all → treat as having data.
+        //
+        // Split into non-empty lines, skip the header (first line), then check
+        // whether any remaining line has non-whitespace content:
+        //   0 lines total           → false  (empty file)
+        //   header only             → false  (no data rows)
+        //   header + 1 or more rows → true   (has real data)
+        //
+        // Corner case: if the file exceeds 64 KB and all data rows fall beyond that
+        // boundary (e.g. an unusually large header), this returns false incorrectly.
+        // In practice sensor CSV headers are a single short line so this cannot occur.
+        //
         guard let handle = try? FileHandle(forReadingFrom: file) else { return false }
         defer { handle.closeFile() }
         let data = handle.readData(ofLength: 64 * 1024)
@@ -325,6 +358,46 @@ struct Uploader {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd"
         return formatter.string(from: Date())
+    }
+    
+    
+    
+    /*
+     Deletes regular files in `folder` whose creation date falls within the last `days` days.
+     Returns the URLs that were actually removed.
+     - recursive: false = top-level only; true = descend into subfolders (folders themselves are never deleted).
+     - dryRun: true = report matches without deleting (use this first).
+    */
+    @discardableResult
+    func deleteFilesCreatedInLast(days: Int = 15,
+                                  in folder: URL,
+                                  recursive: Bool = false,
+                                  dryRun: Bool = false) -> [URL] {
+        let fm = FileManager.default
+        let keys: [URLResourceKey] = [.creationDateKey, .contentModificationDateKey, .isRegularFileKey]
+        guard let cutoff = Calendar.current.date(byAdding: .day, value: -days, to: Date()) else { return [] }
+     
+        /* Enumerator for recursive walk, plain listing otherwise; hidden files (.DS_Store etc.) skipped */
+        let urls: [URL]
+        if recursive {
+            let e = fm.enumerator(at: folder, includingPropertiesForKeys: keys, options: [.skipsHiddenFiles])
+            urls = (e?.allObjects as? [URL]) ?? []
+        } else {
+            urls = (try? fm.contentsOfDirectory(at: folder, includingPropertiesForKeys: keys,
+                                                options: [.skipsHiddenFiles])) ?? []
+        }
+     
+        var deleted: [URL] = []
+        for url in urls {
+            guard let v = try? url.resourceValues(forKeys: Set(keys)), v.isRegularFile == true else { continue }
+            /* TODO verify: creationDate can be nil on some volumes; falls back to modification date */
+            guard let created = v.creationDate ?? v.contentModificationDate, created >= cutoff else { continue }
+     
+            if dryRun { deleted.append(url); continue }
+            if (try? fm.removeItem(at: url)) != nil { deleted.append(url) }
+        }
+        
+        return deleted
     }
     
     

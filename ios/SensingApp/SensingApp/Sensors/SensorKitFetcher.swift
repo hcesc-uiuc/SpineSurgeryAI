@@ -268,6 +268,18 @@ extension SensorKitFetcher: SRSensorReaderDelegate {
                       fetching fetchRequest: SRFetchRequest,
                       didFetchResult result: SRFetchResult<AnyObject>) -> Bool {
         buffer(rows(from: result))   // subclass decides how to turn the result into lines
+        /*
+         didFetchResult called for each sample
+           └─ stamp.saw(result)
+                └─ newest = max(newest, result.timestamp as Date)
+                     (keeps the latest sample time across all results in the batch)
+
+         didCompleteFetch called once when batch is done
+           └─ stamp.save()
+                └─ SensorStatusStore.shared.record(kind, at: newest)
+                     (records the newest sample's measurement time as the sensor's "last seen" date)
+                └─ newest = nil  (resets for next fetch)
+         */
         stamp.saw(result)
         return true
     }

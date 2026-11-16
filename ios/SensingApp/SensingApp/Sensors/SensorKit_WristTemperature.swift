@@ -216,7 +216,7 @@ extension SensorKitWristTemperatureFetcher: SRSensorReaderDelegate {
         guard let session = result.sample as? SRWristTemperatureSession else {
             return true
         }
-        stamp.saw(result)
+        stamp.saw(result) //sets the latest date
 
         let allTemps = Array(session.temperatures)
         print("SK-WristTemp: Writing \(allTemps.count) samples of wrist temperature data")
@@ -234,7 +234,19 @@ extension SensorKitWristTemperatureFetcher: SRSensorReaderDelegate {
 
     func sensorReader(_ reader: SRSensorReader, didCompleteFetch fetchRequest: SRFetchRequest) {
         fileHandle?.synchronizeFile()  // fsync to disk
-        stamp.save()
+        /*
+         didFetchResult called for each sample
+           └─ stamp.saw(result)
+                └─ newest = max(newest, result.timestamp as Date)
+                     (keeps the latest sample time across all results in the batch)
+
+         didCompleteFetch called once when batch is done
+           └─ stamp.save()
+                └─ SensorStatusStore.shared.record(kind, at: newest)
+                     (records the newest sample's measurement time as the sensor's "last seen" date)
+                └─ newest = nil  (resets for next fetch)
+         */
+        stamp.save() //save the latest date (Akarsh: can we just save here detectly)
         print("SK-WristTemp: Fetch complete")
         Logger.shared.append("SK-WristTemp: Fetch complete")
     }

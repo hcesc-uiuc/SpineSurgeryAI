@@ -36,6 +36,20 @@ struct DebugTabView: View {
             .sheet(isPresented: $showImportData) {
                 ImportDataView()
             }
+            
+            Button("Delete last 15 days of files") {
+                /* Example: clean the app's to-be-processed folder */
+                let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+                    .appendingPathComponent("processed")
+                let preview = Uploader.shared.deleteFilesCreatedInLast(days: 15, in: dir, dryRun: true)
+                let removed = Uploader.shared.deleteFilesCreatedInLast(days: 15, in: dir)
+                let names = removed.map { $0.lastPathComponent }.joined(separator: "\n  ")
+                
+                print("Deleted \(removed.count) files from \(dir.lastPathComponent):\n  \(names)")
+                Logger.shared.append("Deleted \(removed.count) files from \(dir.lastPathComponent):\n  \(names)")
+            }
+            .padding(.top, 10)
+            
 
             Button("Ask for sensorkit permissions") {
                 let sk = SensorKitManager()

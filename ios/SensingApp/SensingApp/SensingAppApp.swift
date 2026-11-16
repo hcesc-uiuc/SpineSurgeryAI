@@ -122,15 +122,12 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         
 
         // Detect geofence-triggered relaunch for logging purposes.
-        // UIApplication.LaunchOptionsKey.location is deprecated in iOS 26 with no
-        // direct replacement at didFinishLaunching time. We access the key via its
-        // raw string value to avoid the compiler warning. On iOS 26+ the geofence
-        // event is also captured in didExitRegion once CLLocationManagerDelegate fires.
-        let locationLaunchKey = UIApplication.LaunchOptionsKey(rawValue: "UIApplicationLaunchOptionsLocationKey")
-        if launchOptions?[locationLaunchKey] != nil {
+        // UIApplication.LaunchOptionsKey.location is deprecated in iOS 26 but there
+        // is no direct replacement for detecting this at didFinishLaunching time.
+        if launchOptions?[.location] != nil {
             print("Relaunched by geofence/location event")
             Logger.shared.append("Relaunched by geofence/location event")
-            
+
             // Force AdaptiveLocationManager to initialize now, before the SwiftUI scene
             // connects. This is critical for geofence-triggered background relaunches:
             // setting delegate = self in init() causes iOS to call
@@ -141,7 +138,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
             // with check if authorization exists
             //
             _ = AdaptiveLocationManager.shared
-            
+
         } else {
             Logger.shared.append("didFinishLaunchingWithOptions — normal launch")
         }
