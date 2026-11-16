@@ -435,15 +435,25 @@ class BackgroundScheduler {
         
         self.scheduleUploadBGTask()
 
-        // Set expiration handler — iOS will call this if time runs out
+        // Completed once: by the expiration handler (performUpload may still be
+        // waiting for an upload started on opening the app) or after the run
+        let lock = NSLock()
+        var completed = false
+        let complete = { (success: Bool) in
+            lock.lock(); defer { lock.unlock() }
+            guard !completed else { return }
+            completed = true
+            task.setTaskCompleted(success: success)
+        }
         task.expirationHandler = {
-            // Cancel any ongoing work here
             print("Task expired — clean up")
+            Logger.shared.append("BGUploadProcessingTask: expired before the upload finished")
+            complete(false)
         }
 
         // Do your actual work
         performUpload()
-        task.setTaskCompleted(success: true)
+        complete(true)
     }
     
     func isOnWiFi() -> Bool {
