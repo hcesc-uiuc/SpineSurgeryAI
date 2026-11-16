@@ -26,8 +26,10 @@ final class SensorKitRecheckTests: XCTestCase {
         // stopped 20 min in: the rest
         let newest = a.addingTimeInterval(10 * 60)
         XCTAssertEqual(SensorKitRecheck.missingPart(from: a, to: b, newest: newest)?.0, newest)
-        // ran to within 5 min of the end: complete
-        XCTAssertNil(SensorKitRecheck.missingPart(from: a, to: b, newest: b.addingTimeInterval(-60)))
+        // ran to within 30 s of the end: complete
+        XCTAssertNil(SensorKitRecheck.missingPart(from: a, to: b, newest: b.addingTimeInterval(-10)))
+        // stopped 2 min short: the last 2 min are rechecked
+        XCTAssertNotNil(SensorKitRecheck.missingPart(from: a, to: b, newest: b.addingTimeInterval(-120)))
     }
 
     func testAddSplitsIntoChunksAndDoesNotDuplicate() {
@@ -78,5 +80,19 @@ final class SensorKitRecheckTests: XCTestCase {
         XCTAssertEqual(SensorKitRecheck.windows(p, defaults: defaults).count, 3)   // 80 min in 30 min pieces
         XCTAssertFalse(FileManager.default.fileExists(atPath: url.path))
         XCTAssertTrue(FileManager.default.fileExists(atPath: url.path + ".imported"))
+    }
+
+    func testRowTimeReadsTheFirstColumn() {
+        XCTAssertEqual(SensorKitFetcher.rowTime("1794000000.250000,0.1,0.2,0.3"), 1_794_000_000.25)
+        XCTAssertNil(SensorKitFetcher.rowTime("timestamp_unix,x,y,z"))
+    }
+
+    func testImportAcceptsFractionalSeconds() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("recheck-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let url = dir.appendingPathComponent(SensorKitRecheck.importFileName)
+        try Data(#"[{"sensor":"sensorkit_gyro_phone","from":"2026-11-13T22:06:00.000Z","to":"2026-11-13T22:36:00.000Z"}]"#.utf8).write(to: url)
+        XCTAssertEqual(SensorKitRecheck.importFile(url, chunks: [p: 0.5 * hour], defaults: defaults), 1)
     }
 }

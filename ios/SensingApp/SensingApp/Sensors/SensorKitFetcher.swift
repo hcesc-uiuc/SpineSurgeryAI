@@ -70,6 +70,8 @@ class SensorKitFetcher: NSObject {
     private var currentDevice: SRDevice?   // device of the running fetch, for the next chunk
     private var currentRequest: SRFetchRequest?   // callbacks for any other request are stale
     private var pendingFetchStart: Double?
+    /// Unix time of the last row written in the chunk being fetched (first CSV column).
+    private var chunkLastRowTime: Double?
     /// Set while fetching a window again (SensorKitRecheck): rows go to their
     /// own file and the progress point does not move.
     private var recheckWindow: RecheckWindow?
@@ -263,6 +265,9 @@ class SensorKitFetcher: NSObject {
         fetchStartedAt = Date()
         print("\(logTag): Sensorkit is authorized, fetching devices")
         Logger.shared.append("\(logTag): Sensorkit is authorized, fetching devices")
+        // A run taken over after 30 min may have been in a recheck; start normal
+        recheckWindow = nil
+        pendingFetchStart = nil
         openCurrentFile()
         chunksThisRun = 0
         bytesThisRun = 0
@@ -314,6 +319,7 @@ class SensorKitFetcher: NSObject {
         pendingFetchEnd = fetchEnd.timeIntervalSinceReferenceDate
         writeFailed = false
         chunkRows = 0
+        chunkLastRowTime = nil
         currentRequest = request
         reader.fetch(request)
     }
@@ -436,7 +442,14 @@ class SensorKitFetcher: NSObject {
     // MARK: - Buffered write
 
     private func buffer(_ lines: [String]) {
+        var lines = lines
+        // A recheck starts at the last row already saved; drop rows up to it
+        if let w = recheckWindow {
+            let savedUpTo = w.from + kCFAbsoluteTimeIntervalSince1970
+            lines = lines.filter { Self.rowTime($0).map { $0 > savedUpTo } ?? true }
+        }
         guard !lines.isEmpty else { return }
+        if let t = Self.rowTime(lines[lines.count - 1]) { chunkLastRowTime = max(chunkLastRowTime ?? t, t) }
         lineBuffer.append(contentsOf: lines)
         chunkRows += lines.count
         if lineBuffer.count >= batchSize { flush() }
@@ -539,7 +552,7 @@ extension SensorKitFetcher: SRSensorReaderDelegate {
             lastFetchEnd = end
             rowsThisRun += chunkRows
             chunkRows = 0
-            queueRecheckIfShort(newest: stamp.chunkNewest)
+            queueRecheckIfShort(newest: chunkLastRowTime.map { Date(timeIntervalSince1970: $0) })
             stamp.commitChunk()
         }
         pendingFetchEnd = nil
@@ -596,8 +609,10 @@ extension SensorKitFetcher: SRSensorReaderDelegate {
         else { return false }
         recheckWindow = w
         openCurrentFile()               // the recheck file
+        Self.trimToCommitted(currentFileURL)   // rows of an abandoned recheck
         recordCommittedSize()
         chunkRows = 0
+        chunkLastRowTime = nil
         writeFailed = false
         let request = SRFetchRequest()
         request.device = device
@@ -640,6 +655,12 @@ extension SensorKitFetcher: SRSensorReaderDelegate {
     }
 
     private static func short(_ d: Date) -> String { d.formatted(date: .abbreviated, time: .shortened) }
+
+    /// Unix time in a row's first column.
+    static func rowTime(_ line: String) -> Double? {
+        guard let comma = line.firstIndex(of: ",") else { return Double(line) }
+        return Double(line[..<comma])
+    }
 
     /// Records this run (SensorRunLog, shown on the status screen) and logs
     /// one summary line for it.

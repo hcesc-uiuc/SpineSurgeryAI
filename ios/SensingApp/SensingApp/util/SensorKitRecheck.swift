@@ -24,8 +24,9 @@ nonisolated enum SensorKitRecheck {
     static let dueAfter: TimeInterval = 48 * 3600
     /// SensorKit deletes data after 7 days.
     static let expireAfter: TimeInterval = 6.5 * 24 * 3600
-    /// A chunk whose newest sample is this close to its end counts as complete.
-    static let shortTolerance: TimeInterval = 5 * 60
+    /// A chunk whose newest sample is this close to its end counts as complete
+    /// (continuous sensors sample at 10-100 Hz).
+    static let shortTolerance: TimeInterval = 30
 
     private static let lock = NSLock()
 
@@ -42,7 +43,8 @@ nonisolated enum SensorKitRecheck {
     }
 
     /// The part of a chunk that came back missing, or nil if it came back whole.
-    /// `newest` is the newest sample the chunk returned.
+    /// `newest` is the time of the last row written; the recheck skips rows up
+    /// to it, so nothing is saved twice.
     static func missingPart(from: Date, to: Date, newest: Date?) -> (Date, Date)? {
         guard let newest else { return (from, to) }
         guard newest < to.addingTimeInterval(-shortTolerance) else { return nil }
@@ -110,10 +112,12 @@ nonisolated enum SensorKitRecheck {
         guard let data = try? Data(contentsOf: url),
               let entries = try? JSONDecoder().decode([ImportEntry].self, from: data) else { return 0 }
         let iso = ISO8601DateFormatter()
+        let isoFrac = ISO8601DateFormatter()
+        isoFrac.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let parse = { (s: String) in iso.date(from: s) ?? isoFrac.date(from: s) }
         var count = 0
         for e in entries {
-            guard let chunk = chunks[e.sensor], let from = iso.date(from: e.from),
-                  let to = iso.date(from: e.to) else { continue }
+            guard let chunk = chunks[e.sensor], let from = parse(e.from), let to = parse(e.to) else { continue }
             add(e.sensor, from: from, to: to, chunk: chunk, defaults: defaults)
             count += 1
         }
