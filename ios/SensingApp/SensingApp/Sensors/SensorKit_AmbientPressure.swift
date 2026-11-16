@@ -21,7 +21,8 @@ final class SensorKitAmbientPressureFetcher: SensorKitFetcher {
             devicePreference: .iPhone,
             logTag: "SK-Pressure",
             fileIndexKey: "sk_pressure_csv_file_index",
-            lastFetchEndKey: "sk_pressure_last_fetch_end"
+            lastFetchEndKey: "sk_pressure_last_fetch_end",
+            continuous: true    // recheck chunks that come back short
         )
     }
 

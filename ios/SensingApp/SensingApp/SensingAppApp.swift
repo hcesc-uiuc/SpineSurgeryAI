@@ -123,6 +123,17 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         SensorKitWristTemperatureFetcher.shared.startRecordingWithAuthorizationCheck()
         SensorKitHeartRateFetcher.shared.startRecordingWithAuthorizationCheck()
 
+        // Gap windows found on the server, copied onto the phone to fetch again
+        // (SensorKitRecheck). Read once, then renamed.
+        if let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
+            let url = docs.appendingPathComponent(SensorKitRecheck.importFileName)
+            if FileManager.default.fileExists(atPath: url.path) {
+                let chunks = Dictionary(uniqueKeysWithValues: SensorKitRegistry.all.map { ($0.prefix, $0.chunkLength) })
+                let n = SensorKitRecheck.importFile(url, chunks: chunks)
+                Logger.shared.append("Queued \(n) gap window(s) from \(SensorKitRecheck.importFileName) for a recheck")
+            }
+        }
+
         // Runs on every launch, including background relaunches for location
         BackgroundScheduler.shared.fetchSensorKitIfDue(trigger: "relaunch")
         // Log Low Power Mode changes: it stops iOS running background tasks

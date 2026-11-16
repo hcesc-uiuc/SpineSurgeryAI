@@ -47,6 +47,12 @@ class SensorKitFetcher: NSObject {
     private let batchSize: Int
     private let maxFileSize: Int
     private let fetchChunk: TimeInterval   // longest window asked for in one fetch
+    /// Records all the time (accel, gyro, pressure): a chunk that comes back
+    /// short means SensorKit had not released it yet, so it is rechecked.
+    private let continuous: Bool
+
+    var prefix: String { filePrefix }
+    var chunkLength: TimeInterval { fetchChunk }
 
     private let fileIndexKey: String
     private let lastFetchEndKey: String
@@ -63,6 +69,10 @@ class SensorKitFetcher: NSObject {
     private var stamp: SensorKitStamp       // newest sample time → SensorStatusStore
     private var currentDevice: SRDevice?   // device of the running fetch, for the next chunk
     private var currentRequest: SRFetchRequest?   // callbacks for any other request are stale
+    private var pendingFetchStart: Double?
+    /// Set while fetching a window again (SensorKitRecheck): rows go to their
+    /// own file and the progress point does not move.
+    private var recheckWindow: RecheckWindow?
     private var chunksThisRun = 0
     private var bytesThisRun = 0
     private var rowsThisRun = 0            // rows in committed chunks
@@ -151,9 +161,22 @@ class SensorKitFetcher: NSObject {
     private let documentsDir = FileManager.default
         .urls(for: .documentDirectory, in: .userDomainMask)[0]
 
+    /// Recheck files are numbered from 90000 so every existing parser (uploader,
+    /// server report) still reads them as this sensor's files.
+    private static let recheckIndexBase = 90000
     private var fileIndex: Int {
-        get { UserDefaults.standard.integer(forKey: fileIndexKey) }
-        set { UserDefaults.standard.set(newValue, forKey: fileIndexKey) }
+        get {
+            recheckWindow == nil
+                ? UserDefaults.standard.integer(forKey: fileIndexKey)
+                : Self.recheckIndexBase + UserDefaults.standard.integer(forKey: fileIndexKey + "_recheck")
+        }
+        set {
+            if recheckWindow == nil {
+                UserDefaults.standard.set(newValue, forKey: fileIndexKey)
+            } else {
+                UserDefaults.standard.set(newValue - Self.recheckIndexBase, forKey: fileIndexKey + "_recheck")
+            }
+        }
     }
     private var lastFetchEnd: Double {
         get { UserDefaults.standard.double(forKey: lastFetchEndKey) }
@@ -170,7 +193,8 @@ class SensorKitFetcher: NSObject {
          lastFetchEndKey: String,
          batchSize: Int = 2000,
          maxFileSizeMB: Int = 50,
-         fetchChunkHours: Double = 6) {
+         fetchChunkHours: Double = 6,
+         continuous: Bool = false) {
         self.sensor           = sensor
         self.reader           = SRSensorReader(sensor: sensor)
         self.filePrefix       = filePrefix
@@ -182,6 +206,7 @@ class SensorKitFetcher: NSObject {
         self.batchSize        = batchSize
         self.maxFileSize      = maxFileSizeMB * 1024 * 1024
         self.fetchChunk       = fetchChunkHours * 3600
+        self.continuous       = continuous
         self.currentFileURL   = documentsDir   // placeholder; set in openCurrentFile()
         self.stamp            = SensorKitStamp(kind)
         self.stamp.recordsRunOnSave = false    // runs are recorded in finishRun below
@@ -268,9 +293,10 @@ class SensorKitFetcher: NSObject {
         currentDevice = device
         guard let window = Self.nextWindow(lastFetchEnd: lastFetchEnd, now: Date(), chunk: fetchChunk) else {
             print("\(logTag): No new data window available yet")
-            isFetching = false
             recordSuccessfulRun()
             if chunksThisRun == 0 { finishRun(stopReason: "caught up", failed: false) }
+            if startRecheckIfDue(device) { return }
+            isFetching = false
             return
         }
         let (fetchStart, fetchEnd) = window
@@ -284,6 +310,7 @@ class SensorKitFetcher: NSObject {
 
         print("\(logTag): Fetching from \(fetchStart) to \(fetchEnd)")
         Logger.shared.append("\(logTag): Fetching \(fetchStart.formatted(date: .abbreviated, time: .shortened)) - \(fetchEnd.formatted(date: .omitted, time: .shortened))")
+        pendingFetchStart = fetchStart.timeIntervalSinceReferenceDate
         pendingFetchEnd = fetchEnd.timeIntervalSinceReferenceDate
         writeFailed = false
         chunkRows = 0
@@ -491,6 +518,10 @@ extension SensorKitFetcher: SRSensorReaderDelegate {
         currentRequest = nil
         flush()
         fileHandle?.synchronizeFile()   // rows on disk before the window is committed
+        if let w = recheckWindow {
+            completeRecheck(w)
+            return
+        }
         if writeFailed {
             print("\(logTag): Rows could not be written, window will be retried")
             Logger.shared.append("\(logTag): Rows could not be written, window will be retried")
@@ -508,6 +539,7 @@ extension SensorKitFetcher: SRSensorReaderDelegate {
             lastFetchEnd = end
             rowsThisRun += chunkRows
             chunkRows = 0
+            queueRecheckIfShort(newest: stamp.chunkNewest)
             stamp.commitChunk()
         }
         pendingFetchEnd = nil
@@ -527,14 +559,87 @@ extension SensorKitFetcher: SRSensorReaderDelegate {
             return
         }
 
-        isFetching = false
         recordSuccessfulRun()
         sealCurrentFile()               // hands the file to the uploader
         let reason = Self.stopReason(caughtUp: !more, chunks: chunksThisRun,
                                      bytesThisRun: bytesThisRun, freeBytes: free)
         print("\(logTag): Fetch complete (\(chunksThisRun) chunk(s), stopped: \(reason))")
         finishRun(stopReason: reason, failed: false)
+        if let device = currentDevice, startRecheckIfDue(device) { return }
+        isFetching = false
     }
+
+    // MARK: - Recheck (SensorKitRecheck)
+
+    /// A continuous sensor's chunk that came back short: SensorKit had not
+    /// released its newest part yet. Queue that part for a later recheck.
+    private func queueRecheckIfShort(newest: Date?) {
+        guard continuous, let s = pendingFetchStart, let e = pendingFetchEnd else { return }
+        let from = Date(timeIntervalSinceReferenceDate: s), to = Date(timeIntervalSinceReferenceDate: e)
+        guard let (a, b) = SensorKitRecheck.missingPart(from: from, to: to, newest: newest) else { return }
+        SensorKitRecheck.add(filePrefix, from: a, to: b, chunk: fetchChunk)
+        let lag = newest.map { "SensorKit had released data up to \(Self.short($0)) (\(Int(Date().timeIntervalSince($0) / 3600)) h ago)" }
+            ?? "SensorKit returned nothing"
+        Logger.shared.append("\(logTag): \(lag); queued \(Self.short(a)) - \(Self.short(b)) for a recheck after 48 h")
+    }
+
+    /// Starts fetching the oldest due recheck window, if any. Returns true if
+    /// one started (the run continues in completeRecheck).
+    private func startRecheckIfDue(_ device: SRDevice) -> Bool {
+        guard continuous else { return false }
+        let dropped = SensorKitRecheck.dropExpired(filePrefix)
+        if dropped > 0 {
+            Logger.shared.append("\(logTag): \(dropped) recheck window(s) expired (SensorKit keeps 7 days)")
+        }
+        guard let w = SensorKitRecheck.due(filePrefix),
+              Self.shouldChain(chunks: chunksThisRun, bytesThisRun: bytesThisRun, freeBytes: freeDiskBytes())
+        else { return false }
+        recheckWindow = w
+        openCurrentFile()               // the recheck file
+        recordCommittedSize()
+        chunkRows = 0
+        writeFailed = false
+        let request = SRFetchRequest()
+        request.device = device
+        request.from = SRAbsoluteTime.fromCFAbsoluteTime(_cf: w.from)
+        request.to   = SRAbsoluteTime.fromCFAbsoluteTime(_cf: w.to)
+        currentRequest = request
+        Logger.shared.append("\(logTag): Recheck: fetching \(Self.short(Date(timeIntervalSinceReferenceDate: w.from))) - \(Self.short(Date(timeIntervalSinceReferenceDate: w.to)))")
+        // Possibly inside a SensorKit callback: start the fetch after it returns
+        DispatchQueue.main.async { self.reader.fetch(request) }
+        return true
+    }
+
+    private func completeRecheck(_ w: RecheckWindow) {
+        if writeFailed {
+            Logger.shared.append("\(logTag): Recheck rows could not be written, will retry")
+            discardUncommittedChunk()
+            exitRecheck()
+            isFetching = false
+            return
+        }
+        recordCommittedSize()
+        let rows = chunkRows
+        chunkRows = 0
+        stamp.discardChunk()            // recheck rows are reported here, not in the run record
+        SensorKitRecheck.remove(filePrefix, w)
+        chunksThisRun += 1
+        Logger.shared.append("\(logTag): Recheck \(Self.short(Date(timeIntervalSinceReferenceDate: w.from))) - "
+            + "\(Self.short(Date(timeIntervalSinceReferenceDate: w.to))): \(rows.formatted(.number)) rows "
+            + (rows > 0 ? "recovered (released late)" : "(SensorKit has nothing)"))
+        rotateFileIfNeeded()
+        if let device = currentDevice, startRecheckIfDue(device) { return }
+        sealCurrentFile()
+        exitRecheck()
+        isFetching = false
+    }
+
+    private func exitRecheck() {
+        recheckWindow = nil
+        openCurrentFile()               // back to the normal file
+    }
+
+    private static func short(_ d: Date) -> String { d.formatted(date: .abbreviated, time: .shortened) }
 
     /// Records this run (SensorRunLog, shown on the status screen) and logs
     /// one summary line for it.
@@ -569,6 +674,14 @@ extension SensorKitFetcher: SRSensorReaderDelegate {
             return
         }
         currentRequest = nil
+        if recheckWindow != nil {
+            // The window stays queued and is tried again on a later run
+            Logger.shared.append("\(logTag): Recheck failed, will retry: \(error)")
+            discardUncommittedChunk()
+            exitRecheck()
+            isFetching = false
+            return
+        }
         // Keep lastFetchEnd where it was so the next fetch retries this window,
         // and drop this chunk's rows so the retry does not duplicate them.
         pendingFetchEnd = nil

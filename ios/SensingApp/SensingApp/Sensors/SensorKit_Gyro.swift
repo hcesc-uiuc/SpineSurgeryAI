@@ -22,7 +22,8 @@ final class SensorKitGyroscopeFetcher: SensorKitFetcher {
             logTag: "SK-Gyro",
             fileIndexKey: "sk_gyro_csv_file_index",
             lastFetchEndKey: "sk_gyro_last_fetch_end",
-            fetchChunkHours: 0.5   // high rate: keep each fetch short enough to finish
+            fetchChunkHours: 0.5,   // high rate: keep each fetch short enough to finish
+            continuous: true    // recheck chunks that come back short
         )
     }
 

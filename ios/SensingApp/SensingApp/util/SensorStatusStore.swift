@@ -350,6 +350,9 @@ nonisolated struct SensorKitStamp {
         chunkEnd = max(chunkEnd ?? date, date)
     }
 
+    /// Newest sample of the chunk being fetched (nil if it returned none).
+    var chunkNewest: Date? { chunkEnd }
+
     /// The chunk's rows are written and its window committed.
     mutating func commitChunk() {
         runResults += chunkResults
