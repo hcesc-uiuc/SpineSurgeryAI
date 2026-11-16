@@ -33,4 +33,24 @@ final class BackgroundSettingsTests: XCTestCase {
         XCTAssertTrue(Uploader.beginRun())
         Uploader.endRun()
     }
+
+    func testSecondRunWaitsForTheFirstInsteadOfSkipping() async {
+        XCTAssertTrue(Uploader.beginRun())
+        DispatchQueue.global().asyncAfter(deadline: .now() + 1) { Uploader.endRun() }
+        let got = await Uploader.acquireRun(timeout: 10)
+        XCTAssertTrue(got)
+        Uploader.endRun()
+    }
+
+    func testWaitingGivesUpAfterTheTimeout() async {
+        XCTAssertTrue(Uploader.beginRun())
+        let got = await Uploader.acquireRun(timeout: 0)
+        XCTAssertFalse(got)
+        Uploader.endRun()
+    }
+
+    func testSensorUploadsNeverUseCellular() {
+        XCTAssertFalse(Uploader.wifiOnlySession.configuration.allowsCellularAccess)
+        XCTAssertFalse(Uploader.wifiOnlySession.configuration.allowsExpensiveNetworkAccess)
+    }
 }

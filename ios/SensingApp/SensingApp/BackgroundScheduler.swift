@@ -528,12 +528,14 @@ class BackgroundScheduler {
     /// waiting, instead of waiting for iOS to run the upload task (which needs
     /// charging, and which iOS may refuse altogether, as above).
     func uploadIfDue(trigger: String) {
+        // Counted from the start of the last run, so an interrupted one does
+        // not restart on every open.
+        if let last = Uploader.lastStart, Date().timeIntervalSince(last) < 10 * 60 { return }
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         let dir = docs.appendingPathComponent("to-be-processed")
         let waiting = ((try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? [])
             .filter { Uploader.isSealed($0) }
         guard !waiting.isEmpty else { return }
-        if let last = Uploader.lastRun, Date().timeIntervalSince(last) < 10 * 60 { return }
 
         var task = UIBackgroundTaskIdentifier.invalid
         task = UIApplication.shared.beginBackgroundTask(withName: "ForegroundUpload") {
@@ -550,8 +552,9 @@ class BackgroundScheduler {
                 Logger.shared.append("Upload on open (\(trigger)): not on Wi-Fi, \(waiting.count) file(s) waiting")
                 return
             }
+            // No SQLite rotation here: it is not synchronized with the thread
+            // writing rows. The overnight upload task rotates it as before.
             Logger.shared.append("Upload on open (\(trigger)): Wi-Fi, \(waiting.count) file(s) waiting, starting")
-            SQLiteSaver.shared.flushDataToDb(forceNewFile: true)
             let done = DispatchSemaphore(value: 0)
             Task {
                 await Uploader.shared.uploadFolder()

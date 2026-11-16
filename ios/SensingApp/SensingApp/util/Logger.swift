@@ -10,6 +10,9 @@ import UIKit
 final class Logger {
     static let shared = Logger()
     private init() {}
+
+    // Lines come from several threads; one at a time so they do not overwrite each other
+    private let lock = NSLock()
     
     /// Get current log file URL with date
     private var logFileURL: URL {
@@ -23,6 +26,7 @@ final class Logger {
     }
     
     func append(_ message: String) {
+        lock.lock(); defer { lock.unlock() }
         let fullMessage = "[\(timestamp())] \(message)\n"
         let data = fullMessage.data(using: .utf8)!
         

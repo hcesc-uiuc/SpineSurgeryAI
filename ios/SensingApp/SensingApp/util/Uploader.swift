@@ -19,19 +19,21 @@ struct Uploader {
     
     func uploadFolder() async {
         // One run at a time: the upload task and an upload on opening the app
-        // could otherwise send the same files twice.
-        guard Uploader.beginRun() else {
-            Logger.shared.append("Uploader: a run is already going, skipped")
+        // could otherwise send the same files twice. Wait for a running one
+        // rather than skip, so the overnight upload task does not end early.
+        guard await Uploader.acquireRun() else {
+            Logger.shared.append("Uploader: another run still going after 10 min, skipped")
             return
         }
         defer { Uploader.endRun() }
+        UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: "upload_last_start")
 
         let fileManager = FileManager.default
         let documentsURL = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first!
         let toBeProcessedURL = documentsURL.appendingPathComponent("to-be-processed")
         let processedURL = documentsURL.appendingPathComponent("processed")
         
-        let uploader = S3TestUploader()
+        let uploader = S3TestUploader(session: Uploader.wifiOnlySession)
         var uploadedCount = 0
         var failedCount = 0
         
@@ -251,7 +253,7 @@ struct Uploader {
     
     func upload(data: Data, request: URLRequest) async throws -> (Data, URLResponse) {
         // `upload(for:from:)` works with Data
-        let (responseData, response) = try await URLSession.shared.data(
+        let (responseData, response) = try await Uploader.wifiOnlySession.data(
             for: request
         )
         return (responseData, response)
@@ -301,6 +303,30 @@ struct Uploader {
         running = true
         return true
     }
+
+    /// Waits (up to `timeout`) for a running upload to finish, then takes the run.
+    static func acquireRun(timeout: TimeInterval = 600) async -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while !beginRun() {
+            if Date() >= deadline { return false }
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+        }
+        return true
+    }
+
+    /// When the last upload run started (gates uploads on opening the app).
+    static var lastStart: Date? {
+        let t = UserDefaults.standard.double(forKey: "upload_last_start")
+        return t > 0 ? Date(timeIntervalSince1970: t) : nil
+    }
+
+    /// Sensor files never go over cellular, even if Wi-Fi drops mid-run.
+    nonisolated(unsafe) static let wifiOnlySession: URLSession = {
+        let config = URLSessionConfiguration.default
+        config.allowsCellularAccess = false
+        config.allowsExpensiveNetworkAccess = false
+        return URLSession(configuration: config)
+    }()
 
     static func endRun() {
         runLock.lock(); running = false; runLock.unlock()
