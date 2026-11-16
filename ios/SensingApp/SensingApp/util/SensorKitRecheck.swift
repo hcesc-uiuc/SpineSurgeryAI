@@ -25,7 +25,7 @@ nonisolated enum SensorKitRecheck {
     /// SensorKit deletes data after 7 days.
     static let expireAfter: TimeInterval = 6.5 * 24 * 3600
     /// A chunk whose newest sample is this close to its end counts as complete
-    /// (continuous sensors sample at 10-100 Hz).
+    /// (phone accel and gyro ~100 Hz, pressure ~10 Hz).
     static let shortTolerance: TimeInterval = 30
 
     private static let lock = NSLock()

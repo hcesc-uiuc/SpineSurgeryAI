@@ -265,9 +265,14 @@ class SensorKitFetcher: NSObject {
         fetchStartedAt = Date()
         print("\(logTag): Sensorkit is authorized, fetching devices")
         Logger.shared.append("\(logTag): Sensorkit is authorized, fetching devices")
-        // A run taken over after 30 min may have been in a recheck; start normal
+        // A run taken over after 30 min may have been in a recheck; start
+        // normal, and drop the old run's state so a late callback from it is
+        // ignored (currentRequest) and its unsaved rows are not written here
         recheckWindow = nil
+        currentRequest = nil
         pendingFetchStart = nil
+        pendingFetchEnd = nil
+        lineBuffer.removeAll(keepingCapacity: true)
         openCurrentFile()
         chunksThisRun = 0
         bytesThisRun = 0
